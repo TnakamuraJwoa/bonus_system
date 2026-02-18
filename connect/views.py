@@ -334,12 +334,21 @@ class KibetuView(generic.ListView):
         return PeriodMaster.objects.using("rds").all()
 
 
-class TitleListView(generic.ListView):
-    template_name = "title_list.html"
+class TitleDataView(generic.ListView):
+    template_name = "title_data.html"
     context_object_name = "object_list"
     model = PeriodMaster
     paginate_by = 10
 
     def get_queryset(self):
         return UserTitles.objects.using("rds").select_related("user", "title").all()
+
+
+class TitleListView(generic.ListView):
+    template_name = "title_list.html"
+    context_object_name = "object_list"
+    model = TitleMaster
+
+    def get_queryset(self):
+        return TitleMaster.objects.using("rds").all()
 

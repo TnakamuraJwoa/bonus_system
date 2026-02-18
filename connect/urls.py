@@ -6,6 +6,7 @@ app_name = 'connect'
 urlpatterns = [
     path('', views.IndexView.as_view(), name = "index"),
     path('kibetu/', views.KibetuView.as_view(), name = "kibetu"),
+    path('title_data/', views.TitleDataView.as_view(), name = "title_data"),
     path('title_list/', views.TitleListView.as_view(), name = "title_list"),
     path('drive_bonus/', views.DriveBonusView.as_view(), name = "drive_bonus"),
     path('basic_bonus/', views.BasicBonusView.as_view(), name = "basic_bonus"),
