@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block contents %}
+
+<div class="container mt-4">
+
+    <!-- ① 期別選択 -->
+    <form method="get" class="mb-4">
+        <p>【ドライブボーナス】</p>
+        <label class="form-label">■期別を選択</label>
+
+        <select name="kibetu" class="form-select">
+            {% for obj in object_list %}
+            <option value="{{ obj.kibetu }}"
+                    {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
+                【{{ obj.kibetu }}】
+                ({{ obj.st_date }} - {{ obj.end_date }})
+            </option>
+            {% endfor %}
+        </select>
+
+        <button type="submit" class="btn btn-primary mt-2">
+            選択
+        </button>
+        <!-- ★ リセット -->
+        <a href="{% url 'connect:index' %}" class="btn btn-secondary">リセット</a>
+    </form>
+
+    <!-- ② 選択された期間表示 -->
+    {% if selected_period %}
+    <div class="alert alert-info">
+        選択中：
+        <strong>{{ selected_period.kibetu }}</strong>
+        （{{ selected_period.st_date }} ～ {{ selected_period.end_date }}）
+    </div>
+    {% endif %}
+
+    <!-- ③ 期間内データ表示 -->
+    {% if rows %}
+    <p class="text-end"><strong>件数：{{ rows|length }} 件</strong></p>
+    <table class="table table-bordered">
+        <thead>
+        <tr>
+            <th>紹介者ID</th>
+            <th>会員ID</th>
+            <th>会員名</th>
+            <th>タイトルID</th>
+            <th>BV合計</th>
+            <th>報酬</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for r in rows %}
+        <tr>
+            <td>{{ r.introducer_code }}</td>
+            <td>{{ r.jmoa_code }}</td>
+            <td>{{ r.send_bv_name }}</td>
+            <td>{{ r.max_title_id }}</td>
+            <td>{{ r.total_sum }}</td>
+            <td>{{ r.bonus_amount }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    {% if selected_kibetu %}
+    <p>この期間のデータはありません。</p>
+    {% endif %}
+    {% endif %}
+
+</div>
+
+{% endblock %}

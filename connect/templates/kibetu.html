@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block contents %}
+
+<div class="container mt-4">
+
+    <h4 class="mb-3">期別一覧</h4>
+
+    <table class="table table-bordered table-striped table-hover">
+        <thead class="thead-dark">
+        <tr>
+            <th>期別コード</th>
+            <th>開始日</th>
+            <th>終了日</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for obj in object_list %}
+        <tr>
+            <td>
+                <a href="?kibetu={{ obj.kibetu }}">
+                    {{ obj.kibetu }}
+                </a>
+            </td>
+            <td>{{ obj.st_date }}</td>
+            <td>{{ obj.end_date }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="3" class="text-center">
+                データがありません
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% if is_paginated %}
+    <nav aria-label="Page navigation">
+        <ul class="pagination justify-content-center">
+
+            {# 前へ #}
+            {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}">前へ</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+                <span class="page-link">前へ</span>
+            </li>
+            {% endif %}
+
+            {# ページ番号（全部出す版） #}
+            {% for num in page_obj.paginator.page_range %}
+            {% if num == page_obj.number %}
+            <li class="page-item active">
+                <span class="page-link">{{ num }}</span>
+            </li>
+            {% else %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+            </li>
+            {% endif %}
+            {% endfor %}
+
+            {# 次へ #}
+            {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}">次へ</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+                <span class="page-link">次へ</span>
+            </li>
+            {% endif %}
+
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+
+{% endblock %}

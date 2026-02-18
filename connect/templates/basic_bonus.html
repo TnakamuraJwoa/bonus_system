@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block contents %}
+
+<div class="container mt-4">
+
+  <!-- ① 期別選択 -->
+  <form method="get" class="mb-4">
+      <p>【ベーシックボーナス】</p>
+      <label class="form-label">■期別を選択</label>
+
+      <select name="kibetu" class="form-select">
+          {% for obj in object_list %}
+              <option value="{{ obj.kibetu }}"
+                {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
+                  【{{ obj.kibetu }}】
+                  ({{ obj.st_date }} - {{ obj.end_date }})
+              </option>
+          {% endfor %}
+      </select>
+
+      <button type="submit" class="btn btn-primary mt-2">
+          選択
+      </button>
+      <!-- ★ リセット -->
+      <a href="{% url 'connect:index' %}" class="btn btn-secondary">リセット</a>
+  </form>
+
+  <!-- ② 選択された期間表示 -->
+  {% if selected_period %}
+      <div class="alert alert-info">
+          選択中：
+          <strong>{{ selected_period.kibetu }}</strong>
+          （{{ selected_period.st_date }} ～ {{ selected_period.end_date }}）
+      </div>
+  {% endif %}
+
+  <!-- ③ 期間内データ表示 -->
+  {% if rows %}
+      <table class="table table-bordered">
+          <thead>
+              <tr>
+                  <th>ID</th>
+                  <th>日付</th>
+                  <th>金額</th>
+              </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+              <tr>
+                <td>{{ r.jwoa_code }}</td>
+                <td>{{ r.total_sum }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+      </table>
+  {% else %}
+      {% if selected_kibetu %}
+          <p>この期間のデータはありません。</p>
+      {% endif %}
+  {% endif %}
+
+</div>
+
+{% endblock %}
