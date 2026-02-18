@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+{% block title %}登録画面{% endblock %}
+{% block active_signup %}active{% endblock %}
+
+{% block head %}
+    {% load static %}
+    <link href="{% static 'css/login.css' %}" rel="stylesheet">
+    <style>
+        .error-input {
+            border: 1px solid red;  /* エラーがある場合の枠線のスタイル */
+        }
+    </style>
+{% endblock %}
+
+{% block contents %}
+<div class="container my-mt">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <div class="form-wrapper sigup-form-wrapper">
+                <h1>Sign Up</h1>
+                <form class="signup-form" method="post" action="{% url 'account_signup' %}">
+                    {% csrf_token %}
+                    <div class="form-item">
+                        <input type="text" id="my_username" name="my_username" required="required" placeholder="ユーザー名" {% if form.errors.my_username %}class="error-input"{% endif %} value="{{ form.cleaned_data.my_username }}"></input>
+                        {% if form.errors.my_username %}
+                            <ul class="messages" style="list-style-type: none; padding-left: 0rem;">
+                                {% for error in form.errors.my_username %}
+                                    <li class="text-danger">{{ error }}</li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+                    </div>
+                    <!-- 同様の修正を他のフィールドにも適用 -->
+                    <!-- email フィールド -->
+                    <div class="form-item">
+                        <input type="email" id="email" name="email" required="required" placeholder="メールアドレス" {% if form.errors.email %}class="error-input"{% endif %} value="{{ form.cleaned_data.email }}"></input>
+                        {% if form.errors.email %}
+                            <ul class="messages" style="list-style-type: none; padding-left: 0rem;">
+                                {% for error in form.errors.email %}
+                                    <li class="text-danger">{{ error }}</li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+                    </div>
+                    <!-- password1 フィールド -->
+                    <div class="form-item">
+                        <input type="password" id="id_password1" name="password1" required="required" placeholder="パスワード" {% if form.errors.password1 %}class="error-input"{% endif %}></input>
+                        {% if form.errors.password1 %}
+                            <ul class="messages" style="list-style-type: none; padding-left: 0rem;">
+                                {% for error in form.errors.password1 %}
+                                    <li class="text-danger">{{ error }}</li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+                    </div>
+                    <!-- password2 フィールド -->
+                    <div class="form-item">
+                        <input type="password" id="id_password2" name="password2" required="required" placeholder="パスワード(確認用)" {% if form.errors.password2 %}class="error-input"{% endif %}></input>
+                        {% if form.errors.password2 %}
+                            <ul class="messages" style="list-style-type: none; padding-left: 0rem;">
+                                {% for error in form.errors.password2 %}
+                                    <li class="text-danger">{{ error }}</li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+                    </div>
+                    <!-- gender フィールド -->
+                    <div class="form-item select-item">
+                        <label for="id_gender">性別</label>
+                        <select name="gender" id="id_gender" {% if form.errors.gender %}class="error-input"{% endif %}>
+                            <option value="" selected disabled>選択してください</option>
+                            <option value="0">女性</option>
+                            <option value="1">男性</option>
+                        </select>
+                        {% if form.errors.gender %}
+                            <ul class="messages" style="list-style-type: none; padding-left: 0rem;">
+                                {% for error in form.errors.gender %}
+                                    <li class="text-danger">{{ error }}</li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+                    </div>
+                    <!-- 元のページにリダイレクト -->
+                    {% if redirect_field_value %}
+                        <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}" />
+                    {% endif %}
+                    <div class="button-panel">
+                        <input type="submit" class="button" title="Sign Up" value="登録"></input>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

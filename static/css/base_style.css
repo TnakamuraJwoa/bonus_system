@@ -1,0 +1,42 @@
+.card-group > .card {
+    border: 1px solid rgba(0, 0, 0, .125) !important;
+}
+
+.my-btn1 {
+    color: #fff !important;
+    background-color: #ee0979 !important;
+    border-color: #ee0979 !important;
+    width: 131px;
+    height: 41px;
+}
+
+body, #wrapper {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+footer {
+    margin-top: auto;
+}
+
+.my-mt {
+    margin-top: 3.5rem;
+    margin-bottom: 50px !important;
+}
+
+.messages-container {
+    position: fixed;
+    top: 56px;
+    left: 0;
+    right: 0;
+    width: 100%;
+}
+
+.my-modal-class {
+    top: 20% !important;
+}
+
+footer > P {
+    color: #5e5e5e;
+}

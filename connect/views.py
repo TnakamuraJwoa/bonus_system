@@ -1,0 +1,299 @@
+from django.shortcuts import render
+# Create your views here.
+
+from django.http import JsonResponse
+import logging
+from django.views import generic
+from django.contrib import messages
+from .forms import InquiryForm
+from django.urls import reverse_lazy
+from django.shortcuts import render
+from datetime import datetime, timedelta
+from django.db.models import Q
+from django.conf import settings
+
+from django.db.models import Sum
+
+from .models import Plan, PlanDate, GenreList, Region, FavoritePlan
+
+from .models import TitleMaster, PeriodMaster, UserTitles, Orders, User
+
+
+logger = logging.getLogger(__name__)
+
+
+class IndexView(generic.ListView):
+    template_name = "index.html"
+    context_object_name = "object_list"
+    model = PeriodMaster
+
+    def get_queryset(self):
+        return PeriodMaster.objects.using("rds").all()
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        selected_kibetu = self.request.GET.get("kibetu")
+        ctx["selected_kibetu"] = selected_kibetu
+        ctx["rows"] = []
+        ctx["selected_period"] = None
+
+        if selected_kibetu:
+            period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
+
+            if period:
+                ctx["selected_period"] = period
+
+                st_date = period.st_date
+                end_date = period.end_date
+
+#                 table: orders
+#                 group by: jwoa_code
+#                 sum     :total_bv
+                orders_summary = Orders.objects.using("rds").filter(
+                    bv_actived_flg=True,
+                    order_type__in=[102, 103],
+                    bv_actived_at__date__range=(st_date, end_date)
+                ).exclude(
+                    order_status__in=[201, 202, 206]
+                ).values(
+                    "jwoa_code"
+                ).annotate(
+                    total_sum=Sum("total_bv")
+                ).order_by(
+                    "-total_sum"
+                )
+
+                # ★これが必要（テンプレに渡す）
+                ctx["rows"] = orders_summary
+
+        return ctx
+
+
+class DriveBonusView(generic.ListView):
+    template_name = "drive_bonus.html"
+    context_object_name = "object_list"
+    model = PeriodMaster
+
+    def get_queryset(self):
+        return PeriodMaster.objects.using("rds").all()
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        selected_kibetu = self.request.GET.get("kibetu")
+        ctx["selected_kibetu"] = selected_kibetu
+        ctx["rows"] = []
+        ctx["selected_period"] = None
+
+        if selected_kibetu:
+            period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
+
+            if period:
+                ctx["selected_period"] = period
+
+                st_date = period.st_date
+                end_date = period.end_date
+
+#                 table: orders
+#                 group by: jwoa_code
+#                 sum     :total_bv
+                orders_summary = Orders.objects.using("rds").filter(
+                    bv_actived_flg=True,
+                    order_type__in=[102, 103],
+                    bv_actived_at__date__range=(st_date, end_date)
+                ).exclude(
+                    order_status__in=[201, 202, 206]
+                ).values(
+                    "jwoa_code"
+                ).annotate(
+                    total_sum=Sum("total_bv")
+                ).order_by(
+                    "-total_sum"
+                )
+
+                # ★これが必要（テンプレに渡す）
+                ctx["rows"] = orders_summary
+
+        return ctx
+
+
+class BasicBonusView(generic.ListView):
+    template_name = "basic_bonus.html"
+    context_object_name = "object_list"
+    model = PeriodMaster
+
+    def get_queryset(self):
+        return PeriodMaster.objects.using("rds").all()
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        selected_kibetu = self.request.GET.get("kibetu")
+        ctx["selected_kibetu"] = selected_kibetu
+        ctx["rows"] = []
+        ctx["selected_period"] = None
+
+        if selected_kibetu:
+            period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
+
+            if period:
+                ctx["selected_period"] = period
+
+                st_date = period.st_date
+                end_date = period.end_date
+
+#                 table: orders
+#                 group by: jwoa_code
+#                 sum     :total_bv
+                orders_summary = Orders.objects.using("rds").filter(
+                    bv_actived_flg=True,
+                    order_type__in=[102, 103],
+                    bv_actived_at__date__range=(st_date, end_date)
+                ).exclude(
+                    order_status__in=[201, 202, 206]
+                ).values(
+                    "jwoa_code"
+                ).annotate(
+                    total_sum=Sum("total_bv")
+                ).order_by(
+                    "-total_sum"
+                )
+
+                # ★これが必要（テンプレに渡す）
+                ctx["rows"] = orders_summary
+
+        return ctx
+
+
+
+class InquiryView(generic.FormView):
+    template_name = "inquiry.html"
+    form_class = InquiryForm
+    success_url = reverse_lazy('connect:inquiry')
+
+    def form_valid(self, form):
+        form.send_email()
+        messages.info(self.request, f'メッセージを送信しました')
+        logger.info('Inquiry sent by {}'.format(form.cleaned_data['name']))
+        return super().form_valid(form)
+
+
+class PlanListView(generic.ListView):
+    template_name = 'plan_list.html'
+    paginate_by = 2
+
+    def get(self, request, *args, **kwargs):
+        form_data = {
+            'genre_name': request.GET.get('checkbox_value[]'),
+            'event_place': request.GET.get('place_checkbox_value[]'),
+            'event_date': request.GET.get('event_date[]'),
+            'gender': request.GET.get('gender_value[]'),
+            'age': request.GET.get('form_field_age[]'),
+        }
+
+        current_date_time = datetime.now()
+        reservation_limit_hours = current_date_time + timedelta(hours=settings.RESERVATION_LIMIT_HOURS)
+
+        filter_conditions = []
+
+        # ジャンル名があれば条件を追加
+        if form_data['genre_name']:
+            array_genre_name = form_data['genre_name'].split(', ')
+            filter_conditions.append(Q(plan_name__genre_name__in=array_genre_name))
+
+        # 日付があれば条件を追加
+        if form_data['event_date']:
+            date_strings = form_data['event_date'].split(', ')
+            dates = [datetime.strptime(date_str, '%Y/%m/%d').date() for date_str in date_strings]
+            filter_conditions.append(Q(start_time__date__in=dates))
+
+        # イベント場所があれば条件を追加
+        if form_data['event_place']:
+            array_place = form_data['event_place'].split(', ')
+            filter_conditions.append(Q(plan_name__place__in=array_place))
+
+        # 性別があれば条件を追加
+        if form_data['gender']:
+            if form_data['gender'] == "0":
+                filter_conditions.append(Q(plan_name__gender_limit=Plan.FEMALE))
+            elif form_data['gender'] == "1":
+                filter_conditions.append(Q(plan_name__gender_limit=Plan.MALE))
+
+        # 年齢制限があれば条件を追加
+        if form_data['age']:
+            filter_conditions.append(Q(plan_name__min_age__lte=form_data['age']) | Q(plan_name__min_age__isnull=True))
+            filter_conditions.append(Q(plan_name__max_age__gte=form_data['age']) | Q(plan_name__max_age__isnull=True))
+
+        combined_conditions = Q()
+        for condition in filter_conditions:
+            combined_conditions &= condition
+
+        queryset = (
+            PlanDate.objects
+            .select_related('plan_name__genre_name')
+            .filter(plan_name__plan_active=True, start_time__gte=reservation_limit_hours)
+            .filter(combined_conditions)
+        )
+
+        #お気に入りリストを取得する
+        user_id = request.user.id
+        favorite_plan_list = FavoritePlan.objects.filter(username=user_id).values_list('plan_date', flat=True)
+
+        return render(request, self.template_name, {'plan_list': queryset, 'favorite_list': favorite_plan_list})
+
+
+class AddFavoriteToDBView(generic.View):
+    def post(self, request):
+        plan_id = request.POST.get('plan_id')
+        user_id = request.user.id
+
+        if user_id is None:
+            return JsonResponse({'status': 'user_none'})
+
+        # 指定されたplan_date_idとusernameの組み合わせが既に存在するかを確認
+        existing_favorite = FavoritePlan.objects.filter(plan_date_id=int(plan_id), username=user_id).first()
+
+        if existing_favorite:
+            # 既に存在する場合は削除
+            existing_favorite.delete()
+        else:
+            # 存在しない場合は追加
+            FavoritePlan.objects.create(plan_date_id=int(plan_id), username_id=user_id)
+
+        return JsonResponse({'status': 'success'})  # もしくはエラーメッセージを返すことも可能
+
+
+class PlanDetailView(generic.DetailView):
+    model = PlanDate
+    template_name = 'plan_detail.html'
+
+    def get_queryset(self):
+        # self.kwargs['pk']を使ってpkの値を取得
+        pk = self.kwargs.get('pk')
+
+        # pkを条件にクエリセットをフィルタリングする例
+        queryset = PlanDate.objects.filter(id=pk)
+        return queryset
+
+
+
+class KibetuView(generic.ListView):
+    template_name = "kibetu.html"
+    context_object_name = "object_list"
+    model = PeriodMaster
+    paginate_by = 10
+
+    def get_queryset(self):
+        return PeriodMaster.objects.using("rds").all()
+
+
+class TitleListView(generic.ListView):
+    template_name = "title_list.html"
+    context_object_name = "object_list"
+    model = PeriodMaster
+    paginate_by = 10
+
+    def get_queryset(self):
+        return UserTitles.objects.using("rds").select_related("user", "title").all()
+
