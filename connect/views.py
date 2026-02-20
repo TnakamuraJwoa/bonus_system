@@ -105,50 +105,77 @@ class DriveBonusView(generic.ListView):
         end_exclusive = make_aware(datetime.combine(end_date + timedelta(days=1), time.min))
 
         sql = """
-            SELECT
-                a.introducer_code,
-                a.jmoa_code,
-                a.send_bv_name,
-                a.max_title_id,
-                b.total_sum,
+SELECT
+    u.introducer_code,
+    u.jmoa_code,
+    u.send_bv_name,
+    u.max_title_id,
+    bv.total_sum,
+
+    CASE
+        WHEN u.max_title_id >= 4
+            THEN TRUNCATE(COALESCE(bv.total_sum, 0) * 0.20, 2)
+
+        WHEN u.max_title_id = 3
+            THEN TRUNCATE(COALESCE(bv.total_sum, 0) * 0.15, 2)
+
+        ELSE
+            TRUNCATE(COALESCE(bv.total_sum, 0) * 0.10, 2)
+    END AS bonus_amount
+
+FROM bonus_db.v_users_with_max_title AS u
+
+LEFT JOIN (
+    SELECT
+        o.distribution_jwoa_code AS jwoa_code,
+        SUM(o.custom_total_bv)   AS total_sum
+    FROM (
+        SELECT
+            b.jwoa_code AS distribution_jwoa_code,
+            a.bv_actived_flg,
+            a.deposit_at,
+            a.order_status,
+            a.order_type,
+            b.distribution_bv,
 
             CASE
-                WHEN a.max_title_id >= 4 THEN TRUNCATE(COALESCE(b.total_sum,0) * 0.20, 2)
-                WHEN a.max_title_id = 3 THEN TRUNCATE(COALESCE(b.total_sum,0) * 0.15, 2)
-                ELSE TRUNCATE(COALESCE(b.total_sum,0) * 0.10, 2)
-            END AS bonus_amount
+                WHEN a.order_type = 101
+                    THEN LEAST(IFNULL(b.distribution_bv, 0), 50)
+                ELSE
+                    IFNULL(b.distribution_bv, 0)
+            END AS custom_total_bv
+        FROM bonus_db.orders AS a
+        LEFT JOIN bonus_db.orders_distribution_bv AS b
+               ON a.order_code = b.order_code
 
-            FROM bonus_db.v_users_with_max_title AS a
+        WHERE a.order_type IN (101, 102, 103)
+ AND deposit_at >= %s
+ AND deposit_at <  %s
+        UNION ALL
+        SELECT
+            member_no AS distribution_jwoa_code,
+            1         AS bv_actived_flg,
+            payment_date as deposit_at,
+            203       AS order_status,
+            105       AS order_type,
+            total_bv        AS distribution_bv,
+            LEAST(IFNULL(total_bv, 0), 50) AS custom_total_bv
 
-            LEFT JOIN (
-                SELECT
-                    o.jwoa_code,
-                    SUM(o.costom_total_bv) AS total_sum
-                FROM (select *, total_bv as costom_total_bv
-            from bonus_db.orders
-            WHERE
-             order_type IN (102, 103)
-            union
-            SELECT
-                *,
-                CASE
-                    WHEN total_bv >= 50 THEN 50
-                    ELSE 0
-                END AS custom_total_bv
-            FROM bonus_db.orders
-            WHERE
-             order_type = 101) AS o
-                WHERE
-                    o.bv_actived_flg = 1
-                    AND o.bv_actived_at >= %s
-                    AND o.bv_actived_at <  %s
-                    AND o.order_status NOT IN (201, 202, 206)
-                GROUP BY
-                    o.jwoa_code
-            ) AS b
-            ON a.jmoa_code = b.jwoa_code
+        FROM bonus_db.api_users_bv
+    WHERE
+        payment_date >= %s
+        AND payment_date <  %s
+    ) AS o
+    WHERE
+        o.bv_actived_flg = 1
+        AND o.order_status NOT IN (201, 202, 206)
 
-WHERE b.total_sum >= 1
+    GROUP BY
+        o.distribution_jwoa_code
+) AS bv
+    ON u.jmoa_code = bv.jwoa_code
+WHERE
+    bv.total_sum >= 1;
         """
 
 
