@@ -1,6 +1,6 @@
 from django.db import models
 from django.conf import settings
-
+from django.core.validators import MinValueValidator, MaxValueValidator
 # Create your models here.
 
 class Prefecture(models.Model):
@@ -289,3 +289,34 @@ class User(models.Model):
 
     def __str__(self):
         return self.jmoa_code
+
+
+class PrevMonthPurchaseStatus(models.Model):
+
+    year = models.PositiveSmallIntegerField(
+        verbose_name="対象年"
+    )
+
+    month = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(12)],
+        verbose_name="対象月(1-12)"
+    )
+
+    CREATE_STATUS_CHOICES = (
+        (0, "未作成"),
+        (1, "作成済"),
+    )
+
+    create_status = models.PositiveSmallIntegerField(
+        choices=CREATE_STATUS_CHOICES,
+        default=0,
+        verbose_name="作成状態"
+    )
+
+    class Meta:   # ← インデント重要
+        db_table = "prev_month_purchase_status"
+        managed = False
+        unique_together = ("year", "month")
+
+    def __str__(self):
+        return f"{self.year}-{self.month:02d}"

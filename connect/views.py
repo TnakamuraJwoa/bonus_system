@@ -8,7 +8,9 @@ from django.contrib import messages
 from .forms import InquiryForm
 from django.urls import reverse_lazy
 from django.shortcuts import render
+from datetime import date
 from datetime import datetime, time, timedelta
+from dateutil.relativedelta import relativedelta
 from django.db.models import Q
 from django.conf import settings
 from django.db import connections
@@ -17,7 +19,7 @@ from django.db.models import Sum
 from django.utils.timezone import make_aware
 from .models import Plan, PlanDate, GenreList, Region, FavoritePlan
 
-from .models import TitleMaster, PeriodMaster, UserTitles, Orders, User
+from .models import TitleMaster, PeriodMaster, UserTitles, Orders, User, PrevMonthPurchaseStatus
 
 
 logger = logging.getLogger(__name__)
@@ -106,24 +108,42 @@ class DriveBonusView(generic.ListView):
 
         sql = """
 SELECT
-    u.introducer_code,
-    u.jmoa_code,
-    u.send_bv_name,
-    u.max_title_id,
+    a.introducer_code,
+    a.jmoa_code,
+    a.send_bv_name,
+    a.title_id,
+    a.title_name,
     bv.total_sum,
 
     CASE
-        WHEN u.max_title_id >= 4
+        WHEN a.title_id >= 4
             THEN TRUNCATE(COALESCE(bv.total_sum, 0) * 0.20, 2)
 
-        WHEN u.max_title_id = 3
+        WHEN a.title_id = 3
             THEN TRUNCATE(COALESCE(bv.total_sum, 0) * 0.15, 2)
 
         ELSE
             TRUNCATE(COALESCE(bv.total_sum, 0) * 0.10, 2)
     END AS bonus_amount
 
-FROM bonus_db.v_users_with_max_title AS u
+FROM (
+#アクティブ招待 + title
+SELECT
+    u.send_bv_name,
+    copy_non9.*,
+    tm.title_id,
+    tm.title_name
+FROM bonus_db.copy_introducer_non9 AS copy_non9
+LEFT JOIN bonus_db.users ui
+    ON copy_non9.introducer_code = ui.jmoa_code
+LEFT JOIN bonus_db.user_titles ut
+    ON ut.user_id = ui.id
+LEFT JOIN bonus_db.title_master tm
+    ON ut.title_id = tm.title_id
+LEFT JOIN bonus_db.users u
+    ON copy_non9.jmoa_code = u.jmoa_code
+
+) AS a
 
 LEFT JOIN (
     SELECT
@@ -164,7 +184,7 @@ LEFT JOIN (
         FROM bonus_db.api_users_bv
     WHERE
         payment_date >= %s
-        AND payment_date <  %s
+        AND payment_date < %s
     ) AS o
     WHERE
         o.bv_actived_flg = 1
@@ -173,7 +193,7 @@ LEFT JOIN (
     GROUP BY
         o.distribution_jwoa_code
 ) AS bv
-    ON u.jmoa_code = bv.jwoa_code
+    ON a.jmoa_code = bv.jwoa_code
 WHERE
     bv.total_sum >= 1;
         """
@@ -181,7 +201,7 @@ WHERE
 
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, [start_dt, end_exclusive])
+            cursor.execute(sql, [start_dt, end_exclusive, start_dt, end_exclusive])
             logger.info(f"Executed SQL: {cursor._executed}")
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
@@ -361,15 +381,6 @@ class KibetuView(generic.ListView):
         return PeriodMaster.objects.using("rds").all()
 
 
-class TitleDataView(generic.ListView):
-    template_name = "title_data.html"
-    context_object_name = "object_list"
-    model = PeriodMaster
-    paginate_by = 10
-
-    def get_queryset(self):
-        return UserTitles.objects.using("rds").select_related("user", "title").all()
-
 
 class TitleListView(generic.ListView):
     template_name = "title_list.html"
@@ -379,3 +390,81 @@ class TitleListView(generic.ListView):
     def get_queryset(self):
         return TitleMaster.objects.using("rds").all()
 
+
+
+class RepurchaseLastMonthView(generic.ListView):
+    template_name = "repurchase_last_month.html"
+    context_object_name = "object_list"
+    model = PrevMonthPurchaseStatus
+
+    def get_queryset(self):
+        # セレクトの候補（object_list）を作る
+        today = date.today()
+        default_target = today.replace(day=1) - relativedelta(months=1)
+
+        qs = (
+            PrevMonthPurchaseStatus.objects
+            .using("rds")
+            .filter(create_status=0)
+            .filter(
+                Q(year__lt=default_target.year) |
+                Q(year=default_target.year, month__lte=default_target.month)
+            )
+            .order_by("year", "month")
+        )
+        return qs
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        selected_prev_month = self.request.GET.get("prev_month")
+        ctx["selected_prev_month"] = selected_prev_month
+        ctx["rows"] = []
+        ctx["selected_period"] = None
+
+        if not selected_prev_month:
+            return ctx
+
+        # 期別マスタ取得（ここはORMのまま）
+        period = PrevMonthPurchaseStatus.objects.using("rds").filter(id=selected_prev_month).first()
+        if not period:
+            return ctx
+
+        ctx["selected_period"] = period
+
+        year = period.year
+        month = period.month
+
+        base_date = datetime(period.year, period.month, 1)
+        next_month_start = base_date + relativedelta(months=1)
+
+        sql = """
+SELECT
+    b.jwoa_code,
+    users.send_bv_name,
+    SUM(b.distribution_bv) AS total_bv,
+    %s as year,
+    %s as month
+FROM bonus_db.orders AS a
+LEFT JOIN bonus_db.orders_distribution_bv AS b
+    ON a.order_code = b.order_code
+LEFT JOIN users
+    ON b.jwoa_code = users.jmoa_code
+WHERE a.order_status NOT IN (201, 206)
+  AND a.deposit_at >= %s
+  AND a.deposit_at <  %s
+GROUP BY b.jwoa_code
+HAVING SUM(b.distribution_bv) >= 50;
+        """
+
+
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, [year, month, base_date, next_month_start])
+            logger.info(f"Executed SQL: {cursor._executed}")
+            cols = [c[0] for c in cursor.description]
+            rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+        # テンプレに渡す
+        ctx["rows"] = rows
+        return ctx

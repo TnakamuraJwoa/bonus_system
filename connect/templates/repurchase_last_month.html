@@ -11,37 +11,17 @@
     ========================== -->
     <nav class="col-12 col-md-3 col-lg-2">
 
-      <!-- Stickyにしたい場合は position-sticky を使う -->
       <div class="card shadow-sm position-sticky" style="top: 1rem;">
         <div class="card-body">
 
-          <div class="fw-bold mb-2">週ボーナス</div>
+          <div class="fw-bold mb-2">メニュー</div>
 
           <div class="list-group">
-            <a class="list-group-item list-group-item-action active" href="{% url 'connect:drive_bonus' %}">ドライブボーナス</a>
-            <a class="list-group-item list-group-item-action" href="{% url 'connect:index' %}">ベーシックボーナス</a>
-            <a class="list-group-item list-group-item-action" href="{% url 'connect:index' %}">マッチングボーナス</a>
+            <a class="list-group-item list-group-item-action" href="{% url 'connect:kibetu' %}">期別</a>
+            <a class="list-group-item list-group-item-action" href="{% url 'connect:title_list' %}">タイトル一覧</a>
+            <a class="list-group-item list-group-item-action active" href="{% url 'connect:repurchase_last_month' %}">購入情報管理</a>
           </div>
 
-          <hr class="my-3">
-
-          <div class="fw-bold mb-2">月ボーナス</div>
-
-          <div class="list-group">
-            <a class="list-group-item list-group-item-action" href="{% url 'connect:index' %}">タイトルボーナス</a>
-            <a class="list-group-item list-group-item-action" href="{% url 'connect:index' %}">タイトル差額ボーナス</a>
-            <a class="list-group-item list-group-item-action" href="{% url 'connect:index' %}">再購入オーバーボーナス</a>
-          </div>
-
-          <hr class="my-3">
-
-          <div class="fw-bold mb-2">特別ボーナス</div>
-
-          <div class="list-group">
-            <a class="list-group-item list-group-item-action" href="{% url 'connect:index' %}">３スターダイヤ　グローバル配当</a>
-            <a class="list-group-item list-group-item-action" href="{% url 'connect:index' %}">クラウンダイヤアンバサダー　グローバル配当</a>
-            <a class="list-group-item list-group-item-action" href="{% url 'connect:index' %}">ダブルクラウンダイヤアンバサダー特別ボーナス</a>
-          </div>
         </div>
       </div>
 
@@ -56,18 +36,18 @@
       <div class="card shadow-sm mb-3">
         <div class="card-body">
 
-          <h5 class="mb-3">【ドライブボーナス】</h5>
+          <h5 class="mb-3">【購入情報管理】</h5>
 
-          <div class="fw-bold mb-2">■期別を選択</div>
+          <div class="fw-bold mb-2">対象年月を選択</div>
 
           <form method="get" class="row g-2 align-items-end">
 
             <div class="col-12 col-sm-6 col-md-5 col-lg-4">
-              <select name="kibetu" class="form-select">
+              <select name="prev_month" class="form-select">
                 {% for obj in object_list %}
-                <option value="{{ obj.kibetu }}"
-                        {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
-                  【{{ obj.kibetu }}】 ({{ obj.st_date }} - {{ obj.end_date }})
+                <option value="{{ obj.id }}"
+                        {% if obj.id|stringformat:"s" == selected_prev_month|stringformat:"s" %}selected{% endif %}>
+                  【{{ obj.year }}年{{ obj.month }}月】
                 </option>
                 {% endfor %}
               </select>
@@ -81,7 +61,7 @@
 
             <div class="col-auto">
               <a href="{% url 'connect:index' %}" class="btn btn-outline-secondary">
-                リセット
+                登録
               </a>
             </div>
 
@@ -91,8 +71,7 @@
           {% if selected_period %}
           <div class="alert alert-info mt-3 mb-0">
             選択中：
-            <strong>{{ selected_period.kibetu }}</strong>
-            （{{ selected_period.st_date }} ～ {{ selected_period.end_date }}）
+            <strong>{{ selected_period.year }}年{{ selected_period.month }}月</strong>
           </div>
           {% endif %}
 
@@ -114,23 +93,21 @@
               <table class="table table-bordered table-sm align-middle mb-0">
                 <thead class="table-light">
                   <tr>
-                    <th>紹介者ID</th>
-                    <th>会員ID</th>
-                    <th>会員名</th>
-                    <th>タイトルID</th>
-                    <th>BV合計</th>
-                    <th>報酬</th>
+                    <th>jwoa_code</th>
+                    <th>send_bv_name</th>
+                    <th>bv</th>
+                    <th>year</th>
+                    <th>month</th>
                   </tr>
                 </thead>
                 <tbody>
                   {% for r in rows %}
                   <tr>
-                    <td>{{ r.introducer_code }}</td>
-                    <td>{{ r.jmoa_code }}</td>
+                    <td>{{ r.jwoa_code }}</td>
                     <td>{{ r.send_bv_name }}</td>
-                    <td>{{ r.max_title_id }}</td>
-                    <td>{{ r.total_sum }}</td>
-                    <td>{{ r.bonus_amount }}</td>
+                    <td>{{ r.total_bv }}</td>
+                    <td>{{ r.year }}</td>
+                    <td>{{ r.month }}</td>
                   </tr>
                   {% endfor %}
                 </tbody>
