@@ -6,68 +6,63 @@
 <div class="container-fluid mt-3">
   <div class="row g-3">
 
-    <!-- =========================
-         ✅ Sidebar
-    ========================== -->
+    <!-- Sidebar（そのまま） -->
     <nav class="col-12 col-md-3 col-lg-2">
-
       <div class="card shadow-sm position-sticky" style="top: 1rem;">
         <div class="card-body">
-
           <div class="fw-bold mb-2">メニュー</div>
-
           <div class="list-group">
             <a class="list-group-item list-group-item-action" href="{% url 'connect:kibetu' %}">期別</a>
             <a class="list-group-item list-group-item-action" href="{% url 'connect:title_list' %}">タイトル一覧</a>
-            <a class="list-group-item list-group-item-action active" href="{% url 'connect:repurchase_last_month' %}">購入情報管理</a>
+            <a class="list-group-item list-group-item-action active" href="{% url 'connect:repurchase_last_month' %}">購入情報登録</a>
+            <a class="list-group-item list-group-item-action" href="{% url 'connect:repurchase_list' %}">購入情報登録一覧</a>
           </div>
-
         </div>
       </div>
-
     </nav>
 
-    <!-- =========================
-         ✅ Main
-    ========================== -->
+    <!-- Main -->
     <main class="col-12 col-md-9 col-lg-10">
 
-      <!-- タイトル + 期別フォーム -->
       <div class="card shadow-sm mb-3">
         <div class="card-body">
 
-          <h5 class="mb-3">【購入情報管理】</h5>
-
+          <h5 class="mb-3">【購入情報登録】</h5>
           <div class="fw-bold mb-2">対象年月を選択</div>
 
-          <form method="get" class="row g-2 align-items-end">
+          <div class="d-flex gap-2 align-items-end flex-wrap">
 
-            <div class="col-12 col-sm-6 col-md-5 col-lg-4">
-              <select name="prev_month" class="form-select">
-                {% for obj in object_list %}
-                <option value="{{ obj.id }}"
-                        {% if obj.id|stringformat:"s" == selected_prev_month|stringformat:"s" %}selected{% endif %}>
-                  【{{ obj.year }}年{{ obj.month }}月】
-                </option>
-                {% endfor %}
-              </select>
-            </div>
+            <!-- ✅ 選択（GET） -->
+            <form method="get" class="d-flex gap-2 align-items-end mb-0">
+              <div style="min-width: 220px;">
+                <select name="prev_month" class="form-select">
+                  {% for obj in object_list %}
+                  <option value="{{ obj.id }}"
+                          {% if obj.id|stringformat:"s" == selected_prev_month|stringformat:"s" %}selected{% endif %}>
+                    【{{ obj.year }}年{{ obj.month }}月】
+                  </option>
+                  {% endfor %}
+                </select>
+              </div>
 
-            <div class="col-auto">
               <button type="submit" class="btn btn-primary">
                 選択
               </button>
-            </div>
+            </form>
 
-            <div class="col-auto">
-              <a href="{% url 'connect:index' %}" class="btn btn-outline-secondary">
+            <!-- ✅ 登録（POST） -->
+            <form method="post" class="mb-0">
+              {% csrf_token %}
+              <input type="hidden" name="prev_month" value="{{ selected_prev_month }}">
+              <button type="submit"
+                      class="btn btn-success"
+                      {% if not selected_prev_month %}disabled{% endif %}>
                 登録
-              </a>
-            </div>
+              </button>
+            </form>
 
-          </form>
+          </div>
 
-          <!-- 選択された期間表示 -->
           {% if selected_period %}
           <div class="alert alert-info mt-3 mb-0">
             選択中：
@@ -78,12 +73,11 @@
         </div>
       </div>
 
-      <!-- データ表示 -->
+      <!-- データ表示（そのまま） -->
       <div class="card shadow-sm">
         <div class="card-body">
 
           {% if rows %}
-
             <div class="d-flex justify-content-between align-items-center mb-2">
               <div class="fw-bold">一覧</div>
               <div class="text-end"><strong>件数：{{ rows|length }} 件</strong></div>
@@ -113,22 +107,19 @@
                 </tbody>
               </table>
             </div>
-
           {% else %}
-
-            {% if selected_kibetu %}
+            {# ※ここ、selected_kibetu じゃなく selected_prev_month の方が自然 #}
+            {% if selected_prev_month %}
               <p class="mb-0">この期間のデータはありません。</p>
             {% else %}
-              <p class="mb-0 text-muted">期別を選択して「選択」を押してください。</p>
+              <p class="mb-0 text-muted">対象年月を選択して「選択」を押してください。</p>
             {% endif %}
-
           {% endif %}
 
         </div>
       </div>
 
     </main>
-
   </div>
 </div>
 
