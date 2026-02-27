@@ -320,3 +320,57 @@ class PrevMonthPurchaseStatus(models.Model):
 
     def __str__(self):
         return f"{self.year}-{self.month:02d}"
+
+
+
+class PurchaseInfoList(models.Model):
+
+    id = models.BigAutoField(primary_key=True)
+
+    year = models.PositiveSmallIntegerField(
+        verbose_name="対象年"
+    )
+
+    month = models.PositiveSmallIntegerField(
+        verbose_name="対象月(1-12)"
+    )
+
+    jwoa_code = models.CharField(
+        max_length=16,
+        verbose_name="会員コード"
+    )
+
+    send_bv_name = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        verbose_name="会員名(表示用)"
+    )
+
+    bv = models.PositiveIntegerField(
+        verbose_name="BV(合計)"
+    )
+
+    created_at = models.DateTimeField(
+        verbose_name="作成日時"
+    )
+
+    updated_at = models.DateTimeField(
+        verbose_name="更新日時"
+    )
+
+    class Meta:
+        db_table = "purchase_info_list"
+        managed = False  # ← 既存テーブルを使うので重要
+        verbose_name = "購入情報登録"
+        verbose_name_plural = "購入情報登録"
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["year", "month", "jwoa_code"],
+                name="uq_purchase_info_ym_user"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.year}-{self.month} {self.jwoa_code} ({self.bv})"

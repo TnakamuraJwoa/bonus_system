@@ -19,8 +19,8 @@
           <div class="list-group">
             <a class="list-group-item list-group-item-action" href="{% url 'connect:kibetu' %}">期別</a>
             <a class="list-group-item list-group-item-action" href="{% url 'connect:title_list' %}">タイトル一覧</a>
-            <a class="list-group-item list-group-item-action active" href="{% url 'connect:repurchase_last_month' %}">購入情報登録</a>
-            <a class="list-group-item list-group-item-action" href="{% url 'connect:repurchase_list' %}">購入情報登録一覧</a>
+            <a class="list-group-item list-group-item-action" href="{% url 'connect:repurchase_last_month' %}">購入情報登録</a>
+            <a class="list-group-item list-group-item-action active" href="{% url 'connect:repurchase_list' %}">購入情報登録一覧</a>
           </div>
         </div>
       </div>
@@ -32,41 +32,48 @@
       <div class="card shadow-sm mb-3">
         <div class="card-body">
 
-          <h5 class="mb-3">【購入情報登録】</h5>
+          <h5 class="mb-3">【購入情報登録一覧】</h5>
           <div class="fw-bold mb-2">対象年月を選択</div>
 
           <div class="d-flex gap-2 align-items-end flex-wrap">
 
-            <!-- ✅ 選択（GET） -->
-            <form method="get" class="d-flex gap-2 align-items-end mb-0">
-              <div style="min-width: 220px;">
-                <select name="prev_month" class="form-select">
-                  {% for obj in object_list %}
-                  <option value="{{ obj.id }}"
-                          {% if obj.id|stringformat:"s" == selected_prev_month|stringformat:"s" %}selected{% endif %}>
-                    【{{ obj.year }}年{{ obj.month }}月】
-                  </option>
-                  {% endfor %}
-                </select>
-              </div>
+          <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
 
-              <button type="submit" class="btn btn-primary">
-                選択
-              </button>
-            </form>
+            <div style="min-width: 220px;">
+              <select name="prev_month" class="form-select">
+                {% for obj in object_list %}
+                <option value="{{ obj.id }}"
+                        {% if obj.id|stringformat:"s" == selected_prev_month|stringformat:"s" %}selected{% endif %}>
+                  【{{ obj.year }}年{{ obj.month }}月】
+                </option>
+                {% endfor %}
+              </select>
+            </div>
 
-            <!-- ✅ 登録（POST） -->
-            <form method="post" class="mb-0">
-              {% csrf_token %}
-              <input type="hidden" name="prev_month" value="{{ selected_prev_month }}">
-              <button type="submit"
-                      class="btn btn-success"
-                      {% if not selected_prev_month %}disabled{% endif %}>
-                登録
-              </button>
-            </form>
+            <!-- ✅ 追加：jwoa_code検索 -->
+            <div>
+              <label class="form-label mb-0 small text-muted">jwoa_code</label>
+              <input type="text" name="q_code" class="form-control"
+                     value="{{ q_code|default:'' }}" placeholder="例: JP0416">
+            </div>
 
-          </div>
+            <!-- ✅ 追加：名前検索 -->
+            <div>
+              <label class="form-label mb-0 small text-muted">send_bv_name</label>
+              <input type="text" name="q_name" class="form-control"
+                     value="{{ q_name|default:'' }}" placeholder="例: 野口">
+            </div>
+
+            <button type="submit" class="btn btn-primary">検索</button>
+
+            <!-- 任意：リセット -->
+            <a class="btn btn-outline-secondary"
+               href="{% url 'connect:repurchase_list' %}{% if selected_prev_month %}?prev_month={{ selected_prev_month }}{% endif %}">
+              リセット
+            </a>
+
+          </form>
+                    </div>
 
           {% if selected_period %}
           <div class="alert alert-info mt-3 mb-0">
@@ -92,21 +99,27 @@
               <table class="table table-bordered table-sm align-middle mb-0">
                 <thead class="table-light">
                   <tr>
+                    <th>id</th>
+                    <th>year</th>
+                    <th>month</th>
                     <th>jwoa_code</th>
                     <th>send_bv_name</th>
                     <th>bv</th>
-                    <th>year</th>
-                    <th>month</th>
+                    <th>created_at</th>
+                    <th>updated_at</th>
                   </tr>
                 </thead>
                 <tbody>
                   {% for r in rows %}
                   <tr>
-                    <td>{{ r.jwoa_code }}</td>
-                    <td>{{ r.send_bv_name }}</td>
-                    <td>{{ r.total_bv }}</td>
+                    <td>{{ r.id }}</td>
                     <td>{{ r.year }}</td>
                     <td>{{ r.month }}</td>
+                    <td>{{ r.jwoa_code }}</td>
+                    <td>{{ r.send_bv_name }}</td>
+                    <td>{{ r.bv }}</td>
+                    <td>{{ r.created_at }}</td>
+                    <td>{{ r.updated_at }}</td>
                   </tr>
                   {% endfor %}
                 </tbody>
