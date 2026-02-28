@@ -3,6 +3,11 @@
 
 {% block contents %}
 
+{% block head %}
+    {% load static %}
+    <link href="{% static 'css/common.css' %}" rel="stylesheet">
+{% endblock %}
+
 <div class="container-fluid mt-3">
   <div class="row g-1">
   <div class="col-12 text-end">
