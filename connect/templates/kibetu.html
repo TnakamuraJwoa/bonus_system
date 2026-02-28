@@ -4,7 +4,6 @@
 {% block contents %}
 
 <div class="container-fluid mt-3">
-
   <div class="row g-1">
   <div class="col-12 text-end">
     {% if user.is_authenticated %}
@@ -26,94 +25,91 @@
       </div>
     </nav>
 
-
-    <!-- =========================
-         ✅ Main
-    ========================== -->
+    <!-- Main -->
     <main class="col-12 col-md-9 col-lg-10">
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+
+          <h5 class="mb-3">【期別一覧】</h5>
+
+          <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+
+            <!-- ✅ プルダウン（任意：完全一致で絞り込み） -->
+            <div>
+              <label class="form-label mb-0 small text-muted">kibetu（選択）</label>
+              <select name="kibetu" class="form-select">
+                <option value="">（全件）</option>
+                {% for k in kibetu_choices %}
+                  <option value="{{ k }}" {% if k == selected_kibetu %}selected{% endif %}>
+                    {{ k }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- ✅ テキスト検索（部分一致） -->
+            <div>
+              <label class="form-label mb-0 small text-muted">kibetu（検索）</label>
+              <input type="text" name="q_kibetu" class="form-control"
+                     value="{{ q_kibetu|default:'' }}" placeholder="例: 2026C01">
+            </div>
+
+            <button type="submit" class="btn btn-primary">絞り込み</button>
+
+            <a class="btn btn-outline-secondary" href="{% url 'connect:kibetu' %}">リセット</a>
+          </form>
+
+          {% if selected_kibetu or q_kibetu %}
+            <div class="text-muted small mt-3">
+              絞り込み中：
+              {% if selected_kibetu %}<span class="badge bg-info text-dark">選択={{ selected_kibetu }}</span>{% endif %}
+              {% if q_kibetu %}<span class="badge bg-secondary">検索={{ q_kibetu }}</span>{% endif %}
+            </div>
+          {% else %}
+            <div class="text-muted small mt-3">全件表示中</div>
+          {% endif %}
+
+        </div>
+      </div>
 
       <div class="card shadow-sm">
         <div class="card-body">
 
-          <h4 class="mb-3">期別一覧</h4>
+          {% if rows %}
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="fw-bold">一覧</div>
+              <div class="text-end"><strong>件数：{{ rows|length }} 件</strong></div>
+            </div>
 
-          <div class="table-responsive">
-            <table class="table table-bordered table-striped table-hover mb-0">
-              <thead class="table-dark">
-                <tr>
-                  <th>期別コード</th>
-                  <th>開始日</th>
-                  <th>終了日</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for obj in object_list %}
-                <tr>
-                  <td>
-                    <a href="?kibetu={{ obj.kibetu }}">
-                      {{ obj.kibetu }}
-                    </a>
-                  </td>
-                  <td>{{ obj.st_date }}</td>
-                  <td>{{ obj.end_date }}</td>
-                </tr>
-                {% empty %}
-                <tr>
-                  <td colspan="3" class="text-center">
-                    データがありません
-                  </td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-
-          <!-- ページネーション -->
-          {% if is_paginated %}
-          <nav class="mt-3" aria-label="Page navigation">
-            <ul class="pagination justify-content-center">
-
-              {% if page_obj.has_previous %}
-              <li class="page-item">
-                <a class="page-link" href="?page={{ page_obj.previous_page_number }}">前へ</a>
-              </li>
-              {% else %}
-              <li class="page-item disabled">
-                <span class="page-link">前へ</span>
-              </li>
-              {% endif %}
-
-              {% for num in page_obj.paginator.page_range %}
-                {% if num == page_obj.number %}
-                  <li class="page-item active">
-                    <span class="page-link">{{ num }}</span>
-                  </li>
-                {% else %}
-                  <li class="page-item">
-                    <a class="page-link" href="?page={{ num }}">{{ num }}</a>
-                  </li>
-                {% endif %}
-              {% endfor %}
-
-              {% if page_obj.has_next %}
-              <li class="page-item">
-                <a class="page-link" href="?page={{ page_obj.next_page_number }}">次へ</a>
-              </li>
-              {% else %}
-              <li class="page-item disabled">
-                <span class="page-link">次へ</span>
-              </li>
-              {% endif %}
-
-            </ul>
-          </nav>
+            <div class="table-responsive">
+              <table class="table table-bordered table-sm align-middle mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th>期別</th>
+                    <th>開始日</th>
+                    <th>終了日</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for r in rows %}
+                    <tr>
+                      <td>{{ r.kibetu }}</td>
+                      <td>{{ r.st_date }}</td>
+                      <td>{{ r.end_date }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p class="mb-0 text-muted">該当データがありません。</p>
           {% endif %}
 
         </div>
       </div>
 
     </main>
-
   </div>
 </div>
 

@@ -374,22 +374,55 @@ class PlanDetailView(generic.DetailView):
 
 class KibetuView(generic.ListView):
     template_name = "kibetu.html"
-    context_object_name = "object_list"
-    model = PeriodMaster
-    paginate_by = 10
+    context_object_name = "rows"
+    model = PeriodMaster  # kibetu, st_date, end_date を持つモデル
 
     def get_queryset(self):
-        return PeriodMaster.objects.using("rds").all()
+        qs = PeriodMaster.objects.using("rds").all()
+
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()   # 完全一致用
+        q_kibetu = (self.request.GET.get("q_kibetu") or "").strip()        # 部分一致用
+
+        if selected_kibetu:
+            qs = qs.filter(kibetu=selected_kibetu)
+
+        if q_kibetu:
+            qs = qs.filter(kibetu__icontains=q_kibetu)
+
+        return qs.order_by("-st_date", "-kibetu")
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        ctx["selected_kibetu"] = (self.request.GET.get("kibetu") or "").strip()
+        ctx["q_kibetu"] = (self.request.GET.get("q_kibetu") or "").strip()
+
+        # プルダウンの選択肢（重複なし）
+        ctx["kibetu_choices"] = list(
+            PeriodMaster.objects.using("rds")
+            .order_by("-st_date")
+            .values_list("kibetu", flat=True)
+            .distinct()
+        )
+
+        return ctx
 
 
 
 class TitleListView(generic.ListView):
     template_name = "title_list.html"
-    context_object_name = "object_list"
+    context_object_name = "rows"
     model = TitleMaster
 
     def get_queryset(self):
-        return TitleMaster.objects.using("rds").all()
+        # 並び順はお好みで（title_id順など）
+        return TitleMaster.objects.using("rds").order_by("title_id")
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        # 件数表示用（テンプレで rows|length を使わない）
+        ctx["total_count"] = ctx["rows"].count()
+        return ctx
 
 
 
