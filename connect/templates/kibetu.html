@@ -16,19 +16,7 @@
     {% endif %}
   </div>
     <!-- Sidebar（そのまま） -->
-    <nav class="col-12 col-md-3 col-lg-2">
-      <div class="card shadow-sm position-sticky" style="top: 1rem;">
-        <div class="card-body">
-          <div class="fw-bold mb-2">メニュー</div>
-          <div class="list-group">
-            <a class="list-group-item list-group-item-action active" href="{% url 'connect:kibetu' %}">期別</a>
-            <a class="list-group-item list-group-item-action" href="{% url 'connect:title_list' %}">タイトル一覧</a>
-            <a class="list-group-item list-group-item-action" href="{% url 'connect:repurchase_last_month' %}">購入情報登録</a>
-            <a class="list-group-item list-group-item-action" href="{% url 'connect:repurchase_list' %}">購入情報登録一覧</a>
-          </div>
-        </div>
-      </div>
-    </nav>
+    {% include "com/_sidebar.html" with active_menu="kibetu" %}
 
     <!-- Main -->
     <main class="col-12 col-md-9 col-lg-10">

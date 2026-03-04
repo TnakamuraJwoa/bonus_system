@@ -18,7 +18,7 @@
     </div>
 
     <!-- Sidebar（そのまま） -->
-    {% include "com/_sidebar.html" with active_menu="title_list" %}
+    {% include "com/_sidebar.html" with active_menu="settings" %}
 
     <!-- Main -->
     <main class="col-12 col-md-9 col-lg-10">
@@ -42,15 +42,17 @@
               <table class="table table-bordered table-sm align-middle mb-0">
                 <thead class="table-light">
                   <tr>
-                    <th>id</th>
-                    <th>タイトル名</th>
+                    <th>設定キー</th>
+                    <th>値</th>
+                    <th>説明</th>
                   </tr>
                 </thead>
                 <tbody>
                   {% for r in rows %}
                     <tr>
-                      <td>{{ r.title_id }}</td>
-                      <td>{{ r.title_name }}</td>
+                      <td>{{ r.name }}</td>
+                      <td>{{ r.value }}</td>
+                      <td>{{ r.comment }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

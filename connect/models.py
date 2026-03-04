@@ -374,3 +374,28 @@ class PurchaseInfoList(models.Model):
 
     def __str__(self):
         return f"{self.year}-{self.month} {self.jwoa_code} ({self.bv})"
+
+
+class Settings(models.Model):
+
+    name = models.CharField(
+        max_length=50,
+        verbose_name="設定キー"
+    )
+
+    value = models.CharField(
+        max_length=100,
+        verbose_name="値"
+    )
+
+    comment = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        verbose_name="説明"
+    )
+
+    class Meta:
+        db_table = "settings"
+        verbose_name = "設定"
+        verbose_name_plural = "設定"

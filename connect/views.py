@@ -21,6 +21,7 @@ from django.utils.timezone import make_aware
 from .models import Plan, PlanDate, GenreList, Region, FavoritePlan
 
 from .models import TitleMaster, PeriodMaster, UserTitles, Orders, User, PrevMonthPurchaseStatus, PurchaseInfoList
+from .models import Settings
 
 
 logger = logging.getLogger(__name__)
@@ -408,7 +409,6 @@ class KibetuView(generic.ListView):
         return ctx
 
 
-
 class TitleListView(generic.ListView):
     template_name = "title_list.html"
     context_object_name = "rows"
@@ -423,6 +423,7 @@ class TitleListView(generic.ListView):
         # 件数表示用（テンプレで rows|length を使わない）
         ctx["total_count"] = ctx["rows"].count()
         return ctx
+
 
 
 
@@ -615,4 +616,21 @@ class RepurchaseListView(generic.ListView):
         # ✅ ここが重要：検索条件を渡す
         ctx["rows"] = self._fetch_rows(period.year, period.month, q_code=q_code, q_name=q_name)
 
+        return ctx
+
+
+
+class SettingsView(generic.ListView):
+    template_name = "settings.html"
+    context_object_name = "rows"
+    model = Settings
+
+    def get_queryset(self):
+        # 並び順はお好みで（title_id順など）
+        return Settings.objects.using("rds").order_by("id")
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        # 件数表示用（テンプレで rows|length を使わない）
+        ctx["total_count"] = ctx["rows"].count()
         return ctx
