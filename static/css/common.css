@@ -7,3 +7,16 @@ body {
     background-color: #f4f6f9; /* 今使っている色に合わせて変更 */
 }
 
+/* テーブルヘッダー固定 */
+.table-responsive thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background-color: cadetblue; /* Bootstrap table-light */
+}
+
+/* スクロール領域 */
+.table-responsive {
+  max-height: 450px;
+  overflow-y: auto;
+}

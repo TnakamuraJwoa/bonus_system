@@ -15,6 +15,8 @@ from django.db.models import Q
 from django.conf import settings
 from django.db import connections, transaction
 from django.shortcuts import redirect
+import math
+from urllib.parse import urlencode
 
 from django.db.models import Sum
 from django.utils.timezone import make_aware
@@ -109,95 +111,351 @@ class DriveBonusView(generic.ListView):
         end_exclusive = make_aware(datetime.combine(end_date + timedelta(days=1), time.min))
 
         sql = """
+WITH RECURSIVE
+
+repurchase_list AS (  -- 再購入リスト
+    SELECT
+        b.jwoa_code AS distribution_jwoa_code,
+        a.bv_actived_flg,
+        a.deposit_at,
+        a.order_status,
+        a.order_type,
+        b.distribution_bv,
+        CASE -- 101:再購入
+            WHEN a.order_type = 101
+                THEN LEAST(IFNULL(b.distribution_bv, 0), 50)
+            ELSE
+                IFNULL(b.distribution_bv, 0)
+        END AS custom_bv
+    FROM bonus_db.orders AS a
+    LEFT JOIN bonus_db.orders_distribution_bv AS b
+      ON a.order_code = b.order_code
+     -- 101:再購入, 102:初回購入, 103:ランクアップ購入品
+    WHERE a.order_type = 101
+      AND a.order_status NOT IN (201, 206)
+      AND a.deposit_at >= %s
+      AND a.deposit_at < %s
+
+    UNION ALL
+
+    SELECT
+        member_no AS distribution_jwoa_code,
+        1         AS bv_actived_flg,
+        payment_date AS deposit_at,
+        203       AS order_status,
+        105       AS order_type,-- 105:特別対応
+        total_bv  AS distribution_bv,
+        LEAST(IFNULL(total_bv, 0), 50) AS custom_bv
+    FROM bonus_db.api_users_bv
+    WHERE payment_date >= %s
+      AND payment_date <  %s
+),
+
+
+-- ランクアップ、初回購入情報リスト
+rank_up_list AS (
+    SELECT
+        b.jwoa_code AS distribution_jwoa_code,
+        a.bv_actived_flg,
+        a.deposit_at,
+        a.order_status,
+        a.order_type,
+        b.distribution_bv,
+        IFNULL(b.distribution_bv, 0) AS custom_bv
+    FROM bonus_db.orders AS a
+    LEFT JOIN bonus_db.orders_distribution_bv AS b
+      ON a.order_code = b.order_code
+     -- 101:再購入, 102:初回購入, 103:ランクアップ購入品
+    WHERE a.order_type IN (102, 103)
+      AND a.order_status NOT IN (201, 206)
+      AND a.deposit_at >= '2026-01-11 00:00:00'
+      AND a.deposit_at <  '2026-01-18 00:00:00'
+),
+-- 購入者リスト
+purchasers_list AS (
+select distribution_jwoa_code as jwoa_code from repurchase_list
+union
+select distribution_jwoa_code as jwoa_code from rank_up_list
+),
+
+/* ランクアップ変動履歴 */
+rankup_history AS (
+  SELECT *
+  FROM (
+      SELECT
+          t.*,
+          ROW_NUMBER() OVER (
+              PARTITION BY user_id
+              ORDER BY fluctuation_up_at DESC
+          ) AS rn
+      FROM bonus_db.users_rank_up_history AS t
+      WHERE fluctuation_up_at < '2025-01-01 00:00:00'
+  ) x
+  WHERE rn = 1
+),
+
+-- ユーザー(in_購入者リスト)
+user_in_purchasers_list AS (
+  SELECT u.*
+  FROM bonus_db.users_target_rank AS u
+  JOIN purchasers_list AS p
+    ON p.jwoa_code = u.jmoa_code
+),
+
+
+-- 再起処理
+chain AS (
+    -- 1段目：各ユーザーの紹介者を起点にする
+    SELECT
+        u.jmoa_code        AS jmoa_code,
+        u.new_rank             AS jmoa_rank,
+        u.introducer_code  AS current_code,
+        1                  AS lvl
+    FROM user_in_purchasers_list AS u
+
+    UNION ALL
+
+    -- 2段目以降：紹介者を辿る（紹介者が rank=9 の間だけ上へ進む）
+    SELECT
+        c.jmoa_code        AS jmoa_code,
+        c.jmoa_rank        AS jmoa_rank,
+        up.introducer_code AS current_code,
+        c.lvl + 1          AS lvl
+    FROM chain AS c
+    JOIN bonus_db.users_target_rank AS up
+      ON up.jmoa_code = c.current_code
+    WHERE
+        c.current_code IS NOT NULL
+        AND up.new_rank = 9
+        AND c.lvl < 100
+),
+
+last_step AS (
+    -- 各ユーザーごとに、辿れた最終段（最大lvl）を取る
+    SELECT
+        chain.jmoa_code AS jmoa_code,
+        MAX(chain.lvl)  AS max_lvl
+    FROM chain
+    GROUP BY chain.jmoa_code
+),
+
+-- 一般会員を除く紹介者を再帰的に設定
+user_introducer_non9 AS (
 SELECT
-    a.introducer_code,
-    a.jmoa_code,
-    a.send_bv_name,
-    a.title_id,
-    a.title_name,
-    bv.total_sum,
+    c.current_code   AS introducer_code,
+    u2.new_rank          AS introducer_rank,
+    c.jmoa_code      AS jmoa_code,
+    c.jmoa_rank      AS jmoa_rank,
+    c.lvl            AS lvl
+FROM chain AS c
+JOIN last_step AS s
+  ON s.jmoa_code = c.jmoa_code
+ AND s.max_lvl   = c.lvl
+LEFT JOIN bonus_db.users_target_rank AS u2
+  ON u2.jmoa_code = c.current_code
+),
 
-    CASE
-        WHEN a.title_id >= 4
-            THEN TRUNCATE(COALESCE(bv.total_sum, 0) * 0.20, 2)
-
-        WHEN a.title_id = 3
-            THEN TRUNCATE(COALESCE(bv.total_sum, 0) * 0.15, 2)
-
-        ELSE
-            TRUNCATE(COALESCE(bv.total_sum, 0) * 0.10, 2)
-    END AS bonus_amount
-
-FROM (
-#アクティブ招待 + title
+-- non9にタイトルを追加
+user_introducer_non9_addTitle AS (
 SELECT
+    non9.introducer_code,
+    non9.introducer_rank,
+    non9.jmoa_code,
     u.send_bv_name,
-    copy_non9.*,
-    tm.title_id,
-    tm.title_name
-FROM bonus_db.copy_introducer_non9 AS copy_non9
-LEFT JOIN bonus_db.users ui
-    ON copy_non9.introducer_code = ui.jmoa_code
+    non9.jmoa_rank,
+    non9.lvl,
+    tm.title_id as introducer_title_id,
+    tm.title_name as introducer_title_name
+FROM user_introducer_non9 AS non9
+LEFT JOIN bonus_db.users_target_rank ui
+    ON non9.introducer_code = ui.jmoa_code
 LEFT JOIN bonus_db.user_titles ut
     ON ut.user_id = ui.id
 LEFT JOIN bonus_db.title_master tm
     ON ut.title_id = tm.title_id
-LEFT JOIN bonus_db.users u
-    ON copy_non9.jmoa_code = u.jmoa_code
+LEFT JOIN bonus_db.users_target_rank u
+    ON non9.jmoa_code = u.jmoa_code
+),
 
-) AS a
 
-LEFT JOIN (
+-- ランクアップ、初回購入情報
+rank_up_add_non9_addTitle AS (
     SELECT
-        o.distribution_jwoa_code AS jwoa_code,
-        SUM(o.custom_total_bv)   AS total_sum
-    FROM (
-        SELECT
-            b.jwoa_code AS distribution_jwoa_code,
-            a.bv_actived_flg,
-            a.deposit_at,
-            a.order_status,
-            a.order_type,
-            b.distribution_bv,
+        non9.introducer_title_name as title_name,
+        non9.introducer_code,
+        non9.jmoa_code as jwoa_code,
+        non9.send_bv_name as jwoa_name,
+        rank_up.custom_bv,
+        CASE
+            WHEN non9.introducer_title_id >= 4
+                THEN TRUNCATE(COALESCE(rank_up.custom_bv, 0) * 0.20, 2)
 
-            CASE
-                WHEN a.order_type = 101
-                    THEN LEAST(IFNULL(b.distribution_bv, 0), 50)
-                ELSE
-                    IFNULL(b.distribution_bv, 0)
-            END AS custom_total_bv
-        FROM bonus_db.orders AS a
-        LEFT JOIN bonus_db.orders_distribution_bv AS b
-               ON a.order_code = b.order_code
+            WHEN non9.introducer_title_id = 3
+                THEN TRUNCATE(COALESCE(rank_up.custom_bv, 0) * 0.15, 2)
 
-        WHERE a.order_type IN (101, 102, 103)
- AND deposit_at >= %s
- AND deposit_at <  %s
-        UNION ALL
-        SELECT
-            member_no AS distribution_jwoa_code,
-            1         AS bv_actived_flg,
-            payment_date as deposit_at,
-            203       AS order_status,
-            105       AS order_type,
-            total_bv        AS distribution_bv,
-            LEAST(IFNULL(total_bv, 0), 50) AS custom_total_bv
+            ELSE
+                TRUNCATE(COALESCE(rank_up.custom_bv, 0) * 0.10, 2)
+        END AS bonus_amount
+    FROM rank_up_list AS rank_up
+    LEFT JOIN user_introducer_non9_addTitle AS non9
+      ON rank_up.distribution_jwoa_code = non9.jmoa_code
+    where rank_up.custom_bv > 0
+),
 
-        FROM bonus_db.api_users_bv
-    WHERE
-        payment_date >= %s
-        AND payment_date < %s
-    ) AS o
-    WHERE
-        o.bv_actived_flg = 1
-        AND o.order_status NOT IN (201, 202, 206)
 
-    GROUP BY
-        o.distribution_jwoa_code
-) AS bv
-    ON a.jmoa_code = bv.jwoa_code
-WHERE
-    bv.total_sum >= 1;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- 条件を満たす紹介者（rank!=9 & bv>=50）が見つかるまで上へ辿る
+chain_find AS (
+    -- 1段目：最初に評価する紹介者 = u.introducer_code
+    SELECT
+        u.jmoa_code       AS jmoa_code,
+        u.new_rank            AS jmoa_rank,
+        u.introducer_code AS evaluated_code,
+        1                 AS lvl,
+        CASE
+            WHEN up.new_rank <> 9 AND IFNULL(p.bv, 0) >= 50 THEN 1
+            ELSE 0
+        END AS found,
+        up.introducer_code AS next_code
+    FROM user_in_purchasers_list u
+    LEFT JOIN bonus_db.users_target_rank up
+      ON up.jmoa_code = u.introducer_code
+    LEFT JOIN bonus_db.purchase_info_list p
+      ON p.jwoa_code = up.jmoa_code
+     AND p.year  = 2025
+     AND p.month = 12
+
+    UNION ALL
+
+    -- 2段目以降
+    SELECT
+        c.jmoa_code,
+        c.jmoa_rank,
+        c.next_code       AS evaluated_code,
+        c.lvl + 1         AS lvl,
+        CASE
+            WHEN up.new_rank <> 9 AND IFNULL(p.bv, 0) >= 50 THEN 1
+            ELSE 0
+        END AS found,
+        up.introducer_code AS next_code
+    FROM chain_find c
+    JOIN bonus_db.users_target_rank up
+      ON up.jmoa_code = c.next_code
+    LEFT JOIN bonus_db.purchase_info_list p
+      ON p.jwoa_code = up.jmoa_code
+     AND p.year  = 2025
+     AND p.month = 12
+    WHERE c.next_code IS NOT NULL
+      AND c.found = 0
+      AND c.lvl < 100
+),
+
+first_found AS (
+    SELECT
+        jmoa_code,
+        MIN(lvl) AS hit_lvl
+    FROM chain_find
+    WHERE found = 1
+    GROUP BY jmoa_code
+),
+
+-- 一般会員以外 & 前月再購入
+user_introducer_non9_2 AS (
+SELECT
+    c.evaluated_code AS introducer_code,
+    u.new_rank           AS introducer_rank,
+    c.jmoa_code,
+    c.jmoa_rank,
+    p.bv             AS introducer_bv,
+    c.lvl
+FROM chain_find c
+JOIN first_found f
+  ON f.jmoa_code = c.jmoa_code
+ AND f.hit_lvl   = c.lvl
+JOIN bonus_db.users_target_rank u
+  ON u.jmoa_code = c.evaluated_code
+JOIN bonus_db.purchase_info_list p
+  ON p.jwoa_code = c.evaluated_code
+ AND p.year  = 2025
+ AND p.month = 12
+WHERE c.found = 1
+ORDER BY c.jmoa_code
+),
+
+-- non9_2にタイトルを追加
+user_introducer_non9_2_addTitle AS (
+SELECT
+    non9.introducer_code,
+    non9.introducer_rank,
+    non9.jmoa_code,
+    u.send_bv_name,
+    non9.jmoa_rank,
+    non9.lvl,
+    tm.title_id as introducer_title_id,
+    tm.title_name as introducer_title_name
+FROM user_introducer_non9_2 AS non9
+LEFT JOIN bonus_db.users_target_rank ui
+    ON non9.introducer_code = ui.jmoa_code
+LEFT JOIN bonus_db.user_titles ut
+    ON ut.user_id = ui.id
+LEFT JOIN bonus_db.title_master tm
+    ON ut.title_id = tm.title_id
+LEFT JOIN bonus_db.users_target_rank u
+    ON non9.jmoa_code = u.jmoa_code
+),
+
+-- 再購入情報
+repurchase_add_non9_2_addTitle AS (
+    SELECT
+        non9.introducer_title_name as title_name,
+        non9.introducer_code,
+        non9.jmoa_code as jwoa_code,
+        non9.send_bv_name as jwoa_name,
+        repurchase.custom_bv,
+        CASE
+            WHEN non9.introducer_title_id >= 4
+                THEN TRUNCATE(COALESCE(repurchase.custom_bv, 0) * 0.20, 2)
+
+            WHEN non9.introducer_title_id = 3
+                THEN TRUNCATE(COALESCE(repurchase.custom_bv, 0) * 0.15, 2)
+
+            ELSE
+                TRUNCATE(COALESCE(repurchase.custom_bv, 0) * 0.10, 2)
+        END AS bonus_amount
+    FROM repurchase_list AS repurchase
+    LEFT JOIN user_introducer_non9_2_addTitle AS non9
+      ON repurchase.distribution_jwoa_code = non9.jmoa_code
+    where repurchase.custom_bv > 0
+),
+
+pay_drive_list AS (
+select * from rank_up_add_non9_addTitle
+union all
+select * from repurchase_add_non9_2_addTitle
+)
+
+select * from pay_drive_list order by introducer_code, jwoa_code
         """
 
 
@@ -633,4 +891,413 @@ class SettingsView(generic.ListView):
         ctx = super().get_context_data(**kwargs)
         # 件数表示用（テンプレで rows|length を使わない）
         ctx["total_count"] = ctx["rows"].count()
+        return ctx
+
+
+
+class UserTargetRankView(generic.TemplateView):
+    template_name = "user_target_rank.html"
+
+    # 表示カラム（順番固定）
+    DISPLAY_COLUMNS = [
+        "id",
+        "jmoa_code",
+        "introducer_code",
+        "placement_code",
+        "group_code",
+        "send_bv_name",
+        "status_code",
+        "rank",
+        "salon_administrator",
+        "salon_name",
+        "interim_at",
+        "activated_at",
+        "created_at",
+        "target_rank",
+        "max_up_at",
+        "new_rank",
+    ]
+
+    # ----------------------------
+    # UI: 月リスト
+    # ----------------------------
+    def get_month_list(self):
+        today = date.today().replace(day=1)
+        months = []
+        for i in range(0, 13):  # 今月〜過去12ヶ月
+            d = today - relativedelta(months=i)
+            months.append({
+                "value": f"{d.year}-{d.month:02d}",
+                "year": d.year,
+                "month": d.month,
+            })
+        return months
+
+    def _month_end_exclusive(self, year: int, month: int):
+        """対象月の締め（翌月1日00:00:00）"""
+        base = datetime(year, month, 1, 0, 0, 0)
+        return base + relativedelta(months=1)
+
+    # ----------------------------
+    # ✅ 件数（総数）
+    # ----------------------------
+    def _fetch_total_count(self) -> int:
+        sql = "SELECT COUNT(*) FROM bonus_db.users"
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql)
+            return int(cursor.fetchone()[0])
+
+    # ----------------------------
+    # 表示用: LIMITあり
+    # ----------------------------
+    def _fetch_users(self, cutoff_dt: datetime, limit: int = 100):
+        sql = f"""
+    SELECT
+      t.id,
+      t.jmoa_code,
+      t.introducer_code,
+      t.placement_code,
+      t.group_code,
+      t.send_bv_name,
+      t.status_code,
+      t.`rank`,
+      t.salon_administrator,
+      t.salon_name,
+      t.interim_at,
+      t.activated_at,
+      t.created_at,
+
+      CASE
+        WHEN x.fluctuation_name REGEXP '^[0-9]+$' THEN CAST(x.fluctuation_name AS UNSIGNED)
+        ELSE NULL
+      END AS target_rank,
+
+      x.created_at AS max_up_at,
+
+      CASE
+        WHEN t.status_code <> 1 THEN 9
+        WHEN x.fluctuation_name REGEXP '^[0-9]+$' THEN CAST(x.fluctuation_name AS UNSIGNED)
+        ELSE t.`rank`
+      END AS new_rank
+
+    FROM bonus_db.users t
+    LEFT JOIN (
+      SELECT user_id, fluctuation_name, created_at
+      FROM (
+        SELECT
+          user_id,
+          fluctuation_name,
+          created_at,
+          ROW_NUMBER() OVER (
+            PARTITION BY user_id
+            ORDER BY created_at DESC, id DESC
+          ) AS rn
+        FROM bonus_db.users_rank_up_history
+        WHERE created_at <= %s
+      ) r
+      WHERE rn = 1
+    ) x
+    ON t.jmoa_code = x.user_id
+    ORDER BY t.jmoa_code
+    LIMIT {int(limit)}
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, [cutoff_dt])
+            cols = [c[0] for c in cursor.description]
+            return [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+    # ----------------------------
+    # GET: 画面表示
+    # ----------------------------
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        ctx["month_list"] = self.get_month_list()
+        ctx["selected_prev_month"] = self.request.GET.get("prev_month") or ""
+        ctx["selected_period"] = None
+
+        ctx["columns"] = self.DISPLAY_COLUMNS
+        ctx["rows"] = []
+        ctx["total_count"] = 0  # ✅ 追加（本当の件数）
+
+        if not ctx["selected_prev_month"]:
+            return ctx
+
+        y, m = map(int, ctx["selected_prev_month"].split("-"))
+        ctx["selected_period"] = {"year": y, "month": m}
+
+        cutoff_dt = self._month_end_exclusive(y, m)
+
+        # ✅ 表示は100件、件数は全件
+        ctx["rows"] = self._fetch_users(cutoff_dt, limit=100)
+        ctx["total_count"] = self._fetch_total_count()
+
+        return ctx
+
+    # ----------------------------
+    # POST: 登録（LIMITなしで全件UPSERT）
+    # ----------------------------
+    def post(self, request, *args, **kwargs):
+        selected_prev_month = request.POST.get("prev_month") or ""
+        if not selected_prev_month:
+            messages.error(request, "対象年月が未選択です。")
+            return redirect("connect:user_target_rank")
+
+        year, month = map(int, selected_prev_month.split("-"))
+        cutoff_dt = self._month_end_exclusive(year, month)
+
+        # ✅ settings と users_target_rank.target_rank に入れる「YYYYMM」
+        target_rank = f"{year}{month:02d}"   # 例: 202512
+
+        insert_sql = """
+    INSERT INTO bonus_db.users_target_rank
+    (
+      `jmoa_code`,
+      `introducer_code`,
+      `placement_code`,
+      `group_code`,
+      `send_bv_name`,
+      `status_code`,
+      `rank`,
+      `salon_administrator`,
+      `salon_name`,
+      `interim_at`,
+      `activated_at`,
+      `created_at`,
+      `target_rank`,
+      `max_up_at`,
+      `new_rank`
+    )
+    SELECT
+      t.jmoa_code,
+      t.introducer_code,
+      t.placement_code,
+      t.group_code,
+      t.send_bv_name,
+      t.status_code,
+      t.`rank`,
+      t.salon_administrator,
+      t.salon_name,
+      t.interim_at,
+      t.activated_at,
+      t.created_at,
+
+      /* target_rank（=履歴のランク）※数値化 */
+      CASE
+        WHEN x.fluctuation_name REGEXP '^[0-9]+$' THEN CAST(x.fluctuation_name AS UNSIGNED)
+        ELSE NULL
+      END AS target_rank,
+
+      /* max_up_at（=最新ランクアップ日時） */
+      x.created_at AS max_up_at,
+
+      /* new_rank（=確定ランク）※数値 */
+      CASE
+        WHEN t.status_code <> 1 THEN 9
+        WHEN x.fluctuation_name REGEXP '^[0-9]+$' THEN CAST(x.fluctuation_name AS UNSIGNED)
+        ELSE t.`rank`
+      END AS new_rank
+
+    FROM bonus_db.users t
+    LEFT JOIN (
+      SELECT user_id, fluctuation_name, created_at
+      FROM (
+        SELECT
+          user_id,
+          fluctuation_name,
+          created_at,
+          ROW_NUMBER() OVER (
+            PARTITION BY user_id
+            ORDER BY created_at DESC, id DESC
+          ) AS rn
+        FROM bonus_db.users_rank_up_history
+        WHERE created_at <= %s
+      ) r
+      WHERE rn = 1
+    ) x
+    ON t.jmoa_code = x.user_id
+    """
+
+        with connections["rds"].cursor() as cursor:
+            # ① 全削除
+            cursor.execute("TRUNCATE TABLE bonus_db.users_target_rank")
+
+            # ② 全件INSERT（%s は cutoff_dt だけ）
+            cursor.execute(insert_sql, [cutoff_dt])
+
+            # ③ settings更新（user_add_rank の value を YYYYMM に更新）
+            cursor.execute(
+                """
+                UPDATE bonus_db.settings
+                SET value = %s
+                WHERE name = 'user_add_rank'
+                """,
+                [target_rank],
+            )
+
+        messages.success(request, f"{year}年{month}月（{target_rank}）で全件登録しました。")
+        return redirect(f"{redirect('connect:user_target_rank').url}?prev_month={selected_prev_month}")
+
+
+class TitleUserView(generic.TemplateView):
+    template_name = "title_user.html"
+
+    DEFAULT_PER_PAGE = 200
+    MAX_PER_PAGE = 500
+
+    def _build_where(self, title_id: str, q_name: str):
+        where = []
+        params = []
+
+        if title_id:
+            where.append("ut.title_id = %s")
+            params.append(title_id)
+
+        if q_name:
+            where.append("u.send_bv_name LIKE %s")
+            params.append(f"%{q_name}%")
+
+        where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+        return where_sql, params
+
+    def _fetch_total_count(self, title_id: str, q_name: str) -> int:
+        where_sql, params = self._build_where(title_id, q_name)
+        sql = f"""
+SELECT COUNT(*)
+FROM bonus_db.user_titles ut
+LEFT JOIN bonus_db.users u
+  ON ut.user_id = u.id
+{where_sql}
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            return int(cursor.fetchone()[0])
+
+    def _fetch_rows_keyset(
+        self,
+        title_id: str,
+        q_name: str,
+        limit: int,
+        after_title_id: str = "",
+        after_jwoa_code: str = "",
+    ):
+        where_sql, params = self._build_where(title_id, q_name)
+
+        # Keyset条件（ORDER BY tm.title_id, u.jmoa_code と一致させる）
+        keyset_sql = ""
+        if after_title_id and after_jwoa_code:
+            if where_sql:
+                keyset_sql = " AND (tm.title_id > %s OR (tm.title_id = %s AND u.jmoa_code > %s))"
+            else:
+                keyset_sql = " WHERE (tm.title_id > %s OR (tm.title_id = %s AND u.jmoa_code > %s))"
+            params += [after_title_id, after_title_id, after_jwoa_code]
+
+        sql = f"""
+SELECT
+  u.id,
+  u.jmoa_code AS jwoa_code,
+  u.send_bv_name AS jwoa_name,
+  tm.title_id AS title_id,
+  tm.title_name AS title_name
+FROM bonus_db.user_titles ut
+LEFT JOIN bonus_db.users u
+  ON ut.user_id = u.id
+LEFT JOIN bonus_db.title_master tm
+  ON ut.title_id = tm.title_id
+{where_sql}{keyset_sql}
+ORDER BY tm.title_id, u.jmoa_code
+LIMIT %s
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params + [limit])
+            cols = [c[0] for c in cursor.description]
+            return [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+    def _fetch_title_choices(self):
+        sql = """
+SELECT tm.title_id, tm.title_name
+FROM bonus_db.title_master tm
+ORDER BY tm.title_id
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql)
+            return [{"title_id": r[0], "title_name": r[1]} for r in cursor.fetchall()]
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        title_id = (self.request.GET.get("title_id") or "").strip()
+        q_name = (self.request.GET.get("q_name") or "").strip()
+
+        # per_page
+        try:
+            per_page = int(self.request.GET.get("per_page") or str(self.DEFAULT_PER_PAGE))
+        except ValueError:
+            per_page = self.DEFAULT_PER_PAGE
+        per_page = max(1, min(per_page, self.MAX_PER_PAGE))
+
+        # ✅ page（表示用カウンタ）
+        try:
+            page = int(self.request.GET.get("page") or "1")
+        except ValueError:
+            page = 1
+        page = max(page, 1)
+
+        # Keyset cursor
+        after_title_id = (self.request.GET.get("after_title_id") or "").strip()
+        after_jwoa_code = (self.request.GET.get("after_jwoa_code") or "").strip()
+
+        total_count = self._fetch_total_count(title_id, q_name)
+        total_pages = max(1, math.ceil(total_count / per_page))
+
+        rows = self._fetch_rows_keyset(
+            title_id=title_id,
+            q_name=q_name,
+            limit=per_page,
+            after_title_id=after_title_id,
+            after_jwoa_code=after_jwoa_code,
+        )
+
+        # 次へ用カーソル（最後の行）
+        next_after_title_id = ""
+        next_after_jwoa_code = ""
+        if rows:
+            last = rows[-1]
+            next_after_title_id = str(last["title_id"])
+            next_after_jwoa_code = str(last["jwoa_code"])
+
+        # 検索条件維持（page/afterはHTML側で付ける）
+        base_params = {}
+        if title_id:
+            base_params["title_id"] = title_id
+        if q_name:
+            base_params["q_name"] = q_name
+        if per_page != self.DEFAULT_PER_PAGE:
+            base_params["per_page"] = per_page
+
+        ctx["title_choices"] = self._fetch_title_choices()
+        ctx["selected_title_id"] = title_id
+        ctx["q_name"] = q_name
+
+        ctx["rows"] = rows
+        ctx["total_count"] = total_count
+        ctx["per_page"] = per_page
+
+        ctx["page"] = page
+        ctx["total_pages"] = total_pages
+
+        ctx["base_qs"] = urlencode(base_params)
+
+        ctx["has_next"] = (
+            len(rows) == per_page
+            and bool(next_after_title_id)
+            and bool(next_after_jwoa_code)
+        )
+        ctx["next_after_title_id"] = next_after_title_id
+        ctx["next_after_jwoa_code"] = next_after_jwoa_code
+
+        ctx["has_prev_hint"] = bool(after_title_id and after_jwoa_code)
+
         return ctx

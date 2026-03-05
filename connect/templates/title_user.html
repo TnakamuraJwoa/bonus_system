@@ -1,0 +1,161 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block contents %}
+
+{% block head %}
+  <link href="{% static 'css/common.css' %}" rel="stylesheet">
+{% endblock %}
+
+<div class="container-fluid mt-3">
+  <div class="row g-1">
+
+    <div class="col-12 text-end">
+      {% if user.is_authenticated %}
+        <span class="small text-muted">👤 {{ user.username }}</span>
+      {% endif %}
+    </div>
+
+    {% include "com/_sidebar.html" with active_menu="title_user" %}
+
+    <main class="col-12 col-md-9 col-lg-10">
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+
+          <h5 class="mb-3">【タイトル保有ユーザー一覧】</h5>
+
+          <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+
+            <div>
+              <label class="form-label mb-0 small text-muted">title（選択）</label>
+              <select name="title_id" class="form-select">
+                <option value="">（全件）</option>
+                {% for t in title_choices %}
+                  <option value="{{ t.title_id }}"
+                          {% if t.title_id|stringformat:"s" == selected_title_id %}selected{% endif %}>
+                    {{ t.title_id }} : {{ t.title_name }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">名前（検索）</label>
+              <input type="text"
+                     name="q_name"
+                     class="form-control"
+                     value="{{ q_name|default:'' }}"
+                     placeholder="例: 田中">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">表示件数</label>
+              <select name="per_page" class="form-select">
+                <option value="50"  {% if per_page == 50 %}selected{% endif %}>50</option>
+                <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+              </select>
+            </div>
+
+            <button type="submit" class="btn btn-primary">絞り込み</button>
+
+            <a class="btn btn-outline-secondary" href="{% url 'connect:title_user' %}">リセット</a>
+          </form>
+
+          {% if selected_title_id or q_name %}
+            <div class="text-muted small mt-3">
+              絞り込み中：
+              {% if selected_title_id %}
+                <span class="badge bg-info text-dark">title_id={{ selected_title_id }}</span>
+              {% endif %}
+              {% if q_name %}
+                <span class="badge bg-secondary">name={{ q_name }}</span>
+              {% endif %}
+            </div>
+          {% else %}
+            <div class="text-muted small mt-3">全件表示中</div>
+          {% endif %}
+
+        </div>
+      </div>
+
+      <div class="card shadow-sm">
+        <div class="card-body">
+
+          {% if rows %}
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="fw-bold">一覧</div>
+              <div class="text-end">
+                <strong>総件数：{{ total_count }} 件</strong>
+                <span class="text-muted small ms-2">
+                  （{{ page }} / {{ total_pages }}）
+                </span>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table table-bordered table-sm align-middle mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th>id</th>
+                    <th>jwoa_code</th>
+                    <th>jwoa_name</th>
+                    <th>title_id</th>
+                    <th>title_name</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for r in rows %}
+                    <tr>
+                      <td>{{ r.id }}</td>
+                      <td>{{ r.jwoa_code }}</td>
+                      <td>{{ r.jwoa_name }}</td>
+                      <td>{{ r.title_id }}</td>
+                      <td>{{ r.title_name }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mt-3">
+              <div class="text-muted small">
+                {% if has_prev_hint %}
+                  ※「戻る」はブラウザの戻るでもOK
+                {% endif %}
+              </div>
+
+              <div class="d-flex gap-2">
+                {% if has_prev_hint %}
+                  <button class="btn btn-outline-secondary btn-sm"
+                          type="button"
+                          onclick="history.back()">
+                    ← 戻る
+                  </button>
+                {% endif %}
+
+                {% if has_next %}
+                  <a class="btn btn-primary btn-sm"
+                     href="?{{ base_qs }}{% if base_qs %}&{% endif %}page={{ page|add:1 }}&after_title_id={{ next_after_title_id }}&after_jwoa_code={{ next_after_jwoa_code }}">
+                    次へ →
+                  </a>
+                {% else %}
+                  <button class="btn btn-secondary btn-sm" disabled>次へ →</button>
+                {% endif %}
+              </div>
+            </div>
+
+          {% else %}
+            <p class="mb-0 text-muted">該当データがありません。</p>
+          {% endif %}
+
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+{% endblock %}
