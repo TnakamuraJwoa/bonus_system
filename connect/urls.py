@@ -4,7 +4,7 @@ from . import views
 
 app_name = 'connect'
 urlpatterns = [
-    path('', views.IndexView.as_view(), name = "index"),
+    path('', views.KibetuView.as_view(), name = "index"),
     path('kibetu/', views.KibetuView.as_view(), name = "kibetu"),
     path('title_list/', views.TitleListView.as_view(), name = "title_list"),
     path('title_user/', views.TitleUserView.as_view(), name = "title_user"),

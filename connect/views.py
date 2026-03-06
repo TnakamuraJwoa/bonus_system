@@ -102,13 +102,27 @@ class DriveBonusView(generic.ListView):
             return ctx
 
         ctx["selected_period"] = period
+        print(period)
 
         st_date = period.st_date
         end_date = period.end_date
 
         # 日付 -> datetime範囲（開始は00:00:00、終了は翌日00:00:00未満）
         start_dt = make_aware(datetime.combine(st_date, time.min))
-        end_exclusive = make_aware(datetime.combine(end_date + timedelta(days=1), time.min))
+        end_dt = make_aware(datetime.combine(end_date + timedelta(days=1), time.min))
+
+        # kibetu 例: 2026C01W3 → 2026-01-01 00:00:00
+        kibetu_year = int(selected_kibetu[0:4])
+        kibetu_month = int(selected_kibetu[5:7])
+        rank_dt = make_aware(datetime(kibetu_year, kibetu_month, 1, 0, 0, 0))
+
+        #期別の前の月の年と月を取得
+        current_month_first = datetime(kibetu_year, kibetu_month, 1)
+        prev_month_last = current_month_first - timedelta(days=1)
+
+        prev_year = prev_month_last.year
+        prev_month = prev_month_last.month
+
 
         sql = """
 WITH RECURSIVE
@@ -148,7 +162,7 @@ repurchase_list AS (  -- 再購入リスト
         LEAST(IFNULL(total_bv, 0), 50) AS custom_bv
     FROM bonus_db.api_users_bv
     WHERE payment_date >= %s
-      AND payment_date <  %s
+      AND payment_date < %s
 ),
 
 
@@ -168,8 +182,8 @@ rank_up_list AS (
      -- 101:再購入, 102:初回購入, 103:ランクアップ購入品
     WHERE a.order_type IN (102, 103)
       AND a.order_status NOT IN (201, 206)
-      AND a.deposit_at >= '2026-01-11 00:00:00'
-      AND a.deposit_at <  '2026-01-18 00:00:00'
+      AND a.deposit_at >= %s
+      AND a.deposit_at < %s
 ),
 -- 購入者リスト
 purchasers_list AS (
@@ -189,7 +203,7 @@ rankup_history AS (
               ORDER BY fluctuation_up_at DESC
           ) AS rn
       FROM bonus_db.users_rank_up_history AS t
-      WHERE fluctuation_up_at < '2025-01-01 00:00:00'
+      WHERE fluctuation_up_at < %s
   ) x
   WHERE rn = 1
 ),
@@ -307,24 +321,6 @@ rank_up_add_non9_addTitle AS (
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 -- 条件を満たす紹介者（rank!=9 & bv>=50）が見つかるまで上へ辿る
 chain_find AS (
     -- 1段目：最初に評価する紹介者 = u.introducer_code
@@ -364,8 +360,8 @@ chain_find AS (
       ON up.jmoa_code = c.next_code
     LEFT JOIN bonus_db.purchase_info_list p
       ON p.jwoa_code = up.jmoa_code
-     AND p.year  = 2025
-     AND p.month = 12
+     AND p.year  = %s
+     AND p.month = %s
     WHERE c.next_code IS NOT NULL
       AND c.found = 0
       AND c.lvl < 100
@@ -397,8 +393,8 @@ JOIN bonus_db.users_target_rank u
   ON u.jmoa_code = c.evaluated_code
 JOIN bonus_db.purchase_info_list p
   ON p.jwoa_code = c.evaluated_code
- AND p.year  = 2025
- AND p.month = 12
+ AND p.year  = %s
+ AND p.month = %s
 WHERE c.found = 1
 ORDER BY c.jmoa_code
 ),
@@ -461,7 +457,7 @@ select * from pay_drive_list order by introducer_code, jwoa_code
 
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, [start_dt, end_exclusive, start_dt, end_exclusive])
+            cursor.execute(sql, [start_dt, end_dt, start_dt, end_dt, start_dt, end_dt, rank_dt, prev_year, prev_month, prev_year, prev_month])
             logger.info(f"Executed SQL: {cursor._executed}")
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
@@ -1021,6 +1017,18 @@ class UserTargetRankView(generic.TemplateView):
         ctx["rows"] = []
         ctx["total_count"] = 0  # ✅ 追加（本当の件数）
 
+        #登録月を設定
+        with connections["rds"].cursor() as cursor:
+            cursor.execute("""
+                SELECT value
+                FROM bonus_db.settings
+                WHERE name = 'user_add_rank'
+                LIMIT 1
+            """)
+            row = cursor.fetchone()
+
+        ctx["select_month"] = row[0] if row else ""
+
         if not ctx["selected_prev_month"]:
             return ctx
 
@@ -1032,6 +1040,9 @@ class UserTargetRankView(generic.TemplateView):
         # ✅ 表示は100件、件数は全件
         ctx["rows"] = self._fetch_users(cutoff_dt, limit=100)
         ctx["total_count"] = self._fetch_total_count()
+
+
+
 
         return ctx
 
