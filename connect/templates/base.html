@@ -30,10 +30,6 @@
         </button>
         <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav ml-auto"> <!-- ml-autoを追加 -->
-                <li class="nav-item">
-                    <a class="nav-link {% block active_home %}{% endblock%}" href="{% url 'connect:index' %}">Home </a>
-                </li>
-
                 {% if user.is_authenticated %}
                 <li class="nav-item">
                     <a class="nav-link" href="{% url 'connect:drive_bonus' %}">ボーナス計算 </a>
@@ -52,11 +48,8 @@
                     <a class="nav-link" href="{% url 'account_logout' %}">Log Out </a>
                 </li>
                 {% else %}
-<!--                <li class="nav-item {% block active_signup %}{% endblock %}">-->
-<!--                    <a class="nav-link" href="{% url 'account_signup' %}">Sign Up</a>-->
-<!--                </li>-->
-                <li class="nav-item {% block active_login %}{% endblock %}">
-                    <a class="nav-link" href="{% url 'account_login' %}">Log In</a>
+                <li class="nav-item">
+                    <a class="nav-link {% block active_home %}{% endblock%}" href="{% url 'account_login' %}">Log In </a>
                 </li>
                 {% endif %}
 
