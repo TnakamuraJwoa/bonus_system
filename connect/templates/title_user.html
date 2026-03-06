@@ -41,12 +41,12 @@
             </div>
 
             <div>
-              <label class="form-label mb-0 small text-muted">名前（検索）</label>
+              <label class="form-label mb-0 small text-muted">会員ID（検索）</label>
               <input type="text"
-                     name="q_name"
+                     name="q_jpid"
                      class="form-control"
-                     value="{{ q_name|default:'' }}"
-                     placeholder="例: 田中">
+                     value="{{ q_jpid|default:'' }}"
+                     placeholder="例: JP05198407">
             </div>
 
             <div>
@@ -64,14 +64,14 @@
             <a class="btn btn-outline-secondary" href="{% url 'connect:title_user' %}">リセット</a>
           </form>
 
-          {% if selected_title_id or q_name %}
+          {% if selected_title_id or q_jpid %}
             <div class="text-muted small mt-3">
               絞り込み中：
               {% if selected_title_id %}
                 <span class="badge bg-info text-dark">title_id={{ selected_title_id }}</span>
               {% endif %}
-              {% if q_name %}
-                <span class="badge bg-secondary">name={{ q_name }}</span>
+              {% if q_jpid %}
+                <span class="badge bg-secondary">会員ID={{ q_jpid }}</span>
               {% endif %}
             </div>
           {% else %}

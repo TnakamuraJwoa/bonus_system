@@ -1146,7 +1146,7 @@ class TitleUserView(generic.TemplateView):
     DEFAULT_PER_PAGE = 200
     MAX_PER_PAGE = 500
 
-    def _build_where(self, title_id: str, q_name: str):
+    def _build_where(self, title_id: str, q_jpid: str):
         where = []
         params = []
 
@@ -1154,15 +1154,15 @@ class TitleUserView(generic.TemplateView):
             where.append("ut.title_id = %s")
             params.append(title_id)
 
-        if q_name:
-            where.append("u.send_bv_name LIKE %s")
-            params.append(f"%{q_name}%")
+        if q_jpid:
+            where.append("u.jmoa_code LIKE %s")
+            params.append(f"%{q_jpid}%")
 
         where_sql = ("WHERE " + " AND ".join(where)) if where else ""
         return where_sql, params
 
-    def _fetch_total_count(self, title_id: str, q_name: str) -> int:
-        where_sql, params = self._build_where(title_id, q_name)
+    def _fetch_total_count(self, title_id: str, q_jpid: str) -> int:
+        where_sql, params = self._build_where(title_id, q_jpid)
         sql = f"""
 SELECT COUNT(*)
 FROM bonus_db.user_titles ut
@@ -1177,12 +1177,12 @@ LEFT JOIN bonus_db.users u
     def _fetch_rows_keyset(
         self,
         title_id: str,
-        q_name: str,
+        q_jpid: str,
         limit: int,
         after_title_id: str = "",
         after_jwoa_code: str = "",
     ):
-        where_sql, params = self._build_where(title_id, q_name)
+        where_sql, params = self._build_where(title_id, q_jpid)
 
         # Keyset条件（ORDER BY tm.title_id, u.jmoa_code と一致させる）
         keyset_sql = ""
@@ -1229,7 +1229,7 @@ ORDER BY tm.title_id
         ctx = super().get_context_data(**kwargs)
 
         title_id = (self.request.GET.get("title_id") or "").strip()
-        q_name = (self.request.GET.get("q_name") or "").strip()
+        q_jpid = (self.request.GET.get("q_jpid") or "").strip()
 
         # per_page
         try:
@@ -1249,12 +1249,12 @@ ORDER BY tm.title_id
         after_title_id = (self.request.GET.get("after_title_id") or "").strip()
         after_jwoa_code = (self.request.GET.get("after_jwoa_code") or "").strip()
 
-        total_count = self._fetch_total_count(title_id, q_name)
+        total_count = self._fetch_total_count(title_id, q_jpid)
         total_pages = max(1, math.ceil(total_count / per_page))
 
         rows = self._fetch_rows_keyset(
             title_id=title_id,
-            q_name=q_name,
+            q_jpid=q_jpid,
             limit=per_page,
             after_title_id=after_title_id,
             after_jwoa_code=after_jwoa_code,
@@ -1272,14 +1272,14 @@ ORDER BY tm.title_id
         base_params = {}
         if title_id:
             base_params["title_id"] = title_id
-        if q_name:
-            base_params["q_name"] = q_name
+        if q_jpid:
+            base_params["q_jpid"] = q_jpid
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
 
         ctx["title_choices"] = self._fetch_title_choices()
         ctx["selected_title_id"] = title_id
-        ctx["q_name"] = q_name
+        ctx["q_jpid"] = q_jpid
 
         ctx["rows"] = rows
         ctx["total_count"] = total_count
