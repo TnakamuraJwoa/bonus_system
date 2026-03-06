@@ -20,3 +20,7 @@ body {
   max-height: 450px;
   overflow-y: auto;
 }
+
+.messages-container {
+ z-index: 99 !important;
+}

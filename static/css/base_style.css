@@ -41,3 +41,28 @@ footer > P {
     color: #5e5e5e;
 }
 
+.alert-container{
+  position: fixed;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  width: min(90vw, 900px);
+}
+
+.alert-container .alert{
+  margin-bottom: 10px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+}
+
+.brand-saas {
+  margin-bottom: 5px !important;
+  color: blanchedalmond !important;
+  font-size: 23.5px !important;
+  line-height: 1 !important;
+  letter-spacing: 0.5px !important;
+}
+
+.alert-success {
+ height: 51px !important;
+}
