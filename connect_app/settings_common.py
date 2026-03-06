@@ -9,6 +9,7 @@ AUTH_USER_MODEL = 'accounts.CustomUser'
 # カスタムフォームの設定
 ACCOUNT_FORMS = {
     'signup': 'accounts.forms.CustomSignupForm',
+    'login': 'accounts.forms.CustomLoginForm',
 }
 
 NUMBER_GROUPING = 3

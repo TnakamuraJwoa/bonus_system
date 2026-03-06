@@ -12,7 +12,7 @@
     <div class="row">
         <div class="col-md-8 mx-auto">
             <div class="form-wrapper">
-                <h1>Log In</h1>
+                <h1>Login</h1>
                 <form method="post" action="{% url 'account_login' %}">
                     {% csrf_token%}
                     <div class="form-item">{{ form.login }}</div>
@@ -27,8 +27,8 @@
                     </div>
                 </form>
                 <div class="form-footer">
-                    <p><a href="{% url 'account_signup' %}">アカウントを作成</a></p>
-                    <p><a href="{% url 'account_reset_password' %}">パスワードを忘れましたか？</a></p>
+<!--                    <p><a href="{% url 'account_signup' %}">アカウントを作成</a></p>-->
+<!--                    <p><a href="{% url 'account_reset_password' %}">パスワードを忘れましたか？</a></p>-->
                 </div>
             </div>
         </div>

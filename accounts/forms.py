@@ -1,4 +1,4 @@
-from allauth.account.forms import SignupForm
+from allauth.account.forms import SignupForm, LoginForm
 from django import forms
 from .models import CustomUser
 
@@ -20,3 +20,11 @@ class CustomSignupForm(SignupForm):
             user.username = my_username
         user.save()
         return user
+
+
+
+class CustomLoginForm(LoginForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.fields['login'].widget.attrs['placeholder'] = 'ユーザー'
