@@ -1,12 +1,11 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block contents %}
-
 {% block head %}
   <link href="{% static 'css/common.css' %}" rel="stylesheet">
 {% endblock %}
 
+{% block contents %}
 <div class="container-fluid mt-3">
   <div class="row g-1">
 
@@ -25,11 +24,11 @@
 
           <h5 class="mb-3">【設定 - タイトル保有ユーザー一覧】</h5>
 
-          <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+          <form method="get" class="d-flex align-items-end mb-0 flex-wrap">
 
-            <div>
+            <div class="mr-2 mb-2">
               <label class="form-label mb-0 small text-muted">title（選択）</label>
-              <select name="title_id" class="form-select">
+              <select name="title_id" class="form-control">
                 <option value="">（全件）</option>
                 {% for t in title_choices %}
                   <option value="{{ t.title_id }}"
@@ -40,7 +39,7 @@
               </select>
             </div>
 
-            <div>
+            <div class="mr-2 mb-2">
               <label class="form-label mb-0 small text-muted">会員ID（検索）</label>
               <input type="text"
                      name="q_jpid"
@@ -49,9 +48,9 @@
                      placeholder="例: JP05198407">
             </div>
 
-            <div>
+            <div class="mr-2 mb-2">
               <label class="form-label mb-0 small text-muted">表示件数</label>
-              <select name="per_page" class="form-select">
+              <select name="per_page" class="form-control">
                 <option value="50"  {% if per_page == 50 %}selected{% endif %}>50</option>
                 <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
                 <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
@@ -59,19 +58,23 @@
               </select>
             </div>
 
-            <button type="submit" class="btn btn-primary">絞り込み</button>
+            <div class="mb-2 mr-2">
+              <button type="submit" class="btn btn-primary">絞り込み</button>
+            </div>
 
-            <a class="btn btn-outline-secondary" href="{% url 'connect:title_user' %}">リセット</a>
+            <div class="mb-2">
+              <a class="btn btn-outline-secondary" href="{% url 'connect:title_user' %}">リセット</a>
+            </div>
           </form>
 
           {% if selected_title_id or q_jpid %}
             <div class="text-muted small mt-3">
               絞り込み中：
               {% if selected_title_id %}
-                <span class="badge bg-info text-dark">title_id={{ selected_title_id }}</span>
+                <span class="badge badge-info">title_id={{ selected_title_id }}</span>
               {% endif %}
               {% if q_jpid %}
-                <span class="badge bg-secondary">会員ID={{ q_jpid }}</span>
+                <span class="badge badge-secondary">会員ID={{ q_jpid }}</span>
               {% endif %}
             </div>
           {% else %}
@@ -89,7 +92,7 @@
               <div class="fw-bold">一覧</div>
               <div class="text-end">
                 <strong>総件数：{{ total_count }} 件</strong>
-                <span class="text-muted small ms-2">
+                <span class="text-muted small ml-2">
                   （{{ page }} / {{ total_pages }}）
                 </span>
               </div>
@@ -100,7 +103,7 @@
                 <thead class="table-light">
                   <tr>
                     <th>id</th>
-                    <th>jwoa_code</th>
+                    <th>jmoa_code</th>
                     <th>jwoa_name</th>
                     <th>title_id</th>
                     <th>title_name</th>
@@ -110,7 +113,7 @@
                   {% for r in rows %}
                     <tr>
                       <td>{{ r.id }}</td>
-                      <td>{{ r.jwoa_code }}</td>
+                      <td>{{ r.jmoa_code }}</td>
                       <td>{{ r.jwoa_name }}</td>
                       <td>{{ r.title_id }}</td>
                       <td>{{ r.title_name }}</td>
@@ -127,9 +130,9 @@
                 {% endif %}
               </div>
 
-              <div class="d-flex gap-2">
+              <div class="d-flex">
                 {% if has_prev_hint %}
-                  <button class="btn btn-outline-secondary btn-sm"
+                  <button class="btn btn-outline-secondary btn-sm mr-2"
                           type="button"
                           onclick="history.back()">
                     ← 戻る
@@ -138,7 +141,7 @@
 
                 {% if has_next %}
                   <a class="btn btn-primary btn-sm"
-                     href="?{{ base_qs }}{% if base_qs %}&{% endif %}page={{ page|add:1 }}&after_title_id={{ next_after_title_id }}&after_jwoa_code={{ next_after_jwoa_code }}">
+                     href="?{{ base_qs }}{% if base_qs %}&{% endif %}page={{ page|add:1 }}&after_title_id={{ next_after_title_id }}&after_jmoa_code={{ next_after_jwoa_code }}">
                     次へ →
                   </a>
                 {% else %}
@@ -157,5 +160,4 @@
     </main>
   </div>
 </div>
-
 {% endblock %}

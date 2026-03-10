@@ -1,6 +1,7 @@
 from django.shortcuts import render
 # Create your views here.
-
+from django.contrib.auth.views import LoginView
+from allauth.account.forms import LoginForm
 from django.http import JsonResponse
 import logging
 from django.views import generic
@@ -29,52 +30,9 @@ from .models import Settings
 logger = logging.getLogger(__name__)
 
 
-class IndexView(generic.ListView):
-    template_name = "index.html"
-    context_object_name = "object_list"
-    model = PeriodMaster
-
-    def get_queryset(self):
-        return PeriodMaster.objects.using("rds").all()
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-
-        selected_kibetu = self.request.GET.get("kibetu")
-        ctx["selected_kibetu"] = selected_kibetu
-        ctx["rows"] = []
-        ctx["selected_period"] = None
-
-        if selected_kibetu:
-            period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
-
-            if period:
-                ctx["selected_period"] = period
-
-                st_date = period.st_date
-                end_date = period.end_date
-
-#                 table: orders
-#                 group by: jwoa_code
-#                 sum     :total_bv
-                orders_summary = Orders.objects.using("rds").filter(
-                    bv_actived_flg=True,
-                    order_type__in=[102, 103],
-                    bv_actived_at__date__range=(st_date, end_date)
-                ).exclude(
-                    order_status__in=[201, 202, 206]
-                ).values(
-                    "jwoa_code"
-                ).annotate(
-                    total_sum=Sum("total_bv")
-                ).order_by(
-                    "-total_sum"
-                )
-
-                # ★これが必要（テンプレに渡す）
-                ctx["rows"] = orders_summary
-
-        return ctx
+class IndexView(LoginView):
+    template_name = "account/login.html"
+    form_class = LoginForm
 
 
 class DriveBonusView(generic.ListView):
@@ -1174,13 +1132,15 @@ class TitleUserView(generic.TemplateView):
 
     def _fetch_total_count(self, title_id: str, q_jpid: str) -> int:
         where_sql, params = self._build_where(title_id, q_jpid)
+
         sql = f"""
 SELECT COUNT(*)
 FROM bonus_db.user_titles ut
 LEFT JOIN bonus_db.users u
-  ON ut.user_id = u.id
+  ON ut.jmoa_code = u.jmoa_code
 {where_sql}
         """
+
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql, params)
             return int(cursor.fetchone()[0])
@@ -1191,32 +1151,42 @@ LEFT JOIN bonus_db.users u
         q_jpid: str,
         limit: int,
         after_title_id: str = "",
-        after_jwoa_code: str = "",
+        after_jmoa_code: str = "",
     ):
         where_sql, params = self._build_where(title_id, q_jpid)
 
-        # Keyset条件（ORDER BY tm.title_id, u.jmoa_code と一致させる）
         keyset_sql = ""
-        if after_title_id and after_jwoa_code:
+        if after_title_id and after_jmoa_code:
             if where_sql:
-                keyset_sql = " AND (tm.title_id > %s OR (tm.title_id = %s AND u.jmoa_code > %s))"
+                keyset_sql = """
+ AND (
+      tm.title_id > %s
+      OR (tm.title_id = %s AND u.jmoa_code > %s)
+ )
+                """
             else:
-                keyset_sql = " WHERE (tm.title_id > %s OR (tm.title_id = %s AND u.jmoa_code > %s))"
-            params += [after_title_id, after_title_id, after_jwoa_code]
+                keyset_sql = """
+WHERE (
+      tm.title_id > %s
+      OR (tm.title_id = %s AND u.jmoa_code > %s)
+)
+                """
+            params += [after_title_id, after_title_id, after_jmoa_code]
 
         sql = f"""
 SELECT
   u.id,
-  u.jmoa_code AS jwoa_code,
+  u.jmoa_code AS jmoa_code,
   u.send_bv_name AS jwoa_name,
   tm.title_id AS title_id,
   tm.title_name AS title_name
 FROM bonus_db.user_titles ut
 LEFT JOIN bonus_db.users u
-  ON ut.user_id = u.id
+  ON ut.jmoa_code = u.jmoa_code
 LEFT JOIN bonus_db.title_master tm
   ON ut.title_id = tm.title_id
-{where_sql}{keyset_sql}
+{where_sql}
+{keyset_sql}
 ORDER BY tm.title_id, u.jmoa_code
 LIMIT %s
         """
@@ -1228,7 +1198,9 @@ LIMIT %s
 
     def _fetch_title_choices(self):
         sql = """
-SELECT tm.title_id, tm.title_name
+SELECT
+  tm.title_id,
+  tm.title_name
 FROM bonus_db.title_master tm
 ORDER BY tm.title_id
         """
@@ -1242,23 +1214,20 @@ ORDER BY tm.title_id
         title_id = (self.request.GET.get("title_id") or "").strip()
         q_jpid = (self.request.GET.get("q_jpid") or "").strip()
 
-        # per_page
         try:
             per_page = int(self.request.GET.get("per_page") or str(self.DEFAULT_PER_PAGE))
         except ValueError:
             per_page = self.DEFAULT_PER_PAGE
         per_page = max(1, min(per_page, self.MAX_PER_PAGE))
 
-        # ✅ page（表示用カウンタ）
         try:
             page = int(self.request.GET.get("page") or "1")
         except ValueError:
             page = 1
         page = max(page, 1)
 
-        # Keyset cursor
         after_title_id = (self.request.GET.get("after_title_id") or "").strip()
-        after_jwoa_code = (self.request.GET.get("after_jwoa_code") or "").strip()
+        after_jmoa_code = (self.request.GET.get("after_jmoa_code") or "").strip()
 
         total_count = self._fetch_total_count(title_id, q_jpid)
         total_pages = max(1, math.ceil(total_count / per_page))
@@ -1268,18 +1237,16 @@ ORDER BY tm.title_id
             q_jpid=q_jpid,
             limit=per_page,
             after_title_id=after_title_id,
-            after_jwoa_code=after_jwoa_code,
+            after_jmoa_code=after_jmoa_code,
         )
 
-        # 次へ用カーソル（最後の行）
         next_after_title_id = ""
-        next_after_jwoa_code = ""
+        next_after_jmoa_code = ""
         if rows:
             last = rows[-1]
             next_after_title_id = str(last["title_id"])
-            next_after_jwoa_code = str(last["jwoa_code"])
+            next_after_jmoa_code = str(last["jmoa_code"])
 
-        # 検索条件維持（page/afterはHTML側で付ける）
         base_params = {}
         if title_id:
             base_params["title_id"] = title_id
@@ -1304,11 +1271,11 @@ ORDER BY tm.title_id
         ctx["has_next"] = (
             len(rows) == per_page
             and bool(next_after_title_id)
-            and bool(next_after_jwoa_code)
+            and bool(next_after_jmoa_code)
         )
         ctx["next_after_title_id"] = next_after_title_id
-        ctx["next_after_jwoa_code"] = next_after_jwoa_code
+        ctx["next_after_jmoa_code"] = next_after_jmoa_code
 
-        ctx["has_prev_hint"] = bool(after_title_id and after_jwoa_code)
+        ctx["has_prev_hint"] = bool(after_title_id and after_jmoa_code)
 
         return ctx
