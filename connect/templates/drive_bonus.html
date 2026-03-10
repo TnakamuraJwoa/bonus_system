@@ -1,123 +1,69 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block contents %}
-
 {% block head %}
-    {% load static %}
     <link href="{% static 'css/common.css' %}" rel="stylesheet">
 {% endblock %}
 
-<div class="container-fluid mt-3">
-  <div class="row g-3">
+{% block contents %}
+<div class="container-fluid mt-3" style="height: calc(100vh - 170px); overflow: hidden;">
+  <div class="row g-1 h-100">
 
-    <!-- =========================
-         ✅ Sidebar
-    ========================== -->
-    <nav class="col-12 col-md-3 col-lg-2">
+    <div class="col-12 text-end">
+      {% if user.is_authenticated %}
+        <span class="small text-muted">👤 {{ user.username }}</span>
+      {% endif %}
+    </div>
 
-      <!-- Stickyにしたい場合は position-sticky を使う -->
-      <div class="card shadow-sm position-sticky" style="top: 1rem;">
-        <div class="card-body">
+    {% include "com/_sidebar.html" with active_menu="drive_bonus" %}
 
-          <div class="fw-bold mb-2">週ボーナス</div>
+    <main class="col-12 col-md-9 col-lg-10 d-flex flex-column" style="height: calc(100% - 24px); overflow: hidden;">
 
-          <div class="list-group">
-            <a class="list-group-item list-group-item-action active" href="{% url 'connect:drive_bonus' %}">ドライブボーナス</a>
-            <a class="list-group-item list-group-item-action" href="{% url 'connect:index' %}">ベーシックボーナス</a>
-            <a class="list-group-item list-group-item-action" href="{% url 'connect:index' %}">マッチングボーナス</a>
-          </div>
-
-          <hr class="my-3">
-
-          <div class="fw-bold mb-2">月ボーナス</div>
-
-          <div class="list-group">
-            <a class="list-group-item list-group-item-action" href="{% url 'connect:index' %}">タイトルボーナス</a>
-            <a class="list-group-item list-group-item-action" href="{% url 'connect:index' %}">タイトル差額ボーナス</a>
-            <a class="list-group-item list-group-item-action" href="{% url 'connect:index' %}">再購入オーバーボーナス</a>
-          </div>
-
-          <hr class="my-3">
-
-          <div class="fw-bold mb-2">特別ボーナス</div>
-
-          <div class="list-group">
-            <a class="list-group-item list-group-item-action" href="{% url 'connect:index' %}">３スターダイヤ　グローバル配当</a>
-            <a class="list-group-item list-group-item-action" href="{% url 'connect:index' %}">クラウンダイヤアンバサダー　グローバル配当</a>
-            <a class="list-group-item list-group-item-action" href="{% url 'connect:index' %}">ダブルクラウンダイヤアンバサダー特別ボーナス</a>
-          </div>
-        </div>
-      </div>
-
-    </nav>
-
-    <!-- =========================
-         ✅ Main
-    ========================== -->
-    <main class="col-12 col-md-9 col-lg-10">
-
-      <!-- タイトル + 期別フォーム -->
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-
           <h5 class="mb-3">【ボーナス一覧 - ドライブボーナス】</h5>
 
-          <div class="fw-bold mb-2">■期別を選択</div>
-
-          <form method="get" class="row g-2 align-items-end">
-
-            <div class="col-12 col-sm-6 col-md-5 col-lg-4">
+          <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+            <div>
+              <label class="form-label mb-0 small text-muted">期別</label>
               <select name="kibetu" class="form-select">
                 {% for obj in object_list %}
-                <option value="{{ obj.kibetu }}"
-                        {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
-                  【{{ obj.kibetu }}】 ({{ obj.st_date }} - {{ obj.end_date }})
-                </option>
+                  <option value="{{ obj.kibetu }}"
+                          {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
+                    【{{ obj.kibetu }}】 ({{ obj.st_date }} - {{ obj.end_date }})
+                  </option>
                 {% endfor %}
               </select>
             </div>
 
-            <div class="col-auto">
-              <button type="submit" class="btn btn-primary">
-                選択
-              </button>
-            </div>
-
-            <div class="col-auto">
-              <a href="{% url 'connect:drive_bonus' %}" class="btn btn-outline-secondary">
-                リセット
-              </a>
-            </div>
-
+            <button type="submit" class="btn btn-primary">選択</button>
+            <a class="btn btn-outline-secondary" href="{% url 'connect:drive_bonus' %}">リセット</a>
           </form>
 
-          <!-- 選択された期間表示 -->
           {% if selected_period %}
-          <div class="alert alert-info mt-3 mb-0">
-            選択中：
-            <strong>{{ selected_period.kibetu }}</strong>
-            （{{ selected_period.st_date }} ～ {{ selected_period.end_date }}）
-          </div>
+            <div class="text-muted small mt-3">
+              選択中：
+              <span class="badge bg-info text-dark">{{ selected_period.kibetu }}</span>
+              <span class="badge bg-secondary">{{ selected_period.st_date }} ～ {{ selected_period.end_date }}</span>
+            </div>
+          {% else %}
+            <div class="text-muted small mt-3">期別を選択してください</div>
           {% endif %}
-
         </div>
       </div>
 
-      <!-- データ表示 -->
-      <div class="card shadow-sm">
-        <div class="card-body">
+      <div class="card shadow-sm flex-grow-1" style="min-height: 0;">
+        <div class="card-body d-flex flex-column" style="min-height: 0; overflow: hidden;">
 
           {% if rows %}
-
             <div class="d-flex justify-content-between align-items-center mb-2">
               <div class="fw-bold">一覧</div>
               <div class="text-end"><strong>件数：{{ rows|length }} 件</strong></div>
             </div>
 
-            <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+            <div class="table-responsive flex-grow-1" style="min-height: 0; overflow: auto;">
               <table class="table table-bordered table-sm align-middle mb-0">
-                <thead class="table-light">
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                   <tr>
                     <th>タイトル</th>
                     <th>紹介者ID</th>
@@ -129,35 +75,31 @@
                 </thead>
                 <tbody>
                   {% for r in rows %}
-                  <tr>
-                    <td>{{ r.title_name }}</td>
-                    <td>{{ r.introducer_code }}</td>
-                    <td>{{ r.jwoa_code }}</td>
-                    <td>{{ r.jwoa_name }}</td>
-                    <td>{{ r.custom_bv }}</td>
-                    <td>{{ r.bonus_amount }}</td>
-                  </tr>
+                    <tr>
+                      <td>{{ r.title_name }}</td>
+                      <td>{{ r.introducer_code }}</td>
+                      <td>{{ r.jwoa_code }}</td>
+                      <td>{{ r.jwoa_name }}</td>
+                      <td>{{ r.custom_bv }}</td>
+                      <td>{{ r.bonus_amount }}</td>
+                    </tr>
                   {% endfor %}
                 </tbody>
               </table>
             </div>
 
           {% else %}
-
             {% if selected_kibetu %}
               <p class="mb-0">この期間のデータはありません。</p>
             {% else %}
               <p class="mb-0 text-muted">期別を選択して「選択」を押してください。</p>
             {% endif %}
-
           {% endif %}
 
         </div>
       </div>
 
     </main>
-
   </div>
 </div>
-
 {% endblock %}

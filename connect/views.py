@@ -242,7 +242,7 @@ FROM user_introducer_non9 AS non9
 LEFT JOIN bonus_db.users_target_rank ui
     ON non9.introducer_code = ui.jmoa_code
 LEFT JOIN bonus_db.user_titles ut
-    ON ut.user_id = ui.id
+    ON ut.jmoa_code = ui.jmoa_code
 LEFT JOIN bonus_db.title_master tm
     ON ut.title_id = tm.title_id
 LEFT JOIN bonus_db.users_target_rank u
@@ -372,7 +372,7 @@ FROM user_introducer_non9_2 AS non9
 LEFT JOIN bonus_db.users_target_rank ui
     ON non9.introducer_code = ui.jmoa_code
 LEFT JOIN bonus_db.user_titles ut
-    ON ut.user_id = ui.id
+    ON ut.jmoa_code = ui.jmoa_code
 LEFT JOIN bonus_db.title_master tm
     ON ut.title_id = tm.title_id
 LEFT JOIN bonus_db.users_target_rank u
