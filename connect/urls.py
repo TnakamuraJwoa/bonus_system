@@ -18,4 +18,5 @@ urlpatterns = [
     path('plan-detail/<int:pk>/', views.PlanDetailView.as_view(), name="plan-detail"),
     path('add_favorite_to_db/', views.AddFavoriteToDBView.as_view(), name="add_favorite_to_db"),
     path('user_target_rank/', views.UserTargetRankView.as_view(), name = "user_target_rank"),
+    path('title_registration/', views.TitleRegistrationView.as_view(), name = "title_registration"),
 ]

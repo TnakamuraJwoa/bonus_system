@@ -1,0 +1,18 @@
+{# templates/com/_sidebar.html #}
+<nav class="col-12 col-md-3 col-lg-2">
+  <div class="card shadow-sm position-sticky" style="top: 1rem;">
+    <div class="card-body">
+      <div class="fw-bold mb-2">メニュー</div>
+
+      <div class="list-group">
+        <a class="list-group-item list-group-item-action {% if active_menu == 'drive_bonus' %}active{% endif %}"
+           href="{% url 'connect:drive_bonus' %}">ドライブボーナス</a>
+
+        <a class="list-group-item list-group-item-action {% if active_menu == 'basic_bonus' %}active{% endif %}"
+           href="{% url 'connect:basic_bonus' %}">ベーシックボーナス</a>
+
+
+      </div>
+    </div>
+  </div>
+</nav>
