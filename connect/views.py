@@ -214,6 +214,7 @@ last_step AS (
 ),
 
 -- 一般会員を除く紹介者を再帰的に設定
+-- 全購入者情報
 user_introducer_non9 AS (
 SELECT
     c.current_code   AS introducer_code,
@@ -229,7 +230,7 @@ LEFT JOIN bonus_db.users_target_rank AS u2
   ON u2.jmoa_code = c.current_code
 ),
 
--- non9にタイトルを追加
+-- non9にタイトルを追加(全購入者情報)
 user_introducer_non9_addTitle AS (
 SELECT
     non9.introducer_code,
@@ -588,126 +589,6 @@ class TitleListView(generic.ListView):
         # 件数表示用（テンプレで rows|length を使わない）
         ctx["total_count"] = ctx["rows"].count()
         return ctx
-
-
-
-
-class RepurchaseLastMonthView(generic.ListView):
-    template_name = "repurchase_last_month.html"
-    context_object_name = "object_list"
-    model = PrevMonthPurchaseStatus
-
-    def get_queryset(self):
-        today = date.today()
-        default_target = today.replace(day=1) - relativedelta(months=1)
-
-        return (
-            PrevMonthPurchaseStatus.objects
-            .using("rds")
-            .filter(create_status=0)
-            .filter(
-                Q(year__lt=default_target.year) |
-                Q(year=default_target.year, month__lte=default_target.month)
-            )
-            .order_by("year", "month")
-        )
-
-    def _fetch_rows(self, year: int, month: int):
-        base_date = datetime(year, month, 1, 0, 0, 0)
-        next_month_start = base_date + relativedelta(months=1)
-
-        sql = """
-SELECT
-    b.jwoa_code,
-    users.send_bv_name,
-    SUM(b.distribution_bv) AS total_bv,
-    %s as year,
-    %s as month
-FROM bonus_db.orders AS a
-LEFT JOIN bonus_db.orders_distribution_bv AS b
-    ON a.order_code = b.order_code
-LEFT JOIN users
-    ON b.jwoa_code = users.jmoa_code
-WHERE a.order_status NOT IN (201, 206)
-  AND a.deposit_at >= %s
-  AND a.deposit_at <  %s
-GROUP BY b.jwoa_code
-HAVING SUM(b.distribution_bv) >= 50;
-        """
-
-        with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, [year, month, base_date, next_month_start])
-            logger.info(f"Executed SQL: {cursor._executed}")
-            cols = [c[0] for c in cursor.description]
-            return [dict(zip(cols, r)) for r in cursor.fetchall()]
-
-    def post(self, request, *args, **kwargs):
-        """✅ 登録ボタンで purchase_info_list に保存"""
-        selected_prev_month = request.POST.get("prev_month")
-        if not selected_prev_month:
-            messages.error(request, "対象年月が未選択です。")
-            return redirect("connect:repurchase_last_month")
-
-        period = (
-            PrevMonthPurchaseStatus.objects
-            .using("rds")
-            .filter(id=selected_prev_month)
-            .first()
-        )
-        if not period:
-            messages.error(request, "対象データが見つかりません。")
-            return redirect("connect:repurchase_last_month")
-
-        rows = self._fetch_rows(period.year, period.month)
-        if not rows:
-            messages.info(request, "登録対象データがありません（BV>=50 なし）。")
-            return redirect(f"{redirect('connect:repurchase_last_month').url}?prev_month={selected_prev_month}")
-
-        upsert_sql = """
-INSERT INTO bonus_db.purchase_info_list
-(year, month, jwoa_code, send_bv_name, bv)
-VALUES (%s, %s, %s, %s, %s)
-ON DUPLICATE KEY UPDATE
-  send_bv_name = VALUES(send_bv_name),
-  bv = VALUES(bv),
-  updated_at = CURRENT_TIMESTAMP;
-        """
-
-        data = [
-            (r["year"], r["month"], r["jwoa_code"], r["send_bv_name"], int(r["total_bv"]))
-            for r in rows
-        ]
-
-        with transaction.atomic(using="rds"):
-            with connections["rds"].cursor() as cursor:
-                cursor.executemany(upsert_sql, data)
-
-            # 任意：作成済みにする（一覧候補から除外される）
-            period.create_status = 1
-            period.save(using="rds", update_fields=["create_status"])
-
-        messages.success(request, f"登録しました（{len(rows)}件）。")
-        return redirect(f"{redirect('connect:repurchase_last_month').url}?prev_month={selected_prev_month}")
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-
-        selected_prev_month = self.request.GET.get("prev_month")
-        ctx["selected_prev_month"] = selected_prev_month
-        ctx["rows"] = []
-        ctx["selected_period"] = None
-
-        if not selected_prev_month:
-            return ctx
-
-        period = PrevMonthPurchaseStatus.objects.using("rds").filter(id=selected_prev_month).first()
-        if not period:
-            return ctx
-
-        ctx["selected_period"] = period
-        ctx["rows"] = self._fetch_rows(period.year, period.month)
-        return ctx
-
 
 
 
@@ -1629,6 +1510,7 @@ select * from pay_drive_list order by introducer_code, jwoa_code
 
 
 
+
 class TitleRegistrationView(generic.TemplateView):
     template_name = "title_registration.html"
 
@@ -1899,3 +1781,142 @@ FROM (
 
         messages.success(request, "登録完了")
         return redirect(f"{redirect('connect:title_registration').url}?target_month={selected}")
+
+
+
+
+class RepurchaseLastMonthView(generic.TemplateView):
+    template_name = "repurchase_last_month.html"
+
+    def _get_month_choices(self):
+        today = date.today().replace(day=1)
+        return [
+            {
+                "value": (today - relativedelta(months=i)).strftime("%Y-%m"),
+                "year": (today - relativedelta(months=i)).year,
+                "month": (today - relativedelta(months=i)).month,
+            }
+            for i in range(12)
+        ]
+
+    def _get_sql(self):
+        return """
+SELECT
+    b.jwoa_code,
+    u.send_bv_name,
+    SUM(b.distribution_bv) AS total_bv,
+    %s as year,
+    %s as month
+FROM bonus_db.orders AS a
+LEFT JOIN bonus_db.orders_distribution_bv AS b
+    ON a.order_code = b.order_code
+LEFT JOIN bonus_db.users AS u
+    ON b.jwoa_code = u.jmoa_code
+WHERE a.order_status NOT IN (201, 206)
+  AND a.deposit_at >= %s
+  AND a.deposit_at < %s
+GROUP BY b.jwoa_code, u.send_bv_name
+HAVING SUM(b.distribution_bv) >= 50
+"""
+
+    def _fetch_rows(self, year, month):
+        start = datetime(year, month, 1)
+        end = start + relativedelta(months=1)
+
+        sql = self._get_sql()
+        params = [year, month, start, end]
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            print(cursor._executed)
+            cols = [c[0] for c in cursor.description]
+            return [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+    def _exists_data(self, year, month):
+        sql = """
+SELECT 1
+FROM bonus_db.purchase_info_list
+WHERE year = %s AND month = %s
+LIMIT 1
+"""
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, [year, month])
+            return cursor.fetchone() is not None
+
+    def _insert_rows(self, rows):
+        upsert_sql = """
+INSERT INTO bonus_db.purchase_info_list
+(year, month, jwoa_code, send_bv_name, bv)
+VALUES (%s, %s, %s, %s, %s)
+ON DUPLICATE KEY UPDATE
+  send_bv_name = VALUES(send_bv_name),
+  bv = VALUES(bv),
+  updated_at = CURRENT_TIMESTAMP
+"""
+
+        data = [
+            (r["year"], r["month"], r["jwoa_code"], r["send_bv_name"], int(r["total_bv"]))
+            for r in rows
+        ]
+
+        with connections["rds"].cursor() as cursor:
+            cursor.executemany(upsert_sql, data)
+
+    def _update_setting(self, year, month):
+        value = f"{year}{month:02d}"
+
+        sql = """
+UPDATE bonus_db.settings
+SET value = %s
+WHERE name = 'set_title'
+"""
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, [value])
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        selected = self.request.GET.get("target_month")
+        ctx["month_choices"] = self._get_month_choices()
+        ctx["selected_month"] = selected
+        ctx["rows"] = []
+
+        if selected:
+            try:
+                y, m = map(int, selected.split("-"))
+                ctx["rows"] = self._fetch_rows(y, m)
+            except:
+                pass
+
+        return ctx
+
+    def post(self, request, *args, **kwargs):
+        selected = request.POST.get("target_month")
+
+        if not selected:
+            messages.error(request, "年月未選択です。")
+            return redirect("connect:repurchase_last_month")
+
+        try:
+            y, m = map(int, selected.split("-"))
+        except:
+            messages.error(request, "年月形式エラー")
+            return redirect("connect:repurchase_last_month")
+
+        rows = self._fetch_rows(y, m)
+        if not rows:
+            messages.info(request, "対象データなし")
+            return redirect(f"{redirect('connect:repurchase_last_month').url}?target_month={selected}")
+
+        try:
+            with transaction.atomic(using="rds"):
+                self._insert_rows(rows)
+                self._update_setting(y, m)
+
+        except Exception as e:
+            print(e)
+            messages.error(request, "エラー発生")
+            return redirect(f"{redirect('connect:repurchase_last_month').url}?target_month={selected}")
+
+        messages.success(request, f"{len(rows)}件登録完了")
+        return redirect(f"{redirect('connect:repurchase_last_month').url}?target_month={selected}")
