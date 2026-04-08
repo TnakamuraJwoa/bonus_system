@@ -35,27 +35,49 @@
 
             <div style="min-width: 220px;">
               <select name="prev_month" class="form-select">
-                {% for obj in object_list %}
-                <option value="{{ obj.id }}"
-                        {% if obj.id|stringformat:"s" == selected_prev_month|stringformat:"s" %}selected{% endif %}>
-                  【{{ obj.year }}年{{ obj.month }}月】
-                </option>
+                <option value="">対象年月を選択</option>
+
+                {% for obj in month_choices %}
+                  <option value="{{ obj.value }}"
+                    {% if obj.value == selected_prev_month %}selected{% endif %}>
+                    {{ obj.year }}年{{ obj.month }}月
+                  </option>
                 {% endfor %}
               </select>
             </div>
 
             <!-- ✅ 追加：jwoa_code検索 -->
             <div>
-              <label class="form-label mb-0 small text-muted">jwoa_code</label>
+              <label class="form-label mb-0 small text-muted">会員番号</label>
               <input type="text" name="q_code" class="form-control"
                      value="{{ q_code|default:'' }}" placeholder="例: JP0416">
             </div>
 
             <!-- ✅ 追加：名前検索 -->
             <div>
-              <label class="form-label mb-0 small text-muted">send_bv_name</label>
+              <label class="form-label mb-0 small text-muted">会員名</label>
               <input type="text" name="q_name" class="form-control"
                      value="{{ q_name|default:'' }}" placeholder="例: 野口">
+            </div>
+
+            <!-- ✅ 追加：注文番号検索 -->
+            <div>
+              <label class="form-label mb-0 small text-muted">注文番号</label>
+              <input type="text" name="q_order_code" class="form-control"
+                     value="{{ q_order_code|default:'' }}" placeholder="例: MF05621663365">
+            </div>
+
+            <!-- ✅ 追加：注文区分 -->
+            <div>
+              <label class="form-label mb-0 small text-muted">注文区分</label>
+              <select name="q_order_type" class="form-select">
+                <option value="">すべて</option>
+
+                <option value="101" {% if q_order_type == "101" %}selected{% endif %}>101（再購入品）</option>
+                <option value="102" {% if q_order_type == "102" %}selected{% endif %}>102（初回購入品）</option>
+                <option value="103" {% if q_order_type == "103" %}selected{% endif %}>103（ランクアップ購入品）</option>
+                <option value="105" {% if q_order_type == "105" %}selected{% endif %}>105（特別対応購入品）</option>
+              </select>
             </div>
 
             <button type="submit" class="btn btn-primary">検索</button>
@@ -86,34 +108,50 @@
           {% if rows %}
             <div class="d-flex justify-content-between align-items-center mb-2">
               <div class="fw-bold">一覧</div>
-              <div class="text-end"><strong>件数：{{ rows|length }} 件</strong></div>
+              <div class="text-end"><strong>件数：{{ rows|length }} / {{ total_count }} 件</strong></div>
             </div>
 
             <div class="table-responsive">
               <table class="table table-bordered table-sm align-middle mb-0">
                 <thead class="table-light">
                   <tr>
-                    <th>id</th>
-                    <th>year</th>
-                    <th>month</th>
-                    <th>jwoa_code</th>
-                    <th>send_bv_name</th>
+                    <th>注文番号</th>
+                    <th>注文区分</th>
+                    <th>会員番号</th>
+                    <th>会員名</th>
+                    <th>total_bv</th>
                     <th>bv</th>
-                    <th>created_at</th>
-                    <th>updated_at</th>
+                    <th>BV反映日時</th>
+                    <th>注文日時</th>
+                    <th>ボーナス支払日</th>
+                    <th>作成日時</th>
                   </tr>
                 </thead>
                 <tbody>
                   {% for r in rows %}
                   <tr>
-                    <td>{{ r.id }}</td>
-                    <td>{{ r.year }}</td>
-                    <td>{{ r.month }}</td>
+                    <td>{{ r.order_code }}</td>
+                    <td>
+                      {% if r.order_type == 101 %}
+                        再購入品
+                      {% elif r.order_type == 102 %}
+                        初回購入品
+                      {% elif r.order_type == 103 %}
+                        ランクアップ購入品
+                      {% elif r.order_type == 105 %}
+                        特別対応購入品
+                      {% else %}
+                        {{ r.order_type }}
+                      {% endif %}
+                    </td>
                     <td>{{ r.jwoa_code }}</td>
                     <td>{{ r.send_bv_name }}</td>
+                    <td>{{ r.total_bv }}</td>
                     <td>{{ r.bv }}</td>
+                    <td>{{ r.deposit_at }}</td>
+                    <td>{{ r.order_at }}</td>
+                    <td>{{ r.bonus_payment_date }}</td>
                     <td>{{ r.created_at }}</td>
-                    <td>{{ r.updated_at }}</td>
                   </tr>
                   {% endfor %}
                 </tbody>

@@ -84,21 +84,29 @@
               <table class="table table-bordered table-sm align-middle mb-0">
                 <thead class="table-light">
                   <tr>
+                    <th>order_code</th>
                     <th>jwoa_code</th>
                     <th>send_bv_name</th>
+                    <th>order_type</th>
                     <th>total_bv</th>
-                    <th>year</th>
-                    <th>month</th>
+                    <th>bv</th>
+                    <th>deposit_at</th>
+                    <th>order_at</th>
+                    <th>payment_date</th>
                   </tr>
                 </thead>
                 <tbody>
                   {% for r in rows %}
                     <tr>
+                      <td>{{ r.order_code }}</td>
                       <td>{{ r.jwoa_code }}</td>
                       <td>{{ r.send_bv_name }}</td>
+                      <td>{{ r.order_type }}</td>
                       <td>{{ r.total_bv }}</td>
-                      <td>{{ r.year }}</td>
-                      <td>{{ r.month }}</td>
+                      <td>{{ r.bv }}</td>
+                      <td>{{ r.deposit_at }}</td>
+                      <td>{{ r.order_at }}</td>
+                      <td>{{ r.payment_date }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>
