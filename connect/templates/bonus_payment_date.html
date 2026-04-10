@@ -1,0 +1,307 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block contents %}
+
+{% block head %}
+    <link href="{% static 'css/common.css' %}" rel="stylesheet">
+    <style>
+        .page-title {
+            font-weight: 700;
+            font-size: 1.35rem;
+            color: #1f2937;
+            margin-bottom: 0;
+        }
+
+        .sub-label {
+            font-size: 0.8rem;
+            color: #6b7280;
+            margin-bottom: 0.35rem;
+            display: block;
+        }
+
+        .custom-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+        }
+
+        .section-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #111827;
+            margin-bottom: 1rem;
+        }
+
+        .summary-badge {
+            background: #f3f4f6;
+            color: #374151;
+            border-radius: 999px;
+            padding: 0.45rem 0.8rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .table thead th {
+            background: #f8fafc;
+            color: #374151;
+            font-weight: 700;
+            border-bottom: 1px solid #d1d5db;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+
+        .table tbody td {
+            vertical-align: middle;
+        }
+
+        .code-text {
+            font-weight: 600;
+            color: #111827;
+            letter-spacing: 0.2px;
+        }
+
+        .date-input-inline {
+            min-width: 180px;
+        }
+
+        .action-cell {
+            white-space: nowrap;
+        }
+
+        .btn-soft-primary {
+            background: #2563eb;
+            border-color: #2563eb;
+            color: #fff;
+        }
+
+        .btn-soft-primary:hover {
+            background: #1d4ed8;
+            border-color: #1d4ed8;
+            color: #fff;
+        }
+
+        .btn-soft-success {
+            background: #059669;
+            border-color: #059669;
+            color: #fff;
+        }
+
+        .btn-soft-success:hover {
+            background: #047857;
+            border-color: #047857;
+            color: #fff;
+        }
+
+        .btn-soft-warning {
+            background: #f59e0b;
+            border-color: #f59e0b;
+            color: #fff;
+        }
+
+        .btn-soft-warning:hover {
+            background: #d97706;
+            border-color: #d97706;
+            color: #fff;
+        }
+
+        .btn-soft-danger {
+            background: #ef4444;
+            border-color: #ef4444;
+            color: #fff;
+        }
+
+        .btn-soft-danger:hover {
+            background: #dc2626;
+            border-color: #dc2626;
+            color: #fff;
+        }
+
+        .search-box,
+        .create-box {
+            background: #ffffff;
+            border: 1px solid #eef2f7;
+            border-radius: 12px;
+            padding: 1rem;
+            height: 100%;
+        }
+
+        .table-wrap {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .empty-box {
+            border: 1px dashed #d1d5db;
+            border-radius: 12px;
+            padding: 2rem 1rem;
+            text-align: center;
+            color: #6b7280;
+            background: #fafafa;
+        }
+
+        .created-at {
+            color: #4b5563;
+            font-size: 0.95rem;
+            white-space: nowrap;
+        }
+
+        @media (max-width: 767.98px) {
+            .date-input-inline {
+                min-width: 140px;
+            }
+        }
+    </style>
+{% endblock %}
+
+<div class="container-fluid mt-3">
+    <div class="row g-3">
+        <div class="col-12 text-end">
+            {% if user.is_authenticated %}
+                <span class="small text-muted">👤 {{ user.username }}</span>
+            {% endif %}
+        </div>
+
+        {% include "com/_sidebar.html" with active_menu="bonus_payment_date" %}
+
+        <main class="col-12 col-md-9 col-lg-10">
+            <div class="custom-card bg-white p-3 p-md-4 mb-3">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <h5 class="page-title">【設定 - 注文別ボーナス支払日】</h5>
+                    <span class="summary-badge">登録データ管理</span>
+                </div>
+                <div class="row g-3">
+                    <div class="col-12 col-xl-5">
+                        <div class="search-box">
+                            <div class="section-title mb-3">検索</div>
+
+                            <form method="get">
+                                <label class="sub-label">注文番号</label>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <input
+                                        type="text"
+                                        name="q_order_code"
+                                        class="form-control"
+                                        value="{{ q_order_code|default:'' }}"
+                                        placeholder="例: MF05621663365"
+                                    >
+                                    <button type="submit" class="btn btn-soft-primary">検索</button>
+                                    <a href="{% url 'connect:bonus_payment_date' %}" class="btn btn-outline-secondary">リセット</a>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-xl-7">
+                        <div class="create-box">
+                            <div class="section-title mb-3">新規登録</div>
+
+                            <form method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="create">
+                                <input type="hidden" name="q_order_code" value="{{ q_order_code|default:'' }}">
+
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-12 col-md-6">
+                                        <label class="sub-label">注文番号</label>
+                                        <input
+                                            type="text"
+                                            name="order_code"
+                                            class="form-control"
+                                            placeholder="例: MF05621663365"
+                                            required
+                                        >
+                                    </div>
+
+                                    <div class="col-12 col-md-4">
+                                        <label class="sub-label">ボーナス支払日</label>
+                                        <input
+                                            type="date"
+                                            name="bonus_payment_date"
+                                            class="form-control"
+                                        >
+                                    </div>
+
+                                    <div class="col-12 col-md-2 d-grid">
+                                        <button type="submit" class="btn btn-soft-success">登録</button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="custom-card bg-white p-3 p-md-4">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <div class="section-title mb-0">一覧</div>
+                    <div class="summary-badge">件数：{{ rows|length }} 件</div>
+                </div>
+
+                {% if rows %}
+                    <div class="table-wrap">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 28%;">注文番号</th>
+                                        <th style="width: 28%;">ボーナス支払日</th>
+                                        <th style="width: 24%;">作成日時</th>
+                                        <th style="width: 20%;">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for r in rows %}
+                                        <tr>
+                                            <td>
+                                                <span class="code-text">{{ r.order_code }}</span>
+                                            </td>
+
+                                            <td>
+                                                <form method="post" class="d-flex flex-wrap gap-2 align-items-center mb-0">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="action" value="update">
+                                                    <input type="hidden" name="order_code" value="{{ r.order_code }}">
+                                                    <input type="hidden" name="q_order_code" value="{{ q_order_code|default:'' }}">
+
+                                                    <input
+                                                        type="date"
+                                                        name="bonus_payment_date"
+                                                        class="form-control form-control-sm date-input-inline"
+                                                        value="{% if r.bonus_payment_date %}{{ r.bonus_payment_date|date:'Y-m-d' }}{% endif %}"
+                                                    >
+                                                    <button type="submit" class="btn btn-sm btn-soft-warning">更新</button>
+                                                </form>
+                                            </td>
+
+                                            <td class="created-at">
+                                                {{ r.created_at }}
+                                            </td>
+
+                                            <td class="action-cell">
+                                                <form method="post" class="mb-0" onsubmit="return confirm('削除しますか？');">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="action" value="delete">
+                                                    <input type="hidden" name="order_code" value="{{ r.order_code }}">
+                                                    <input type="hidden" name="q_order_code" value="{{ q_order_code|default:'' }}">
+                                                    <button type="submit" class="btn btn-sm btn-soft-danger">削除</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="empty-box">
+                        該当データがありません。
+                    </div>
+                {% endif %}
+            </div>
+        </main>
+    </div>
+</div>
+
+{% endblock %}

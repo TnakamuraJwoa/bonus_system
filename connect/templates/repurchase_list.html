@@ -8,19 +8,16 @@
     <link href="{% static 'css/common.css' %}" rel="stylesheet">
 {% endblock %}
 
-
 <div class="container-fluid mt-3">
-
   <div class="row g-1">
-  <div class="col-12 text-end">
-    {% if user.is_authenticated %}
-      <span class="small text-muted">👤 {{ user.username }}</span>
-    {% endif %}
-  </div>
-    <!-- Sidebar（そのまま） -->
+    <div class="col-12 text-end">
+      {% if user.is_authenticated %}
+        <span class="small text-muted">👤 {{ user.username }}</span>
+      {% endif %}
+    </div>
+
     {% include "com/_sidebar.html" with active_menu="repurchase_list" %}
 
-    <!-- Main -->
     <main class="col-12 col-md-9 col-lg-10">
 
       <div class="card shadow-sm mb-3">
@@ -29,14 +26,11 @@
           <h5 class="mb-3">【設定 - 購入情報登録一覧】</h5>
           <div class="fw-bold mb-2">対象年月を選択</div>
 
-          <div class="d-flex gap-2 align-items-end flex-wrap">
-
           <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
 
             <div style="min-width: 220px;">
               <select name="prev_month" class="form-select">
                 <option value="">対象年月を選択</option>
-
                 {% for obj in month_choices %}
                   <option value="{{ obj.value }}"
                     {% if obj.value == selected_prev_month %}selected{% endif %}>
@@ -46,33 +40,28 @@
               </select>
             </div>
 
-            <!-- ✅ 追加：jwoa_code検索 -->
-            <div>
-              <label class="form-label mb-0 small text-muted">会員番号</label>
-              <input type="text" name="q_code" class="form-control"
-                     value="{{ q_code|default:'' }}" placeholder="例: JP0416">
-            </div>
-
-            <!-- ✅ 追加：名前検索 -->
-            <div>
-              <label class="form-label mb-0 small text-muted">会員名</label>
-              <input type="text" name="q_name" class="form-control"
-                     value="{{ q_name|default:'' }}" placeholder="例: 野口">
-            </div>
-
-            <!-- ✅ 追加：注文番号検索 -->
             <div>
               <label class="form-label mb-0 small text-muted">注文番号</label>
               <input type="text" name="q_order_code" class="form-control"
                      value="{{ q_order_code|default:'' }}" placeholder="例: MF05621663365">
             </div>
 
-            <!-- ✅ 追加：注文区分 -->
+            <div>
+              <label class="form-label mb-0 small text-muted">会員番号</label>
+              <input type="text" name="q_code" class="form-control"
+                     value="{{ q_code|default:'' }}" placeholder="例: JP0416">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">会員名</label>
+              <input type="text" name="q_name" class="form-control"
+                     value="{{ q_name|default:'' }}" placeholder="例: 野口">
+            </div>
+
             <div>
               <label class="form-label mb-0 small text-muted">注文区分</label>
               <select name="q_order_type" class="form-select">
                 <option value="">すべて</option>
-
                 <option value="101" {% if q_order_type == "101" %}selected{% endif %}>101（再購入品）</option>
                 <option value="102" {% if q_order_type == "102" %}selected{% endif %}>102（初回購入品）</option>
                 <option value="103" {% if q_order_type == "103" %}selected{% endif %}>103（ランクアップ購入品）</option>
@@ -80,9 +69,18 @@
               </select>
             </div>
 
+            <div style="width: 110px;">
+              <label class="form-label mb-0 small text-muted">表示件数</label>
+              <select name="per_page" class="form-select">
+                <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                <option value="300" {% if per_page == 300 %}selected{% endif %}>300</option>
+                <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+              </select>
+            </div>
+
             <button type="submit" class="btn btn-primary">検索</button>
 
-            <!-- 任意：リセット -->
             <a class="btn btn-outline-secondary"
                href="{% url 'connect:repurchase_list' %}{% if selected_prev_month %}?prev_month={{ selected_prev_month }}{% endif %}">
               リセット
@@ -94,7 +92,6 @@
             </a>
 
           </form>
-                    </div>
 
           {% if selected_period %}
           <div class="alert alert-info mt-3 mb-0">
@@ -106,14 +103,16 @@
         </div>
       </div>
 
-      <!-- データ表示（そのまま） -->
       <div class="card shadow-sm">
         <div class="card-body">
 
           {% if rows %}
-            <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
               <div class="fw-bold">一覧</div>
-              <div class="text-end"><strong>件数：{{ rows|length }} / {{ total_count }} 件</strong></div>
+              <div class="text-end">
+                <strong>総件数：{{ total_count }} 件</strong>
+                <span class="text-muted ms-2">({{ page }} / {{ total_pages }})</span>
+              </div>
             </div>
 
             <div class="table-responsive">
@@ -162,12 +161,32 @@
                 </tbody>
               </table>
             </div>
+
+            <div class="d-flex justify-content-end align-items-center gap-2 mt-3 flex-wrap">
+              {% if has_prev %}
+                <a
+                  href="?{% if base_qs %}{{ base_qs }}&{% endif %}page={{ prev_page }}"
+                  class="btn btn-outline-secondary"
+                >
+                  ← 前へ
+                </a>
+              {% endif %}
+
+              {% if has_next %}
+                <a
+                  href="?{% if base_qs %}{{ base_qs }}&{% endif %}page={{ next_page }}"
+                  class="btn btn-primary"
+                >
+                  次へ →
+                </a>
+              {% endif %}
+            </div>
+
           {% else %}
-            {# ※ここ、selected_kibetu じゃなく selected_prev_month の方が自然 #}
             {% if selected_prev_month %}
               <p class="mb-0">この期間のデータはありません。</p>
             {% else %}
-              <p class="mb-0 text-muted">対象年月を選択して「選択」を押してください。</p>
+              <p class="mb-0 text-muted">対象年月を選択して「検索」を押してください。</p>
             {% endif %}
           {% endif %}
 

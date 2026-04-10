@@ -593,9 +593,56 @@ class TitleListView(generic.ListView):
         return ctx
 
 
+import math
+from datetime import date
+from urllib.parse import urlencode
+
+from dateutil.relativedelta import relativedelta
+from django.db import connections
+from django.views import generic
+
 
 class RepurchaseListView(generic.TemplateView):
     template_name = "repurchase_list.html"
+
+    DEFAULT_PER_PAGE = 100
+    MAX_PER_PAGE = 500
+
+    def _build_where(
+        self,
+        year=None,
+        month=None,
+        q_code: str = "",
+        q_name: str = "",
+        q_order_code: str = "",
+        q_order_type: str = "",
+    ):
+        where = ["1=1"]
+        params = []
+
+        if year is not None and month is not None:
+            where.append("year = %s")
+            where.append("month = %s")
+            params.extend([year, month])
+
+        if q_code:
+            where.append("jwoa_code LIKE %s")
+            params.append(f"%{q_code}%")
+
+        if q_name:
+            where.append("send_bv_name LIKE %s")
+            params.append(f"%{q_name}%")
+
+        if q_order_code:
+            where.append("order_code LIKE %s")
+            params.append(f"%{q_order_code}%")
+
+        if q_order_type:
+            where.append("order_type = %s")
+            params.append(q_order_type)
+
+        where_sql = "WHERE " + " AND ".join(where)
+        return where_sql, params
 
     def _fetch_rows(
         self,
@@ -605,64 +652,43 @@ class RepurchaseListView(generic.TemplateView):
         q_name: str = "",
         q_order_code: str = "",
         q_order_type: str = "",
+        limit: int = 100,
+        offset: int = 0,
     ):
-        sql = """
-SELECT *
+        where_sql, params = self._build_where(
+            year=year,
+            month=month,
+            q_code=q_code,
+            q_name=q_name,
+            q_order_code=q_order_code,
+            q_order_type=q_order_type,
+        )
+
+        sql = f"""
+SELECT
+    order_code,
+    order_type,
+    jwoa_code,
+    send_bv_name,
+    total_bv,
+    bv,
+    deposit_at,
+    order_at,
+    bonus_payment_date,
+    created_at,
+    year,
+    month
 FROM bonus_db.purchase_info_list
-WHERE 1=1
-"""
-        params = []
-
-        # 月指定がある場合のみ絞り込み
-        if year is not None and month is not None:
-            sql += """
-  AND year = %s
-  AND month = %s
-"""
-            params.extend([year, month])
-
-        # jwoa_code 検索
-        if q_code:
-            sql += "  AND jwoa_code LIKE %s\n"
-            params.append(f"%{q_code}%")
-
-        # send_bv_name 検索
-        if q_name:
-            sql += "  AND send_bv_name LIKE %s\n"
-            params.append(f"%{q_name}%")
-
-        # order_code 検索
-        if q_order_code:
-            sql += "  AND order_code LIKE %s\n"
-            params.append(f"%{q_order_code}%")
-
-        # 注文区分 検索
-        if q_order_type:
-            sql += "  AND order_type = %s\n"
-            params.append(q_order_type)
-
-        sql += """
+{where_sql}
 ORDER BY bv DESC, jwoa_code ASC
-LIMIT 2000
+LIMIT %s OFFSET %s
 """
+        params.extend([limit, offset])
 
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql, params)
-            print(cursor._executed)  # デバッグ用
             cols = [c[0] for c in cursor.description]
             return [dict(zip(cols, r)) for r in cursor.fetchall()]
-
-    def _get_month_choices(self):
-        today = date.today().replace(day=1)
-
-        return [
-            {
-                "value": (today - relativedelta(months=i)).strftime("%Y-%m"),
-                "year": (today - relativedelta(months=i)).year,
-                "month": (today - relativedelta(months=i)).month,
-            }
-            for i in range(12)
-        ]
 
     def _count_rows(
         self,
@@ -672,41 +698,36 @@ LIMIT 2000
         q_name: str = "",
         q_order_code: str = "",
         q_order_type: str = "",
-    ):
-        sql = """
-    SELECT COUNT(*) AS cnt
-    FROM bonus_db.purchase_info_list
-    WHERE 1=1
-    """
-        params = []
+    ) -> int:
+        where_sql, params = self._build_where(
+            year=year,
+            month=month,
+            q_code=q_code,
+            q_name=q_name,
+            q_order_code=q_order_code,
+            q_order_type=q_order_type,
+        )
 
-        if year is not None and month is not None:
-            sql += """
-      AND year = %s
-      AND month = %s
-    """
-            params.extend([year, month])
-
-        if q_code:
-            sql += "  AND jwoa_code LIKE %s\n"
-            params.append(f"%{q_code}%")
-
-        if q_name:
-            sql += "  AND send_bv_name LIKE %s\n"
-            params.append(f"%{q_name}%")
-
-        if q_order_code:
-            sql += "  AND send_bv_name LIKE %s\n"
-            params.append(f"%{q_order_code}%")
-
-        if q_order_type:
-            sql += "  AND order_type = %s\n"
-            params.append(q_order_type)
-
+        sql = f"""
+SELECT COUNT(*) AS cnt
+FROM bonus_db.purchase_info_list
+{where_sql}
+"""
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql, params)
             row = cursor.fetchone()
-            return row[0] if row else 0
+            return int(row[0]) if row else 0
+
+    def _get_month_choices(self):
+        today = date.today().replace(day=1)
+        return [
+            {
+                "value": (today - relativedelta(months=i)).strftime("%Y-%m"),
+                "year": (today - relativedelta(months=i)).year,
+                "month": (today - relativedelta(months=i)).month,
+            }
+            for i in range(12)
+        ]
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -717,57 +738,91 @@ LIMIT 2000
         q_order_code = (self.request.GET.get("q_order_code") or "").strip()
         q_order_type = (self.request.GET.get("q_order_type") or "").strip()
 
+        try:
+            per_page = int(self.request.GET.get("per_page") or str(self.DEFAULT_PER_PAGE))
+        except ValueError:
+            per_page = self.DEFAULT_PER_PAGE
+        per_page = max(1, min(per_page, self.MAX_PER_PAGE))
+
+        try:
+            page = int(self.request.GET.get("page") or "1")
+        except ValueError:
+            page = 1
+        page = max(1, page)
+
         ctx["month_choices"] = self._get_month_choices()
         ctx["selected_prev_month"] = selected_month
         ctx["q_code"] = q_code
         ctx["q_name"] = q_name
         ctx["q_order_code"] = q_order_code
         ctx["q_order_type"] = q_order_type
+        ctx["per_page"] = per_page
 
-        ctx["rows"] = []
+        year = None
+        month = None
         ctx["selected_period"] = None
-        ctx["total_count"] = 0
 
-        if not selected_month:
-            ctx["rows"] = self._fetch_rows(
-                q_code=q_code,
-                q_name=q_name,
-                q_order_code=q_order_code,
-                q_order_type=q_order_type,
-            )
-            ctx["total_count"] = self._count_rows(
-                q_code=q_code,
-                q_name=q_name,
-                q_order_code=q_order_code,
-                q_order_type=q_order_type,
-            )
-            return ctx
+        if selected_month:
+            try:
+                year, month = map(int, selected_month.split("-"))
+                ctx["selected_period"] = {"year": year, "month": month}
+            except ValueError:
+                year = None
+                month = None
 
-        try:
-            y, m = map(int, selected_month.split("-"))
-        except ValueError:
-            return ctx
-
-        ctx["selected_period"] = {"year": y, "month": m}
-
-        ctx["rows"] = self._fetch_rows(
-            year=y,
-            month=m,
+        total_count = self._count_rows(
+            year=year,
+            month=month,
             q_code=q_code,
             q_name=q_name,
             q_order_code=q_order_code,
             q_order_type=q_order_type,
         )
-        ctx["total_count"] = self._count_rows(
-            year=y,
-            month=m,
+
+        total_pages = max(1, math.ceil(total_count / per_page))
+
+        if page > total_pages:
+            page = total_pages
+
+        offset = (page - 1) * per_page
+
+        rows = self._fetch_rows(
+            year=year,
+            month=month,
             q_code=q_code,
             q_name=q_name,
             q_order_code=q_order_code,
             q_order_type=q_order_type,
+            limit=per_page,
+            offset=offset,
         )
+
+        base_params = {}
+        if selected_month:
+            base_params["prev_month"] = selected_month
+        if q_code:
+            base_params["q_code"] = q_code
+        if q_name:
+            base_params["q_name"] = q_name
+        if q_order_code:
+            base_params["q_order_code"] = q_order_code
+        if q_order_type:
+            base_params["q_order_type"] = q_order_type
+        if per_page != self.DEFAULT_PER_PAGE:
+            base_params["per_page"] = per_page
+
+        ctx["rows"] = rows
+        ctx["total_count"] = total_count
+        ctx["page"] = page
+        ctx["total_pages"] = total_pages
+        ctx["has_prev"] = page > 1
+        ctx["has_next"] = page < total_pages
+        ctx["prev_page"] = page - 1
+        ctx["next_page"] = page + 1
+        ctx["base_qs"] = urlencode(base_params)
 
         return ctx
+
 
 class SettingsView(generic.ListView):
     template_name = "settings.html"
@@ -785,11 +840,9 @@ class SettingsView(generic.ListView):
         return ctx
 
 
-
 class UserTargetRankView(generic.TemplateView):
     template_name = "user_target_rank.html"
 
-    # 表示カラム（順番固定）
     DISPLAY_COLUMNS = [
         "id",
         "jmoa_code",
@@ -809,13 +862,16 @@ class UserTargetRankView(generic.TemplateView):
         "new_rank",
     ]
 
+    DEFAULT_PER_PAGE = 10
+    MAX_PER_PAGE = 500
+
     # ----------------------------
     # UI: 月リスト
     # ----------------------------
     def get_month_list(self):
         today = date.today().replace(day=1)
         months = []
-        for i in range(0, 13):  # 今月〜過去12ヶ月
+        for i in range(0, 13):
             d = today - relativedelta(months=i)
             months.append({
                 "value": f"{d.year}-{d.month:02d}",
@@ -825,94 +881,145 @@ class UserTargetRankView(generic.TemplateView):
         return months
 
     def _month_end_exclusive(self, year: int, month: int):
-        """対象月の締め（翌月1日00:00:00）"""
         base = datetime(year, month, 1, 0, 0, 0)
         return base + relativedelta(months=1)
 
     # ----------------------------
-    # ✅ 件数（総数）
+    # WHERE句
     # ----------------------------
-    def _fetch_total_count(self) -> int:
-        sql = "SELECT COUNT(*) FROM bonus_db.users"
+    def _build_where(self, q_code: str = "", q_name: str = "", q_new_rank: str = ""):
+        where = ["1=1"]
+        params = []
+
+        if q_code:
+            where.append("t.jmoa_code LIKE %s")
+            params.append(f"%{q_code}%")
+
+        if q_name:
+            where.append("t.send_bv_name LIKE %s")
+            params.append(f"%{q_name}%")
+
+        if q_new_rank:
+            where.append("""
+CASE
+  WHEN t.status_code <> 1 THEN 9
+  WHEN x.fluctuation_name REGEXP '^[0-9]+$' THEN CAST(x.fluctuation_name AS UNSIGNED)
+  ELSE t.`rank`
+END = %s
+""")
+            params.append(q_new_rank)
+
+        where_sql = "WHERE " + " AND ".join(where)
+        return where_sql, params
+
+    # ----------------------------
+    # 総件数
+    # ----------------------------
+    def _fetch_total_count(self, cutoff_dt: datetime, q_code: str = "", q_name: str = "", q_new_rank: str = "") -> int:
+        where_sql, params = self._build_where(q_code=q_code, q_name=q_name, q_new_rank=q_new_rank)
+
+        sql = f"""
+SELECT COUNT(*)
+FROM bonus_db.users t
+LEFT JOIN (
+  SELECT user_id, fluctuation_name, created_at
+  FROM (
+    SELECT
+      user_id,
+      fluctuation_name,
+      created_at,
+      id,
+      ROW_NUMBER() OVER (
+        PARTITION BY user_id
+        ORDER BY created_at DESC, id DESC
+      ) AS rn
+    FROM bonus_db.users_rank_up_history
+    WHERE created_at <= %s
+  ) r
+  WHERE rn = 1
+) x
+  ON t.jmoa_code = x.user_id
+{where_sql}
+"""
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql)
+            cursor.execute(sql, [cutoff_dt] + params)
             return int(cursor.fetchone()[0])
 
     # ----------------------------
-    # 表示用: LIMITあり
+    # 表示用データ
     # ----------------------------
-    def _fetch_users(self, cutoff_dt: datetime, limit: int = 100):
+    def _fetch_users(
+        self,
+        cutoff_dt: datetime,
+        q_code: str = "",
+        q_name: str = "",
+        q_new_rank: str = "",
+        limit: int = 100,
+        offset: int = 0,
+    ):
+        where_sql, params = self._build_where(q_code=q_code, q_name=q_name, q_new_rank=q_new_rank)
+
         sql = f"""
+SELECT
+  t.id,
+  t.jmoa_code,
+  t.introducer_code,
+  t.placement_code,
+  t.group_code,
+  t.send_bv_name,
+  t.status_code,
+  t.`rank`,
+  t.salon_administrator,
+  t.salon_name,
+  t.interim_at,
+  t.activated_at,
+  t.created_at,
+
+  CASE
+    WHEN x.fluctuation_name REGEXP '^[0-9]+$' THEN CAST(x.fluctuation_name AS UNSIGNED)
+    ELSE NULL
+  END AS target_rank,
+
+  x.created_at AS max_up_at,
+
+  CASE
+    WHEN t.status_code <> 1 THEN 9
+    WHEN x.fluctuation_name REGEXP '^[0-9]+$' THEN CAST(x.fluctuation_name AS UNSIGNED)
+    ELSE t.`rank`
+  END AS new_rank
+
+FROM bonus_db.users t
+LEFT JOIN (
+  SELECT user_id, fluctuation_name, created_at
+  FROM (
     SELECT
-      t.id,
-      t.jmoa_code,
-      t.introducer_code,
-      t.placement_code,
-      t.group_code,
-      t.send_bv_name,
-      t.status_code,
-      t.`rank`,
-      t.salon_administrator,
-      t.salon_name,
-      t.interim_at,
-      t.activated_at,
-      t.created_at,
-
-      CASE
-        WHEN x.fluctuation_name REGEXP '^[0-9]+$' THEN CAST(x.fluctuation_name AS UNSIGNED)
-        ELSE NULL
-      END AS target_rank,
-
-      x.created_at AS max_up_at,
-
-      CASE
-        WHEN t.status_code <> 1 THEN 9
-        WHEN x.fluctuation_name REGEXP '^[0-9]+$' THEN CAST(x.fluctuation_name AS UNSIGNED)
-        ELSE t.`rank`
-      END AS new_rank
-
-    FROM bonus_db.users t
-    LEFT JOIN (
-      SELECT user_id, fluctuation_name, created_at
-      FROM (
-        SELECT
-          user_id,
-          fluctuation_name,
-          created_at,
-          ROW_NUMBER() OVER (
-            PARTITION BY user_id
-            ORDER BY created_at DESC, id DESC
-          ) AS rn
-        FROM bonus_db.users_rank_up_history
-        WHERE created_at <= %s
-      ) r
-      WHERE rn = 1
-    ) x
-    ON t.jmoa_code = x.user_id
-    ORDER BY t.jmoa_code
-    LIMIT {int(limit)}
-        """
-
+      user_id,
+      fluctuation_name,
+      created_at,
+      id,
+      ROW_NUMBER() OVER (
+        PARTITION BY user_id
+        ORDER BY created_at DESC, id DESC
+      ) AS rn
+    FROM bonus_db.users_rank_up_history
+    WHERE created_at <= %s
+  ) r
+  WHERE rn = 1
+) x
+  ON t.jmoa_code = x.user_id
+{where_sql}
+ORDER BY t.jmoa_code
+LIMIT %s OFFSET %s
+"""
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, [cutoff_dt])
+            cursor.execute(sql, [cutoff_dt] + params + [limit, offset])
             cols = [c[0] for c in cursor.description]
             return [dict(zip(cols, r)) for r in cursor.fetchall()]
 
     # ----------------------------
-    # GET: 画面表示
+    # settings 取得
     # ----------------------------
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-
-        ctx["month_list"] = self.get_month_list()
-        ctx["selected_prev_month"] = self.request.GET.get("prev_month") or ""
-        ctx["selected_period"] = None
-
-        ctx["columns"] = self.DISPLAY_COLUMNS
-        ctx["rows"] = []
-        ctx["total_count"] = 0  # ✅ 追加（本当の件数）
-
-        #登録月を設定
+    def _get_select_month_setting(self):
         with connections["rds"].cursor() as cursor:
             cursor.execute("""
                 SELECT value
@@ -921,118 +1028,187 @@ class UserTargetRankView(generic.TemplateView):
                 LIMIT 1
             """)
             row = cursor.fetchone()
+        return row[0] if row else ""
 
-        ctx["select_month"] = row[0] if row else ""
+    # ----------------------------
+    # GET
+    # ----------------------------
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
 
-        if not ctx["selected_prev_month"]:
+        selected_prev_month = (self.request.GET.get("prev_month") or "").strip()
+        q_code = (self.request.GET.get("q_code") or "").strip()
+        q_name = (self.request.GET.get("q_name") or "").strip()
+        q_new_rank = (self.request.GET.get("q_new_rank") or "").strip()
+
+        per_page = 10
+
+        try:
+            page = int(self.request.GET.get("page") or "1")
+        except ValueError:
+            page = 1
+        page = max(1, page)
+
+        ctx["month_list"] = self.get_month_list()
+        ctx["selected_prev_month"] = selected_prev_month
+        ctx["selected_period"] = None
+        ctx["columns"] = self.DISPLAY_COLUMNS
+        ctx["rows"] = []
+        ctx["total_count"] = 0
+        ctx["select_month"] = self._get_select_month_setting()
+
+        ctx["q_code"] = q_code
+        ctx["q_name"] = q_name
+        ctx["q_new_rank"] = q_new_rank
+        ctx["per_page"] = per_page
+        ctx["page"] = 1
+        ctx["total_pages"] = 1
+        ctx["has_prev"] = False
+        ctx["has_next"] = False
+        ctx["prev_page"] = 1
+        ctx["next_page"] = 1
+        ctx["base_qs"] = ""
+
+        if not selected_prev_month:
             return ctx
 
-        y, m = map(int, ctx["selected_prev_month"].split("-"))
-        ctx["selected_period"] = {"year": y, "month": m}
+        try:
+            y, m = map(int, selected_prev_month.split("-"))
+        except ValueError:
+            return ctx
 
+        ctx["selected_period"] = {"year": y, "month": m}
         cutoff_dt = self._month_end_exclusive(y, m)
 
-        # ✅ 表示は100件、件数は全件
-        ctx["rows"] = self._fetch_users(cutoff_dt, limit=100)
-        ctx["total_count"] = self._fetch_total_count()
+        total_count = self._fetch_total_count(
+            cutoff_dt=cutoff_dt,
+            q_code=q_code,
+            q_name=q_name,
+            q_new_rank=q_new_rank,
+        )
 
+        total_pages = max(1, math.ceil(total_count / per_page))
+        if page > total_pages:
+            page = total_pages
 
+        offset = (page - 1) * per_page
 
+        rows = self._fetch_users(
+            cutoff_dt=cutoff_dt,
+            q_code=q_code,
+            q_name=q_name,
+            q_new_rank=q_new_rank,
+            limit=per_page,
+            offset=offset,
+        )
+
+        base_params = {
+            "prev_month": selected_prev_month,
+        }
+        if q_code:
+            base_params["q_code"] = q_code
+        if q_name:
+            base_params["q_name"] = q_name
+        if q_new_rank:
+            base_params["q_new_rank"] = q_new_rank
+        if per_page != self.DEFAULT_PER_PAGE:
+            base_params["per_page"] = per_page
+
+        ctx["rows"] = rows
+        ctx["total_count"] = total_count
+        ctx["page"] = page
+        ctx["total_pages"] = total_pages
+        ctx["has_prev"] = page > 1
+        ctx["has_next"] = page < total_pages
+        ctx["prev_page"] = page - 1
+        ctx["next_page"] = page + 1
+        ctx["base_qs"] = urlencode(base_params)
 
         return ctx
 
     # ----------------------------
-    # POST: 登録（LIMITなしで全件UPSERT）
+    # POST: 登録（全件）
     # ----------------------------
     def post(self, request, *args, **kwargs):
-        selected_prev_month = request.POST.get("prev_month") or ""
+        selected_prev_month = (request.POST.get("prev_month") or "").strip()
         if not selected_prev_month:
             messages.error(request, "対象年月が未選択です。")
             return redirect("connect:user_target_rank")
 
         year, month = map(int, selected_prev_month.split("-"))
         cutoff_dt = self._month_end_exclusive(year, month)
-
-        # ✅ settings と users_target_rank.target_rank に入れる「YYYYMM」
-        target_rank = f"{year}{month:02d}"   # 例: 202512
+        target_rank = f"{year}{month:02d}"
 
         insert_sql = """
-    INSERT INTO bonus_db.users_target_rank
-    (
-      `jmoa_code`,
-      `introducer_code`,
-      `placement_code`,
-      `group_code`,
-      `send_bv_name`,
-      `status_code`,
-      `rank`,
-      `salon_administrator`,
-      `salon_name`,
-      `interim_at`,
-      `activated_at`,
-      `created_at`,
-      `target_rank`,
-      `max_up_at`,
-      `new_rank`
-    )
+INSERT INTO bonus_db.users_target_rank
+(
+  `jmoa_code`,
+  `introducer_code`,
+  `placement_code`,
+  `group_code`,
+  `send_bv_name`,
+  `status_code`,
+  `rank`,
+  `salon_administrator`,
+  `salon_name`,
+  `interim_at`,
+  `activated_at`,
+  `created_at`,
+  `target_rank`,
+  `max_up_at`,
+  `new_rank`
+)
+SELECT
+  t.jmoa_code,
+  t.introducer_code,
+  t.placement_code,
+  t.group_code,
+  t.send_bv_name,
+  t.status_code,
+  t.`rank`,
+  t.salon_administrator,
+  t.salon_name,
+  t.interim_at,
+  t.activated_at,
+  t.created_at,
+
+  CASE
+    WHEN x.fluctuation_name REGEXP '^[0-9]+$' THEN CAST(x.fluctuation_name AS UNSIGNED)
+    ELSE NULL
+  END AS target_rank,
+
+  x.created_at AS max_up_at,
+
+  CASE
+    WHEN t.status_code <> 1 THEN 9
+    WHEN x.fluctuation_name REGEXP '^[0-9]+$' THEN CAST(x.fluctuation_name AS UNSIGNED)
+    ELSE t.`rank`
+  END AS new_rank
+
+FROM bonus_db.users t
+LEFT JOIN (
+  SELECT user_id, fluctuation_name, created_at
+  FROM (
     SELECT
-      t.jmoa_code,
-      t.introducer_code,
-      t.placement_code,
-      t.group_code,
-      t.send_bv_name,
-      t.status_code,
-      t.`rank`,
-      t.salon_administrator,
-      t.salon_name,
-      t.interim_at,
-      t.activated_at,
-      t.created_at,
-
-      /* target_rank（=履歴のランク）※数値化 */
-      CASE
-        WHEN x.fluctuation_name REGEXP '^[0-9]+$' THEN CAST(x.fluctuation_name AS UNSIGNED)
-        ELSE NULL
-      END AS target_rank,
-
-      /* max_up_at（=最新ランクアップ日時） */
-      x.created_at AS max_up_at,
-
-      /* new_rank（=確定ランク）※数値 */
-      CASE
-        WHEN t.status_code <> 1 THEN 9
-        WHEN x.fluctuation_name REGEXP '^[0-9]+$' THEN CAST(x.fluctuation_name AS UNSIGNED)
-        ELSE t.`rank`
-      END AS new_rank
-
-    FROM bonus_db.users t
-    LEFT JOIN (
-      SELECT user_id, fluctuation_name, created_at
-      FROM (
-        SELECT
-          user_id,
-          fluctuation_name,
-          created_at,
-          ROW_NUMBER() OVER (
-            PARTITION BY user_id
-            ORDER BY created_at DESC, id DESC
-          ) AS rn
-        FROM bonus_db.users_rank_up_history
-        WHERE created_at <= %s
-      ) r
-      WHERE rn = 1
-    ) x
-    ON t.jmoa_code = x.user_id
-    """
+      user_id,
+      fluctuation_name,
+      created_at,
+      id,
+      ROW_NUMBER() OVER (
+        PARTITION BY user_id
+        ORDER BY created_at DESC, id DESC
+      ) AS rn
+    FROM bonus_db.users_rank_up_history
+    WHERE created_at <= %s
+  ) r
+  WHERE rn = 1
+) x
+  ON t.jmoa_code = x.user_id
+"""
 
         with connections["rds"].cursor() as cursor:
-            # ① 全削除
             cursor.execute("TRUNCATE TABLE bonus_db.users_target_rank")
-
-            # ② 全件INSERT（%s は cutoff_dt だけ）
             cursor.execute(insert_sql, [cutoff_dt])
-
-            # ③ settings更新（user_add_rank の value を YYYYMM に更新）
             cursor.execute(
                 """
                 UPDATE bonus_db.settings
@@ -2137,3 +2313,109 @@ class RepurchaseExportView(RepurchaseListView):
 
         wb.save(response)
         return response
+
+
+
+class BonusPaymentDateView(generic.TemplateView):
+    template_name = "bonus_payment_date.html"
+
+    def _fetch_rows(self, q_order_code: str = ""):
+        sql = """
+SELECT
+    order_code,
+    bonus_payment_date,
+    created_at
+FROM bonus_db.bonus_payment_date
+WHERE 1=1
+"""
+        params = []
+
+        if q_order_code:
+            sql += "  AND order_code LIKE %s\n"
+            params.append(f"%{q_order_code}%")
+
+        sql += """
+ORDER BY created_at DESC, order_code ASC
+LIMIT 2000
+"""
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            cols = [c[0] for c in cursor.description]
+            return [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        q_order_code = (self.request.GET.get("q_order_code") or "").strip()
+
+        ctx["q_order_code"] = q_order_code
+        ctx["rows"] = self._fetch_rows(q_order_code=q_order_code)
+
+        return ctx
+
+    def post(self, request, *args, **kwargs):
+        action = (request.POST.get("action") or "").strip()
+        order_code = (request.POST.get("order_code") or "").strip()
+        bonus_payment_date = (request.POST.get("bonus_payment_date") or "").strip()
+
+        # 検索条件を保持して戻す用
+        q_order_code = (request.POST.get("q_order_code") or "").strip()
+        redirect_url = "connect:bonus_payment_date"
+
+        if action == "create":
+            if not order_code:
+                messages.error(request, "注文番号を入力してください。")
+                return redirect(redirect_url)
+
+            sql = """
+INSERT INTO bonus_db.bonus_payment_date (
+    order_code,
+    bonus_payment_date
+) VALUES (%s, %s)
+"""
+            try:
+                with connections["rds"].cursor() as cursor:
+                    cursor.execute(sql, [order_code, bonus_payment_date or None])
+                messages.success(request, "登録しました。")
+            except Exception as e:
+                messages.error(request, f"登録に失敗しました: {e}")
+            return redirect(f"/bonus_payment_date/?q_order_code={q_order_code}")
+
+        elif action == "update":
+            if not order_code:
+                messages.error(request, "注文番号が不正です。")
+                return redirect(f"/bonus_payment_date/?q_order_code={q_order_code}")
+
+            sql = """
+UPDATE bonus_db.bonus_payment_date
+SET bonus_payment_date = %s
+WHERE order_code = %s
+"""
+            try:
+                with connections["rds"].cursor() as cursor:
+                    cursor.execute(sql, [bonus_payment_date or None, order_code])
+                messages.success(request, "更新しました。")
+            except Exception as e:
+                messages.error(request, f"更新に失敗しました: {e}")
+            return redirect(f"/bonus_payment_date/?q_order_code={q_order_code}")
+
+        elif action == "delete":
+            if not order_code:
+                messages.error(request, "注文番号が不正です。")
+                return redirect(f"/bonus_payment_date/?q_order_code={q_order_code}")
+
+            sql = """
+DELETE FROM bonus_db.bonus_payment_date
+WHERE order_code = %s
+"""
+            try:
+                with connections["rds"].cursor() as cursor:
+                    cursor.execute(sql, [order_code])
+                messages.success(request, "削除しました。")
+            except Exception as e:
+                messages.error(request, f"削除に失敗しました: {e}")
+            return redirect(f"/bonus_payment_date/?q_order_code={q_order_code}")
+
+        messages.error(request, "不正な操作です。")
+        return redirect(f"/bonus_payment_date/?q_order_code={q_order_code}")

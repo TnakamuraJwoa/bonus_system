@@ -22,43 +22,77 @@
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <div class="d-flex align-items-center mb-3">
-              <h5 class="mb-0">【設定 - ユーザーランク】</h5>
-              <span class="ml-3 text-muted">※指定月のランクを登録</span>
+          <div class="d-flex align-items-center mb-3 flex-wrap gap-2">
+            <h5 class="mb-0">【設定 - ユーザーランク】</h5>
+            <span class="text-muted">※指定月のランクを登録</span>
           </div>
+
           <div class="mb-2">
-              <span class="fw-bold">対象年月を選択</span>
+            <span class="fw-bold">対象年月を選択</span>
             <span>　登録月: {{ select_month }}</span>
           </div>
-          <div class="d-flex gap-2 align-items-end flex-wrap">
-            <!-- GET -->
-            <form method="get" class="d-flex gap-2 align-items-end mb-0">
-              <div style="min-width: 220px;">
-                <select name="prev_month" class="form-select">
-                  <option value="">-- 選択 --</option>
-                  {% for obj in month_list %}
-                    <option value="{{ obj.value }}"
-                      {% if obj.value == selected_prev_month %}selected{% endif %}>
-                      【{{ obj.year }}年{{ obj.month }}月】
-                    </option>
-                  {% endfor %}
-                </select>
-              </div>
-              <button type="submit" class="btn btn-primary">選択</button>
-            </form>
 
-            <!-- POST：全件登録 -->
-            <form method="post" class="mb-0" id="registerForm"
-                  onsubmit="return confirm('全件登録します。よろしいですか？');">
-              {% csrf_token %}
-              <input type="hidden" name="prev_month" value="{{ selected_prev_month }}">
-              <button type="submit"
-                      class="btn btn-success"
-                      {% if not selected_prev_month %}disabled{% endif %}>
-                全件登録
-              </button>
-            </form>
-          </div>
+          <!-- 月選択 -->
+          <form method="get" class="d-flex gap-2 align-items-end mb-3 flex-wrap">
+            <div style="min-width: 220px;">
+              <select name="prev_month" class="form-select">
+                <option value="">-- 選択 --</option>
+                {% for obj in month_list %}
+                  <option value="{{ obj.value }}"
+                    {% if obj.value == selected_prev_month %}selected{% endif %}>
+                    【{{ obj.year }}年{{ obj.month }}月】
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">会員番号</label>
+              <input type="text" name="q_code" class="form-control"
+                     value="{{ q_code|default:'' }}" placeholder="例: JP0416">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">会員名</label>
+              <input type="text" name="q_name" class="form-control"
+                     value="{{ q_name|default:'' }}" placeholder="例: 野口">
+            </div>
+
+            <div style="width: 140px;">
+              <label class="form-label mb-0 small text-muted">new_rank</label>
+              <input type="text" name="q_new_rank" class="form-control"
+                     value="{{ q_new_rank|default:'' }}" placeholder="例: 9">
+            </div>
+
+            <div style="width: 110px;">
+              <label class="form-label mb-0 small text-muted">表示件数</label>
+              <select name="per_page" class="form-select">
+                <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                <option value="300" {% if per_page == 300 %}selected{% endif %}>300</option>
+                <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+              </select>
+            </div>
+
+            <button type="submit" class="btn btn-primary">検索</button>
+
+            <a class="btn btn-outline-secondary"
+               href="{% url 'connect:user_target_rank' %}">
+              リセット
+            </a>
+          </form>
+
+          <!-- POST：全件登録 -->
+          <form method="post" class="mb-0" id="registerForm"
+                onsubmit="return confirm('全件登録します。よろしいですか？');">
+            {% csrf_token %}
+            <input type="hidden" name="prev_month" value="{{ selected_prev_month }}">
+            <button type="submit"
+                    class="btn btn-success"
+                    {% if not selected_prev_month %}disabled{% endif %}>
+              全件登録
+            </button>
+          </form>
 
           {% if selected_period %}
           <div class="alert alert-info mt-3 mb-0">
@@ -74,12 +108,14 @@
 
           {% if selected_prev_month %}
             {% if rows %}
-              <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
                 <div class="fw-bold">ユーザー一覧</div>
-                <div class="text-end"><strong>表示：{{ rows|length }} / {{ total_count }} 件</strong></div>
+                <div class="text-end">
+                  <strong>総件数：{{ total_count }} 件</strong>
+                  <span class="text-muted ms-2">({{ page }} / {{ total_pages }})</span>
+                </div>
               </div>
 
-              <!-- 横スクロール -->
               <div class="table-responsive" style="overflow-x:auto; max-height:650px;">
                 <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
                   <thead class="table-light sticky-top">
@@ -89,7 +125,6 @@
                       {% endfor %}
                     </tr>
                   </thead>
-
                   <tbody>
                     {% for r in rows %}
                     <tr>
@@ -102,14 +137,31 @@
                 </table>
               </div>
 
-              <div class="small text-muted mt-2">
-                ※ 「全件登録」を押すと、選択月の条件で全ユーザーが登録されます。
+              <div class="d-flex justify-content-end align-items-center gap-2 mt-3 flex-wrap">
+                {% if has_prev %}
+                  <a
+                    href="?{% if base_qs %}{{ base_qs }}&{% endif %}page={{ prev_page }}"
+                    class="btn btn-outline-secondary"
+                  >
+                    ← 前へ
+                  </a>
+                {% endif %}
+
+                {% if has_next %}
+                  <a
+                    href="?{% if base_qs %}{{ base_qs }}&{% endif %}page={{ next_page }}"
+                    class="btn btn-primary"
+                  >
+                    次へ →
+                  </a>
+                {% endif %}
               </div>
+          
             {% else %}
               <p class="mb-0">ユーザーが見つかりません。</p>
             {% endif %}
           {% else %}
-            <p class="mb-0 text-muted">対象年月を選択して「選択」を押してください。</p>
+            <p class="mb-0 text-muted">対象年月を選択して「検索」を押してください。</p>
           {% endif %}
 
         </div>

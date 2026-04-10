@@ -23,6 +23,9 @@
         <a class="list-group-item list-group-item-action {% if active_menu == 'title_user' %}active{% endif %}"
            href="{% url 'connect:title_user' %}">タイトルユーザー一覧</a>
 
+        <a class="list-group-item list-group-item-action {% if active_menu == 'bonus_payment_date' %}active{% endif %}"
+           href="{% url 'connect:bonus_payment_date' %}">注文別ボーナス支払日</a>
+
         <a class="list-group-item list-group-item-action {% if active_menu == 'repurchase_last_month' %}active{% endif %}"
            href="{% url 'connect:repurchase_last_month' %}">購入情報登録</a>
 
