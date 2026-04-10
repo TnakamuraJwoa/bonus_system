@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 
 
+
 app_name = 'connect'
 urlpatterns = [
     path('', views.IndexView.as_view(), name="index"),
@@ -19,4 +20,5 @@ urlpatterns = [
     path('add_favorite_to_db/', views.AddFavoriteToDBView.as_view(), name="add_favorite_to_db"),
     path('user_target_rank/', views.UserTargetRankView.as_view(), name = "user_target_rank"),
     path('title_registration/', views.TitleRegistrationView.as_view(), name = "title_registration"),
+    path("repurchase/export/", views.RepurchaseExportView.as_view(), name="repurchase_export"),
 ]

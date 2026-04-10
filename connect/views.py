@@ -20,6 +20,8 @@ import math
 from urllib.parse import urlencode
 from django.db import connections, transaction, IntegrityError
 import traceback
+from django.http import HttpResponse
+from openpyxl import Workbook
 
 from django.db.models import Sum
 from django.utils.timezone import make_aware
@@ -2083,3 +2085,55 @@ WHERE name = 'set_title'
         return redirect(
             f"{redirect('connect:repurchase_last_month').url}?target_month={selected}"
         )
+
+
+class RepurchaseExportView(RepurchaseListView):
+
+    def get(self, request, *args, **kwargs):
+        # 既存ロジック使う（これがポイント）
+        ctx = self.get_context_data()
+
+        rows = ctx["rows"]
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "購入情報"
+
+        # ヘッダー
+        headers = [
+            "注文番号", "注文区分", "会員番号", "会員名",
+            "total_bv", "bv", "BV反映日時", "注文日時",
+            "ボーナス支払日", "作成日時"
+        ]
+        ws.append(headers)
+
+        # データ
+        for r in rows:
+            order_type_map = {
+                101: "再購入品",
+                102: "初回購入品",
+                103: "ランクアップ購入品",
+                105: "特別対応購入品",
+            }
+
+            ws.append([
+                r.get("order_code"),
+                order_type_map.get(r.get("order_type"), r.get("order_type")),
+                r.get("jwoa_code"),
+                r.get("send_bv_name"),
+                r.get("total_bv"),
+                r.get("bv"),
+                r.get("deposit_at"),
+                r.get("order_at"),
+                r.get("bonus_payment_date"),
+                r.get("created_at"),
+            ])
+
+        # レスポンス
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = 'attachment; filename="repurchase.xlsx"'
+
+        wb.save(response)
+        return response
