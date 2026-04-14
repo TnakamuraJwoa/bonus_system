@@ -414,7 +414,11 @@ union all
 select * from repurchase_add_non9_2_addTitle
 )
 
-select * from pay_drive_list order by introducer_code, jwoa_code
+select title_name, introducer_code, jwoa_code, jwoa_name, sum(custom_bv) as sum_bv,
+ sum(bonus_amount) as sum_bonus_amount
+from pay_drive_list
+group by title_name, introducer_code, jwoa_code, jwoa_name
+order by introducer_code, jwoa_code
         """
 
 
@@ -1450,70 +1454,46 @@ WITH RECURSIVE
 
 repurchase_list AS (  -- 再購入リスト
     SELECT
-        b.jwoa_code AS distribution_jwoa_code,
-        a.bv_actived_flg,
-        a.deposit_at,
-        a.order_status,
-        a.order_type,
-        b.distribution_bv,
-        CASE -- 101:再購入
-            WHEN a.order_type = 101
-                THEN LEAST(IFNULL(b.distribution_bv, 0), 50)
-            ELSE
-                IFNULL(b.distribution_bv, 0)
-        END AS custom_bv
-    FROM bonus_db.orders AS a
-    LEFT JOIN bonus_db.orders_distribution_bv AS b
-      ON a.order_code = b.order_code
-     -- 101:再購入, 102:初回購入, 103:ランクアップ購入品
-    WHERE a.order_type = 101
-      AND a.order_status NOT IN (201, 206)
-      AND a.deposit_at >= %s
-      AND a.deposit_at < %s
-
-    UNION ALL
-
-    SELECT
-        member_no AS distribution_jwoa_code,
-        1         AS bv_actived_flg,
-        payment_date AS deposit_at,
-        203       AS order_status,
-        105       AS order_type,-- 105:特別対応
-        total_bv  AS distribution_bv,
-        LEAST(IFNULL(total_bv, 0), 50) AS custom_bv
-    FROM bonus_db.api_users_bv
-    WHERE payment_date >= %s
-      AND payment_date < %s
+        order_code,
+        jwoa_code,
+        bonus_payment_date,
+        order_type,
+        bv,
+        LEAST(IFNULL(bv, 0), 50) AS custom_bv
+    FROM bonus_db.purchase_info_list as p
+    WHERE order_type IN (101, 105)
+      AND bonus_payment_date >= %s
+      AND bonus_payment_date < %s
 ),
-
 
 -- ランクアップ、初回購入情報リスト
 rank_up_list AS (
     SELECT
-        b.jwoa_code AS distribution_jwoa_code,
-        a.bv_actived_flg,
-        a.deposit_at,
-        a.order_status,
-        a.order_type,
-        b.distribution_bv,
-        IFNULL(b.distribution_bv, 0) AS custom_bv
-    FROM bonus_db.orders AS a
-    LEFT JOIN bonus_db.orders_distribution_bv AS b
-      ON a.order_code = b.order_code
+        order_code,
+        jwoa_code,
+        bonus_payment_date,
+        order_type,
+        bv,
+        IFNULL(bv, 0) AS custom_bv
+    FROM bonus_db.purchase_info_list as p
+
      -- 101:再購入, 102:初回購入, 103:ランクアップ購入品
-    WHERE a.order_type IN (102, 103)
-      AND a.order_status NOT IN (201, 206)
-      AND a.deposit_at >= %s
-      AND a.deposit_at < %s
-),
--- 購入者リスト
-purchasers_list AS (
-select distribution_jwoa_code as jwoa_code from repurchase_list
-union
-select distribution_jwoa_code as jwoa_code from rank_up_list
+    WHERE order_type IN (102, 103)
+      AND bonus_payment_date >= %s
+      AND bonus_payment_date < %s
 ),
 
-/* ランクアップ変動履歴 */
+
+-- 購入者リスト
+purchasers_list AS (
+select jwoa_code from repurchase_list
+union
+select jwoa_code from rank_up_list
+),
+
+
+-- ランクアップ変動履歴
+-- 指定日時より前で、各ユーザーの“最新のランク履歴を1件だけ取る
 rankup_history AS (
   SELECT *
   FROM (
@@ -1529,14 +1509,16 @@ rankup_history AS (
   WHERE rn = 1
 ),
 
+
 -- ユーザー(in_購入者リスト)
+-- 指定月のランク情報のユーザー情報
+-- 購入者情報だけに絞り込み
 user_in_purchasers_list AS (
   SELECT u.*
   FROM bonus_db.users_target_rank AS u
   JOIN purchasers_list AS p
     ON p.jwoa_code = u.jmoa_code
 ),
-
 
 -- 再起処理
 chain AS (
@@ -1575,6 +1557,7 @@ last_step AS (
 ),
 
 -- 一般会員を除く紹介者を再帰的に設定
+-- 全購入者情報
 user_introducer_non9 AS (
 SELECT
     c.current_code   AS introducer_code,
@@ -1590,7 +1573,7 @@ LEFT JOIN bonus_db.users_target_rank AS u2
   ON u2.jmoa_code = c.current_code
 ),
 
--- non9にタイトルを追加
+-- non9にタイトルを追加(全購入者情報)
 user_introducer_non9_addTitle AS (
 SELECT
     non9.introducer_code,
@@ -1612,7 +1595,6 @@ LEFT JOIN bonus_db.users_target_rank u
     ON non9.jmoa_code = u.jmoa_code
 ),
 
-
 -- ランクアップ、初回購入情報
 rank_up_add_non9_addTitle AS (
     SELECT
@@ -1633,7 +1615,7 @@ rank_up_add_non9_addTitle AS (
         END AS bonus_amount
     FROM rank_up_list AS rank_up
     LEFT JOIN user_introducer_non9_addTitle AS non9
-      ON rank_up.distribution_jwoa_code = non9.jmoa_code
+      ON rank_up.jwoa_code = non9.jmoa_code
     where rank_up.custom_bv > 0
 ),
 
@@ -1762,7 +1744,7 @@ repurchase_add_non9_2_addTitle AS (
         END AS bonus_amount
     FROM repurchase_list AS repurchase
     LEFT JOIN user_introducer_non9_2_addTitle AS non9
-      ON repurchase.distribution_jwoa_code = non9.jmoa_code
+      ON repurchase.jwoa_code = non9.jmoa_code
     where repurchase.custom_bv > 0
 ),
 
@@ -1778,7 +1760,7 @@ select * from pay_drive_list order by introducer_code, jwoa_code
 
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, [start_dt, end_dt, start_dt, end_dt, start_dt, end_dt, rank_dt, prev_year, prev_month, prev_year, prev_month])
+            cursor.execute(sql, [start_dt, end_dt, start_dt, end_dt, rank_dt, prev_year, prev_month, prev_year, prev_month])
             logger.info(f"Executed SQL: {cursor._executed}")
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
