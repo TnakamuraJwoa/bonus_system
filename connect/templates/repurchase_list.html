@@ -66,6 +66,18 @@
             </div>
 
             <div>
+              <label class="form-label mb-0 small text-muted">ボーナス支払日（FROM）</label>
+              <input type="date" name="q_bonus_date_from" class="form-control"
+                     value="{{ q_bonus_date_from|default:'' }}">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">ボーナス支払日（TO）</label>
+              <input type="date" name="q_bonus_date_to" class="form-control"
+                     value="{{ q_bonus_date_to|default:'' }}">
+            </div>
+
+            <div>
               <label class="form-label mb-0 small text-muted">注文区分</label>
               <select name="q_order_type" class="form-select">
                 <option value="">すべて</option>
