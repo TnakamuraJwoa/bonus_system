@@ -22,6 +22,7 @@ from django.db import connections, transaction, IntegrityError
 import traceback
 from django.http import HttpResponse
 from openpyxl import Workbook
+import openpyxl
 
 from django.db.models import Sum
 from django.utils.timezone import make_aware
@@ -46,6 +47,59 @@ class DriveBonusView(generic.ListView):
 
     def get_queryset(self):
         return PeriodMaster.objects.using("rds").all()
+
+
+    def get(self, request, *args, **kwargs):
+        # ListView の object_list を先にセット
+        self.object_list = self.get_queryset()
+        context = self.get_context_data()
+
+        # Excel出力
+        if request.GET.get("export") == "excel":
+            rows = context.get("rows", [])
+
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "DriveBonus"
+
+            # ヘッダー
+            headers = ["タイトル", "紹介者ID", "会員ID", "会員名", "BV合計", "報酬"]
+            ws.append(headers)
+
+            # データ
+            for r in rows:
+                ws.append([
+                    r.get("title_name"),
+                    r.get("introducer_code"),
+                    r.get("jwoa_code"),
+                    r.get("jwoa_name"),
+                    r.get("sum_bv"),
+                    r.get("sum_bonus_amount"),
+                ])
+
+            # 列幅調整
+            ws.column_dimensions["A"].width = 18
+            ws.column_dimensions["B"].width = 15
+            ws.column_dimensions["C"].width = 15
+            ws.column_dimensions["D"].width = 25
+            ws.column_dimensions["E"].width = 12
+            ws.column_dimensions["F"].width = 15
+
+            # 数値フォーマット
+            for row_idx in range(2, ws.max_row + 1):
+                ws[f"E{row_idx}"].number_format = '#,##0.00'
+                ws[f"F{row_idx}"].number_format = '#,##0.00'
+
+            response = HttpResponse(
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            response["Content-Disposition"] = 'attachment; filename="drive_bonus.xlsx"'
+
+            wb.save(response)
+            return response
+
+        return self.render_to_response(context)
+
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -91,70 +145,46 @@ WITH RECURSIVE
 
 repurchase_list AS (  -- 再購入リスト
     SELECT
-        b.jwoa_code AS distribution_jwoa_code,
-        a.bv_actived_flg,
-        a.deposit_at,
-        a.order_status,
-        a.order_type,
-        b.distribution_bv,
-        CASE -- 101:再購入
-            WHEN a.order_type = 101
-                THEN LEAST(IFNULL(b.distribution_bv, 0), 50)
-            ELSE
-                IFNULL(b.distribution_bv, 0)
-        END AS custom_bv
-    FROM bonus_db.orders AS a
-    LEFT JOIN bonus_db.orders_distribution_bv AS b
-      ON a.order_code = b.order_code
-     -- 101:再購入, 102:初回購入, 103:ランクアップ購入品
-    WHERE a.order_type = 101
-      AND a.order_status NOT IN (201, 206)
-      AND a.deposit_at >= %s
-      AND a.deposit_at < %s
-
-    UNION ALL
-
-    SELECT
-        member_no AS distribution_jwoa_code,
-        1         AS bv_actived_flg,
-        payment_date AS deposit_at,
-        203       AS order_status,
-        105       AS order_type,-- 105:特別対応
-        total_bv  AS distribution_bv,
-        LEAST(IFNULL(total_bv, 0), 50) AS custom_bv
-    FROM bonus_db.api_users_bv
-    WHERE payment_date >= %s
-      AND payment_date < %s
+        order_code,
+        jwoa_code,
+        bonus_payment_date,
+        order_type,
+        bv,
+        LEAST(IFNULL(bv, 0), 50) AS custom_bv
+    FROM bonus_db.purchase_info_list as p
+    WHERE order_type IN (101, 105)
+      AND bonus_payment_date >=  %s
+      AND bonus_payment_date <  %s
 ),
-
 
 -- ランクアップ、初回購入情報リスト
 rank_up_list AS (
     SELECT
-        b.jwoa_code AS distribution_jwoa_code,
-        a.bv_actived_flg,
-        a.deposit_at,
-        a.order_status,
-        a.order_type,
-        b.distribution_bv,
-        IFNULL(b.distribution_bv, 0) AS custom_bv
-    FROM bonus_db.orders AS a
-    LEFT JOIN bonus_db.orders_distribution_bv AS b
-      ON a.order_code = b.order_code
+        order_code,
+        jwoa_code,
+        bonus_payment_date,
+        order_type,
+        bv,
+        IFNULL(bv, 0) AS custom_bv
+    FROM bonus_db.purchase_info_list as p
+
      -- 101:再購入, 102:初回購入, 103:ランクアップ購入品
-    WHERE a.order_type IN (102, 103)
-      AND a.order_status NOT IN (201, 206)
-      AND a.deposit_at >= %s
-      AND a.deposit_at < %s
-),
--- 購入者リスト
-purchasers_list AS (
-select distribution_jwoa_code as jwoa_code from repurchase_list
-union
-select distribution_jwoa_code as jwoa_code from rank_up_list
+    WHERE order_type IN (102, 103)
+      AND bonus_payment_date >=  %s
+      AND bonus_payment_date <  %s
 ),
 
-/* ランクアップ変動履歴 */
+
+-- 購入者リスト
+purchasers_list AS (
+select jwoa_code from repurchase_list
+union
+select jwoa_code from rank_up_list
+),
+
+
+-- ランクアップ変動履歴
+-- 指定日時より前で、各ユーザーの“最新のランク履歴を1件だけ取る
 rankup_history AS (
   SELECT *
   FROM (
@@ -165,12 +195,15 @@ rankup_history AS (
               ORDER BY fluctuation_up_at DESC
           ) AS rn
       FROM bonus_db.users_rank_up_history AS t
-      WHERE fluctuation_up_at < %s
+      WHERE fluctuation_up_at <  %s
   ) x
   WHERE rn = 1
 ),
 
+
 -- ユーザー(in_購入者リスト)
+-- 指定月のランク情報のユーザー情報
+-- 購入者情報だけに絞り込み
 user_in_purchasers_list AS (
   SELECT u.*
   FROM bonus_db.users_target_rank AS u
@@ -275,12 +308,9 @@ rank_up_add_non9_addTitle AS (
         END AS bonus_amount
     FROM rank_up_list AS rank_up
     LEFT JOIN user_introducer_non9_addTitle AS non9
-      ON rank_up.distribution_jwoa_code = non9.jmoa_code
+      ON rank_up.jwoa_code = non9.jmoa_code
     where rank_up.custom_bv > 0
 ),
-
-
-
 
 
 
@@ -302,8 +332,8 @@ chain_find AS (
       ON up.jmoa_code = u.introducer_code
     LEFT JOIN bonus_db.purchase_info_list p
       ON p.jwoa_code = up.jmoa_code
-     AND p.year  = %s
-     AND p.month = %s
+     AND p.year  =  %s
+     AND p.month =  %s
 
     UNION ALL
 
@@ -323,8 +353,8 @@ chain_find AS (
       ON up.jmoa_code = c.next_code
     LEFT JOIN bonus_db.purchase_info_list p
       ON p.jwoa_code = up.jmoa_code
-     AND p.year  = %s
-     AND p.month = %s
+     AND p.year  =  %s
+     AND p.month =  %s
     WHERE c.next_code IS NOT NULL
       AND c.found = 0
       AND c.lvl < 100
@@ -356,8 +386,8 @@ JOIN bonus_db.users_target_rank u
   ON u.jmoa_code = c.evaluated_code
 JOIN bonus_db.purchase_info_list p
   ON p.jwoa_code = c.evaluated_code
- AND p.year  = %s
- AND p.month = %s
+ AND p.year  =  %s
+ AND p.month =  %s
 WHERE c.found = 1
 ORDER BY c.jmoa_code
 ),
@@ -404,7 +434,7 @@ repurchase_add_non9_2_addTitle AS (
         END AS bonus_amount
     FROM repurchase_list AS repurchase
     LEFT JOIN user_introducer_non9_2_addTitle AS non9
-      ON repurchase.distribution_jwoa_code = non9.jmoa_code
+      ON repurchase.jwoa_code = non9.jmoa_code
     where repurchase.custom_bv > 0
 ),
 
@@ -412,19 +442,23 @@ pay_drive_list AS (
 select * from rank_up_add_non9_addTitle
 union all
 select * from repurchase_add_non9_2_addTitle
-)
+),
 
+pay_drive_list_group_by as (
 select title_name, introducer_code, jwoa_code, jwoa_name, sum(custom_bv) as sum_bv,
  sum(bonus_amount) as sum_bonus_amount
 from pay_drive_list
 group by title_name, introducer_code, jwoa_code, jwoa_name
 order by introducer_code, jwoa_code
+)
+
+select * from pay_drive_list_group_by
         """
 
 
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, [start_dt, end_dt, start_dt, end_dt, start_dt, end_dt, rank_dt, prev_year, prev_month, prev_year, prev_month, prev_year, prev_month])
+            cursor.execute(sql, [start_dt, end_dt, start_dt, end_dt, rank_dt, prev_year, prev_month, prev_year, prev_month, prev_year, prev_month])
             logger.info(f"Executed SQL: {cursor._executed}")
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
@@ -648,6 +682,15 @@ class RepurchaseListView(generic.TemplateView):
         where_sql = "WHERE " + " AND ".join(where)
         return where_sql, params
 
+    def _get_registered_months(self):
+        sql = """
+        SELECT DISTINCT CONCAT(year, '-', LPAD(month,2,'0')) AS ym
+        FROM bonus_db.purchase_info_list
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql)
+            return [row[0] for row in cursor.fetchall()]
+
     def _fetch_rows(
         self,
         year=None,
@@ -755,6 +798,7 @@ FROM bonus_db.purchase_info_list
         page = max(1, page)
 
         ctx["month_choices"] = self._get_month_choices()
+        ctx["registered_months"] = self._get_registered_months()
         ctx["selected_prev_month"] = selected_month
         ctx["q_code"] = q_code
         ctx["q_name"] = q_name
@@ -2059,13 +2103,22 @@ class RepurchaseLastMonthView(generic.TemplateView):
             for i in range(12)
         ]
 
+    def _get_registered_months(self):
+        sql = """
+        SELECT DISTINCT CONCAT(year, '-', LPAD(month,2,'0')) AS ym
+        FROM bonus_db.purchase_info_list
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql)
+            return [row[0] for row in cursor.fetchall()]
+
     def _get_sql(self):
         return """
 WITH bonus_orders AS (
     SELECT
         o.*,
         b.bonus_payment_date,
-        COALESCE(b.bonus_payment_date, o.order_at) AS payment_date
+        COALESCE(b.bonus_payment_date, o.deposit_at) AS payment_date
     FROM bonus_db.orders AS o
     LEFT JOIN bonus_db.bonus_payment_date AS b
         ON o.order_code = b.order_code
@@ -2194,6 +2247,7 @@ WHERE name = 'set_title'
 
         selected = self.request.GET.get("target_month")
         ctx["month_choices"] = self._get_month_choices()
+        ctx["registered_months"] = self._get_registered_months()
         ctx["selected_month"] = selected
         ctx["rows"] = []
 
@@ -2248,16 +2302,48 @@ WHERE name = 'set_title'
 class RepurchaseExportView(RepurchaseListView):
 
     def get(self, request, *args, **kwargs):
-        # 既存ロジック使う（これがポイント）
-        ctx = self.get_context_data()
+        selected_month = (request.GET.get("prev_month") or "").strip()
+        q_code = (request.GET.get("q_code") or "").strip()
+        q_name = (request.GET.get("q_name") or "").strip()
+        q_order_code = (request.GET.get("q_order_code") or "").strip()
+        q_order_type = (request.GET.get("q_order_type") or "").strip()
 
-        rows = ctx["rows"]
+        year = None
+        month = None
+        if selected_month:
+            try:
+                year, month = map(int, selected_month.split("-"))
+            except ValueError:
+                year = None
+                month = None
+
+        # 総件数取得
+        total_count = self._count_rows(
+            year=year,
+            month=month,
+            q_code=q_code,
+            q_name=q_name,
+            q_order_code=q_order_code,
+            q_order_type=q_order_type,
+        )
+
+        # 全件取得（ここが重要）
+        rows = self._fetch_rows(
+            year=year,
+            month=month,
+            q_code=q_code,
+            q_name=q_name,
+            q_order_code=q_order_code,
+            q_order_type=q_order_type,
+            limit=total_count if total_count > 0 else 1,
+            offset=0,
+        )
 
         wb = Workbook()
         ws = wb.active
         ws.title = "購入情報"
 
-        # ヘッダー
+        # ヘッダー（ここから開始）
         headers = [
             "注文番号", "注文区分", "会員番号", "会員名",
             "total_bv", "bv", "BV反映日時", "注文日時",
@@ -2265,15 +2351,15 @@ class RepurchaseExportView(RepurchaseListView):
         ]
         ws.append(headers)
 
+        order_type_map = {
+            101: "再購入品",
+            102: "初回購入品",
+            103: "ランクアップ購入品",
+            105: "特別対応購入品",
+        }
+
         # データ
         for r in rows:
-            order_type_map = {
-                101: "再購入品",
-                102: "初回購入品",
-                103: "ランクアップ購入品",
-                105: "特別対応購入品",
-            }
-
             ws.append([
                 r.get("order_code"),
                 order_type_map.get(r.get("order_type"), r.get("order_type")),
@@ -2287,7 +2373,6 @@ class RepurchaseExportView(RepurchaseListView):
                 r.get("created_at"),
             ])
 
-        # レスポンス
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )

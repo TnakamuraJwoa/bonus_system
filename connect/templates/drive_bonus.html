@@ -38,6 +38,9 @@
 
             <button type="submit" class="btn btn-primary">選択</button>
             <a class="btn btn-outline-secondary" href="{% url 'connect:drive_bonus' %}">リセット</a>
+            <button type="submit" name="export" value="excel" class="btn btn-success">
+              Excel出力
+            </button>
           </form>
 
           {% if selected_period %}
