@@ -127,6 +127,7 @@ class DriveBonusView(generic.ListView):
         kibetu_month = int(selected_kibetu[5:7])
 
         # 対象期間（開始は00:00:00、終了は翌日00:00:00未満）
+        # 購入情報の絞込条件の日付　from ~ to
         start_dt = make_aware(datetime.combine(st_date, time.min))
         end_dt = make_aware(datetime.combine(end_date + timedelta(days=1), time.min))
 
@@ -139,8 +140,6 @@ class DriveBonusView(generic.ListView):
 
         be_start_dt = make_aware(datetime(prev_year, prev_month, 1, 0, 0, 0))
         be_end_dt = make_aware(datetime(kibetu_year, kibetu_month, 1, 0, 0, 0))
-
-
 
         sql = """
 WITH RECURSIVE
@@ -392,7 +391,7 @@ SELECT
     u.new_rank           AS introducer_rank,
     c.jmoa_code,
     c.jmoa_rank,
-    p.bv             AS introducer_bv,
+    p.bv             AS introducer_bv, -- 使われてない
     c.lvl
 FROM chain_find c
 JOIN first_found f
@@ -466,7 +465,7 @@ group by title_name, introducer_code, jwoa_code, jwoa_name
 order by introducer_code, jwoa_code
 )
 
-select * from pay_drive_list_group_by
+select * from pay_drive_list_group_by where jwoa_code is not null
         """
 
         params = [
@@ -1512,33 +1511,33 @@ class BasicBonusView(generic.ListView):
         if not selected_kibetu:
             return ctx
 
-        # 期別マスタ取得
+        # 期別マスタ取得（ここはORMのまま）
         period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
         if not period:
             return ctx
 
         ctx["selected_period"] = period
+        print(period)
 
         st_date = period.st_date
         end_date = period.end_date
 
-        # kibetu 例: 2026C01W3 → 2026 / 01
-        kibetu_year = int(selected_kibetu[0:4])
-        kibetu_month = int(selected_kibetu[5:7])
-
-        # 対象期間（開始は00:00:00、終了は翌日00:00:00未満）
+        # 日付 -> datetime範囲（開始は00:00:00、終了は翌日00:00:00未満）
         start_dt = make_aware(datetime.combine(st_date, time.min))
         end_dt = make_aware(datetime.combine(end_date + timedelta(days=1), time.min))
 
-        # 前月購入範囲
+        # kibetu 例: 2026C01W3 → 2026-01-01 00:00:00
+        kibetu_year = int(selected_kibetu[0:4])
+        kibetu_month = int(selected_kibetu[5:7])
+        rank_dt = make_aware(datetime(kibetu_year, kibetu_month, 1, 0, 0, 0))
+
+        #期別の前の月の年と月を取得
         current_month_first = datetime(kibetu_year, kibetu_month, 1)
         prev_month_last = current_month_first - timedelta(days=1)
 
         prev_year = prev_month_last.year
         prev_month = prev_month_last.month
 
-        be_start_dt = make_aware(datetime(prev_year, prev_month, 1, 0, 0, 0))
-        be_end_dt = make_aware(datetime(kibetu_year, kibetu_month, 1, 0, 0, 0))
 
         sql = """
 WITH RECURSIVE
@@ -1553,10 +1552,9 @@ repurchase_list AS (  -- 再購入リスト
         LEAST(IFNULL(bv, 0), 50) AS custom_bv
     FROM bonus_db.purchase_info_list as p
     WHERE order_type IN (101, 105)
-      AND bonus_payment_date >=  %s
-      AND bonus_payment_date <  %s
+      AND bonus_payment_date >= %s
+      AND bonus_payment_date < %s
 ),
-
 
 -- ランクアップ、初回購入情報リスト
 rank_up_list AS (
@@ -1571,31 +1569,16 @@ rank_up_list AS (
 
      -- 101:再購入, 102:初回購入, 103:ランクアップ購入品
     WHERE order_type IN (102, 103)
-      AND bonus_payment_date >=  %s
-      AND bonus_payment_date <  %s
+      AND bonus_payment_date >= %s
+      AND bonus_payment_date < %s
 ),
 
 
 -- 購入者リスト
 purchasers_list AS (
-    select jwoa_code from repurchase_list
-        union
-    select jwoa_code from rank_up_list
-),
-
--- group_by(購入者リスト)
--- 前月の購入情報
-sum_purchasers_list AS (
-    SELECT
-        a.jwoa_code,
-        SUM(a.bv) AS bv
-    FROM (
-        SELECT jwoa_code, bv
-        FROM bonus_db.purchase_info_list
-        WHERE bonus_payment_date >=  %s
-        AND bonus_payment_date <  %s
-    ) AS a
-    GROUP BY a.jwoa_code
+select jwoa_code from repurchase_list
+union
+select jwoa_code from rank_up_list
 ),
 
 
@@ -1611,7 +1594,7 @@ rankup_history AS (
               ORDER BY fluctuation_up_at DESC
           ) AS rn
       FROM bonus_db.users_rank_up_history AS t
-      WHERE fluctuation_up_at <  %s
+      WHERE fluctuation_up_at < %s
   ) x
   WHERE rn = 1
 ),
@@ -1626,7 +1609,6 @@ user_in_purchasers_list AS (
   JOIN purchasers_list AS p
     ON p.jwoa_code = u.jmoa_code
 ),
-
 
 -- 再起処理
 chain AS (
@@ -1666,7 +1648,7 @@ last_step AS (
 
 -- 一般会員を除く紹介者を再帰的に設定
 -- 全購入者情報
-user_in_purchasers_list_non9 AS (
+user_introducer_non9 AS (
 SELECT
     c.current_code   AS introducer_code,
     u2.new_rank          AS introducer_rank,
@@ -1682,7 +1664,7 @@ LEFT JOIN bonus_db.users_target_rank AS u2
 ),
 
 -- non9にタイトルを追加(全購入者情報)
-user_in_purchasers_list_non9_addTitle AS (
+user_introducer_non9_addTitle AS (
 SELECT
     non9.introducer_code,
     non9.introducer_rank,
@@ -1692,7 +1674,7 @@ SELECT
     non9.lvl,
     tm.title_id as introducer_title_id,
     tm.title_name as introducer_title_name
-FROM user_in_purchasers_list_non9 AS non9
+FROM user_introducer_non9 AS non9
 LEFT JOIN bonus_db.users_target_rank ui
     ON non9.introducer_code = ui.jmoa_code
 LEFT JOIN bonus_db.user_titles ut
@@ -1703,9 +1685,7 @@ LEFT JOIN bonus_db.users_target_rank u
     ON non9.jmoa_code = u.jmoa_code
 ),
 
-
 -- ランクアップ、初回購入情報
--- non9にタイトルを追加(全購入者情報)をjoin
 rank_up_add_non9_addTitle AS (
     SELECT
         non9.introducer_title_name as title_name,
@@ -1724,10 +1704,13 @@ rank_up_add_non9_addTitle AS (
                 TRUNCATE(COALESCE(rank_up.custom_bv, 0) * 0.10, 2)
         END AS bonus_amount
     FROM rank_up_list AS rank_up
-    LEFT JOIN user_in_purchasers_list_non9_addTitle AS non9
+    LEFT JOIN user_introducer_non9_addTitle AS non9
       ON rank_up.jwoa_code = non9.jmoa_code
     where rank_up.custom_bv > 0
 ),
+
+
+
 
 
 
@@ -1747,9 +1730,10 @@ chain_find AS (
     FROM user_in_purchasers_list u
     LEFT JOIN bonus_db.users_target_rank up
       ON up.jmoa_code = u.introducer_code
-    LEFT JOIN sum_purchasers_list p
+    LEFT JOIN bonus_db.purchase_info_list p
       ON p.jwoa_code = up.jmoa_code
-
+     AND p.year  = 2025
+     AND p.month = 12
 
     UNION ALL
 
@@ -1767,8 +1751,10 @@ chain_find AS (
     FROM chain_find c
     JOIN bonus_db.users_target_rank up
       ON up.jmoa_code = c.next_code
-    LEFT JOIN sum_purchasers_list p
+    LEFT JOIN bonus_db.purchase_info_list p
       ON p.jwoa_code = up.jmoa_code
+     AND p.year  = %s
+     AND p.month = %s
     WHERE c.next_code IS NOT NULL
       AND c.found = 0
       AND c.lvl < 100
@@ -1784,7 +1770,7 @@ first_found AS (
 ),
 
 -- 一般会員以外 & 前月再購入
-user_in_purchasers_list_non9_2 AS (
+user_introducer_non9_2 AS (
 SELECT
     c.evaluated_code AS introducer_code,
     u.new_rank           AS introducer_rank,
@@ -1798,14 +1784,16 @@ JOIN first_found f
  AND f.hit_lvl   = c.lvl
 JOIN bonus_db.users_target_rank u
   ON u.jmoa_code = c.evaluated_code
-JOIN sum_purchasers_list p
+JOIN bonus_db.purchase_info_list p
   ON p.jwoa_code = c.evaluated_code
+ AND p.year  = %s
+ AND p.month = %s
 WHERE c.found = 1
 ORDER BY c.jmoa_code
 ),
 
 -- non9_2にタイトルを追加
-user_in_purchasers_list_non9_2_addTitle AS (
+user_introducer_non9_2_addTitle AS (
 SELECT
     non9.introducer_code,
     non9.introducer_rank,
@@ -1815,7 +1803,7 @@ SELECT
     non9.lvl,
     tm.title_id as introducer_title_id,
     tm.title_name as introducer_title_name
-FROM user_in_purchasers_list_non9_2 AS non9
+FROM user_introducer_non9_2 AS non9
 LEFT JOIN bonus_db.users_target_rank ui
     ON non9.introducer_code = ui.jmoa_code
 LEFT JOIN bonus_db.user_titles ut
@@ -1845,7 +1833,7 @@ repurchase_add_non9_2_addTitle AS (
                 TRUNCATE(COALESCE(repurchase.custom_bv, 0) * 0.10, 2)
         END AS bonus_amount
     FROM repurchase_list AS repurchase
-    LEFT JOIN user_in_purchasers_list_non9_2_addTitle AS non9
+    LEFT JOIN user_introducer_non9_2_addTitle AS non9
       ON repurchase.jwoa_code = non9.jmoa_code
     where repurchase.custom_bv > 0
 ),
@@ -1854,29 +1842,20 @@ pay_drive_list AS (
 select * from rank_up_add_non9_addTitle
 union all
 select * from repurchase_add_non9_2_addTitle
-),
-
-pay_drive_list_group_by as (
-select title_name, introducer_code, jwoa_code, jwoa_name, sum(custom_bv) as sum_bv,
- sum(bonus_amount) as sum_bonus_amount
-from pay_drive_list
-group by title_name, introducer_code, jwoa_code, jwoa_name
-order by introducer_code, jwoa_code
 )
 
-select * from pay_drive_list_group_by
+select * from pay_drive_list order by introducer_code, jwoa_code
         """
 
-        params = [
-            start_dt, end_dt, start_dt, end_dt, be_start_dt, be_end_dt, be_end_dt
-        ]
+
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, params)
+            cursor.execute(sql, [start_dt, end_dt, start_dt, end_dt, rank_dt, prev_year, prev_month, prev_year, prev_month])
             logger.info(f"Executed SQL: {cursor._executed}")
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
 
+        # テンプレに渡す
         ctx["rows"] = rows
         return ctx
 
