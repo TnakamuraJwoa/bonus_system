@@ -144,6 +144,23 @@ class DriveBonusView(generic.ListView):
         sql = """
 WITH RECURSIVE
 
+-- ユーザーランクにアクティブ情報を追加
+users_target_rank_add_activeUser as (
+SELECT
+    a.*,
+    CASE
+        WHEN b.jwoa_code IS NOT NULL THEN 1
+        ELSE 0
+    END AS is_active
+FROM bonus_db.users_target_rank AS a
+LEFT JOIN (
+    SELECT DISTINCT jwoa_code
+    FROM bonus_db.active_users
+    where year = %s AND month = %s
+) AS b
+ON a.jmoa_code = b.jwoa_code
+),
+
 repurchase_list AS (  -- 再購入リスト
     SELECT
         order_code,
@@ -248,11 +265,11 @@ chain AS (
         up.introducer_code AS current_code,
         c.lvl + 1          AS lvl
     FROM chain AS c
-    JOIN bonus_db.users_target_rank AS up
+    JOIN users_target_rank_add_activeUser AS up
       ON up.jmoa_code = c.current_code
     WHERE
         c.current_code IS NOT NULL
-        AND up.new_rank = 9
+        AND (up.is_active OR up.new_rank = 9)
         AND c.lvl < 100
 ),
 
@@ -341,12 +358,12 @@ chain_find AS (
         u.introducer_code AS evaluated_code,
         1                 AS lvl,
         CASE
-            WHEN up.new_rank <> 9 AND IFNULL(p.bv, 0) >= 50 THEN 1
+            WHEN up.is_active OR (up.new_rank <> 9 AND IFNULL(p.bv, 0) >= 50) THEN 1
             ELSE 0
         END AS found,
         up.introducer_code AS next_code
     FROM user_in_purchasers_list u
-    LEFT JOIN bonus_db.users_target_rank up
+    LEFT JOIN users_target_rank_add_activeUser up
       ON up.jmoa_code = u.introducer_code
     LEFT JOIN sum_purchasers_list p
       ON p.jwoa_code = up.jmoa_code
@@ -361,12 +378,12 @@ chain_find AS (
         c.next_code       AS evaluated_code,
         c.lvl + 1         AS lvl,
         CASE
-            WHEN up.new_rank <> 9 AND IFNULL(p.bv, 0) >= 50 THEN 1
+            WHEN up.is_active OR (up.new_rank <> 9 AND IFNULL(p.bv, 0) >= 50) THEN 1
             ELSE 0
         END AS found,
         up.introducer_code AS next_code
     FROM chain_find c
-    JOIN bonus_db.users_target_rank up
+    JOIN users_target_rank_add_activeUser up
       ON up.jmoa_code = c.next_code
     LEFT JOIN sum_purchasers_list p
       ON p.jwoa_code = up.jmoa_code
@@ -469,7 +486,7 @@ select * from pay_drive_list_group_by where jwoa_code is not null
         """
 
         params = [
-            start_dt, end_dt, start_dt, end_dt, be_start_dt, be_end_dt, be_end_dt
+            prev_year, prev_month, start_dt, end_dt, start_dt, end_dt, be_start_dt, be_end_dt, be_end_dt
         ]
 
         with connections["rds"].cursor() as cursor:
@@ -757,7 +774,7 @@ SELECT
     month
 FROM bonus_db.purchase_info_list
 {where_sql}
-ORDER BY bv DESC, jwoa_code ASC
+ORDER BY bonus_payment_date DESC
 LIMIT %s OFFSET %s
 """
         params.extend([limit, offset])
@@ -2347,82 +2364,65 @@ WHERE name = 'set_title'
 
 class RepurchaseExportView(RepurchaseListView):
 
-    def get(self, request, *args, **kwargs):
+    def get(self, request):
+        view = RepurchaseListView()
+
         selected_month = (request.GET.get("prev_month") or "").strip()
         q_code = (request.GET.get("q_code") or "").strip()
         q_name = (request.GET.get("q_name") or "").strip()
         q_order_code = (request.GET.get("q_order_code") or "").strip()
         q_order_type = (request.GET.get("q_order_type") or "").strip()
+        q_bonus_date_from = (request.GET.get("q_bonus_date_from") or "").strip()
+        q_bonus_date_to = (request.GET.get("q_bonus_date_to") or "").strip()
 
-        year = None
-        month = None
+        year, month = None, None
         if selected_month:
             try:
                 year, month = map(int, selected_month.split("-"))
-            except ValueError:
-                year = None
-                month = None
+            except:
+                pass
 
-        # 総件数取得
-        total_count = self._count_rows(
+        # 🔥 ここがポイント（limitなし）
+        rows = view._fetch_rows(
             year=year,
             month=month,
             q_code=q_code,
             q_name=q_name,
             q_order_code=q_order_code,
             q_order_type=q_order_type,
+            q_bonus_date_from=q_bonus_date_from,
+            q_bonus_date_to=q_bonus_date_to,
+            limit=1000000,   # or LIMIT外す専用関数でもOK
+            offset=0
         )
 
-        # 全件取得（ここが重要）
-        rows = self._fetch_rows(
-            year=year,
-            month=month,
-            q_code=q_code,
-            q_name=q_name,
-            q_order_code=q_order_code,
-            q_order_type=q_order_type,
-            limit=total_count if total_count > 0 else 1,
-            offset=0,
-        )
-
-        wb = Workbook()
+        # Excel出力処理（例）
+        wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = "購入情報"
 
-        # ヘッダー（ここから開始）
-        headers = [
-            "注文番号", "注文区分", "会員番号", "会員名",
-            "total_bv", "bv", "BV反映日時", "注文日時",
-            "ボーナス支払日", "作成日時"
-        ]
-        ws.append(headers)
+        ws.append([
+            "注文番号","注文区分","会員番号","会員名",
+            "total_bv","bv","BV反映日時","注文日時","ボーナス支払日","作成日時"
+        ])
 
-        order_type_map = {
-            101: "再購入品",
-            102: "初回購入品",
-            103: "ランクアップ購入品",
-            105: "特別対応購入品",
-        }
-
-        # データ
         for r in rows:
             ws.append([
-                r.get("order_code"),
-                order_type_map.get(r.get("order_type"), r.get("order_type")),
-                r.get("jwoa_code"),
-                r.get("send_bv_name"),
-                r.get("total_bv"),
-                r.get("bv"),
-                r.get("deposit_at"),
-                r.get("order_at"),
-                r.get("bonus_payment_date"),
-                r.get("created_at"),
+                r["order_code"],
+                r["order_type"],
+                r["jwoa_code"],
+                r["send_bv_name"],
+                r["total_bv"],
+                r["bv"],
+                r["deposit_at"],
+                r["order_at"],
+                r["bonus_payment_date"],
+                r["created_at"],
             ])
 
         response = HttpResponse(
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
-        response["Content-Disposition"] = 'attachment; filename="repurchase.xlsx"'
+        response['Content-Disposition'] = 'attachment; filename=repurchase.xlsx'
 
         wb.save(response)
         return response
@@ -2472,67 +2472,93 @@ LIMIT 2000
         order_code = (request.POST.get("order_code") or "").strip()
         bonus_payment_date = (request.POST.get("bonus_payment_date") or "").strip()
 
-        # 検索条件を保持して戻す用
         q_order_code = (request.POST.get("q_order_code") or "").strip()
-        redirect_url = "connect:bonus_payment_date"
+        redirect_path = f"/bonus_payment_date/?q_order_code={q_order_code}"
 
         if action == "create":
             if not order_code:
                 messages.error(request, "注文番号を入力してください。")
-                return redirect(redirect_url)
+                return redirect("connect:bonus_payment_date")
 
-            sql = """
-INSERT INTO bonus_db.bonus_payment_date (
-    order_code,
-    bonus_payment_date
-) VALUES (%s, %s)
-"""
+            insert_sql = """
+            INSERT INTO bonus_db.bonus_payment_date (
+                order_code,
+                bonus_payment_date
+            ) VALUES (%s, %s)
+            """
+
+            update_sql = """
+            UPDATE bonus_db.purchase_info_list
+            SET
+                bonus_payment_date = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE order_code = %s
+            """
+
             try:
-                with connections["rds"].cursor() as cursor:
-                    cursor.execute(sql, [order_code, bonus_payment_date or None])
+                with transaction.atomic(using="rds"):
+                    with connections["rds"].cursor() as cursor:
+                        cursor.execute(insert_sql, [order_code, bonus_payment_date or None])
+                        cursor.execute(update_sql, [bonus_payment_date or None, order_code])
+
                 messages.success(request, "登録しました。")
             except Exception as e:
                 messages.error(request, f"登録に失敗しました: {e}")
-            return redirect(f"/bonus_payment_date/?q_order_code={q_order_code}")
+
+            return redirect(redirect_path)
 
         elif action == "update":
             if not order_code:
                 messages.error(request, "注文番号が不正です。")
-                return redirect(f"/bonus_payment_date/?q_order_code={q_order_code}")
+                return redirect(redirect_path)
 
-            sql = """
-UPDATE bonus_db.bonus_payment_date
-SET bonus_payment_date = %s
-WHERE order_code = %s
-"""
+            sql1 = """
+            UPDATE bonus_db.bonus_payment_date
+            SET bonus_payment_date = %s
+            WHERE order_code = %s
+            """
+
+            sql2 = """
+            UPDATE bonus_db.purchase_info_list
+            SET
+                bonus_payment_date = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE order_code = %s
+            """
+
             try:
-                with connections["rds"].cursor() as cursor:
-                    cursor.execute(sql, [bonus_payment_date or None, order_code])
+                with transaction.atomic(using="rds"):
+                    with connections["rds"].cursor() as cursor:
+                        cursor.execute(sql1, [bonus_payment_date or None, order_code])
+                        cursor.execute(sql2, [bonus_payment_date or None, order_code])
+
                 messages.success(request, "更新しました。")
             except Exception as e:
                 messages.error(request, f"更新に失敗しました: {e}")
-            return redirect(f"/bonus_payment_date/?q_order_code={q_order_code}")
+
+            return redirect(redirect_path)
 
         elif action == "delete":
             if not order_code:
                 messages.error(request, "注文番号が不正です。")
-                return redirect(f"/bonus_payment_date/?q_order_code={q_order_code}")
+                return redirect(redirect_path)
 
             sql = """
-DELETE FROM bonus_db.bonus_payment_date
-WHERE order_code = %s
-"""
+            DELETE FROM bonus_db.bonus_payment_date
+            WHERE order_code = %s
+            """
+
             try:
                 with connections["rds"].cursor() as cursor:
                     cursor.execute(sql, [order_code])
                 messages.success(request, "削除しました。")
             except Exception as e:
                 messages.error(request, f"削除に失敗しました: {e}")
-            return redirect(f"/bonus_payment_date/?q_order_code={q_order_code}")
+
+            return redirect(redirect_path)
 
         messages.error(request, "不正な操作です。")
-        return redirect(f"/bonus_payment_date/?q_order_code={q_order_code}")
-
+        return redirect(redirect_path)
 
 class ActiveUsersView(generic.TemplateView):
     template_name = "active_users.html"
