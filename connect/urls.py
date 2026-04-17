@@ -21,6 +21,6 @@ urlpatterns = [
     path('add_favorite_to_db/', views.AddFavoriteToDBView.as_view(), name="add_favorite_to_db"),
     path('user_target_rank/', views.UserTargetRankView.as_view(), name = "user_target_rank"),
     path('title_registration/', views.TitleRegistrationView.as_view(), name = "title_registration"),
-    path("bonus_payment_date/", views.BonusPaymentDateView.as_view(), name="bonus_payment_date")
-
+    path("bonus_payment_date/", views.BonusPaymentDateView.as_view(), name="bonus_payment_date"),
+    path("active_users/", views.ActiveUsersView.as_view(), name="active_users")
 ]

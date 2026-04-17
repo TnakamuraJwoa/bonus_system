@@ -2532,3 +2532,210 @@ WHERE order_code = %s
 
         messages.error(request, "不正な操作です。")
         return redirect(f"/bonus_payment_date/?q_order_code={q_order_code}")
+
+
+class ActiveUsersView(generic.TemplateView):
+    template_name = "active_users.html"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        q_jwoa_code = self.request.GET.get("q_jwoa_code", "").strip()
+        q_year = self.request.GET.get("q_year", "").strip()
+        q_month = self.request.GET.get("q_month", "").strip()
+
+        ctx["q_jwoa_code"] = q_jwoa_code
+        ctx["q_year"] = q_year
+        ctx["q_month"] = q_month
+        ctx["rows"] = []
+
+        where_clauses = []
+        params = []
+
+        if q_jwoa_code:
+            where_clauses.append("a.jwoa_code LIKE %s")
+            params.append(f"%{q_jwoa_code}%")
+
+        if q_year:
+            where_clauses.append("a.year = %s")
+            params.append(q_year)
+
+        if q_month:
+            where_clauses.append("a.month = %s")
+            params.append(q_month)
+
+        where_sql = ""
+        if where_clauses:
+            where_sql = "WHERE " + " AND ".join(where_clauses)
+
+        sql = f"""
+            SELECT
+                a.id,
+                a.jwoa_code,
+                a.year,
+                a.month,
+                a.created_at,
+                u.send_bv_name
+            FROM active_users a
+            LEFT JOIN users u
+                ON a.jwoa_code = u.jmoa_code
+            {where_sql}
+            ORDER BY a.jwoa_code, a.year DESC, a.month DESC
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            columns = [col[0] for col in cursor.description]
+            ctx["rows"] = [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+        return ctx
+
+    def post(self, request, *args, **kwargs):
+        action = request.POST.get("action")
+        q_jwoa_code = request.POST.get("q_jwoa_code", "").strip()
+        q_year = request.POST.get("q_year", "").strip()
+        q_month = request.POST.get("q_month", "").strip()
+
+        if action == "create":
+            return self._create(request, q_jwoa_code, q_year, q_month)
+        elif action == "update":
+            return self._update(request, q_jwoa_code, q_year, q_month)
+        elif action == "delete":
+            return self._delete(request, q_jwoa_code, q_year, q_month)
+
+        messages.error(request, "不正な操作です。")
+        return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+
+    def _create(self, request, q_jwoa_code, q_year, q_month):
+        jwoa_code = request.POST.get("jwoa_code", "").strip()
+        year = request.POST.get("year", "").strip()
+        month = request.POST.get("month", "").strip()
+
+        error_message = self._validate_input(jwoa_code, year, month)
+        if error_message:
+            messages.error(request, error_message)
+            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+
+        sql = """
+            INSERT INTO active_users (
+                jwoa_code,
+                year,
+                month,
+                created_at
+            ) VALUES (
+                %s,
+                %s,
+                %s,
+                NOW()
+            )
+        """
+
+        try:
+            with connections["rds"].cursor() as cursor:
+                cursor.execute(sql, [jwoa_code, int(year), int(month)])
+            messages.success(request, "登録しました。")
+        except IntegrityError:
+            messages.error(request, "登録に失敗しました。会員コードが存在しないか、整合性エラーです。")
+        except Exception as e:
+            messages.error(request, f"登録中にエラーが発生しました: {e}")
+
+        return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+
+    def _update(self, request, q_jwoa_code, q_year, q_month):
+        row_id = request.POST.get("id", "").strip()
+        jwoa_code = request.POST.get("jwoa_code", "").strip()
+        year = request.POST.get("year", "").strip()
+        month = request.POST.get("month", "").strip()
+
+        if not row_id:
+            messages.error(request, "更新対象IDがありません。")
+            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+
+        error_message = self._validate_input(jwoa_code, year, month)
+        if error_message:
+            messages.error(request, error_message)
+            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+
+        sql = """
+            UPDATE active_users
+            SET
+                jwoa_code = %s,
+                year = %s,
+                month = %s
+            WHERE id = %s
+        """
+
+        try:
+            with connections["rds"].cursor() as cursor:
+                cursor.execute(sql, [jwoa_code, int(year), int(month), int(row_id)])
+            messages.success(request, "更新しました。")
+        except IntegrityError:
+            messages.error(request, "更新に失敗しました。会員コードが存在しないか、整合性エラーです。")
+        except Exception as e:
+            messages.error(request, f"更新中にエラーが発生しました: {e}")
+
+        return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+
+    def _delete(self, request, q_jwoa_code, q_year, q_month):
+        row_id = request.POST.get("id", "").strip()
+
+        if not row_id:
+            messages.error(request, "削除対象IDがありません。")
+            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+
+        sql = """
+            DELETE FROM active_users
+            WHERE id = %s
+        """
+
+        try:
+            with connections["rds"].cursor() as cursor:
+                cursor.execute(sql, [int(row_id)])
+            messages.success(request, "削除しました。")
+        except Exception as e:
+            messages.error(request, f"削除中にエラーが発生しました: {e}")
+
+        return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+
+    def _validate_input(self, jwoa_code, year, month):
+        if not jwoa_code:
+            return "会員コードを入力してください。"
+
+        if not year:
+            return "年を入力してください。"
+
+        if not month:
+            return "月を入力してください。"
+
+        try:
+            year_int = int(year)
+        except ValueError:
+            return "年は数値で入力してください。"
+
+        try:
+            month_int = int(month)
+        except ValueError:
+            return "月は数値で入力してください。"
+
+        if year_int < 1900 or year_int > 2100:
+            return "年は 1900〜2100 の範囲で入力してください。"
+
+        if month_int < 1 or month_int > 12:
+            return "月は 1〜12 の範囲で入力してください。"
+
+        return None
+
+    def _get_redirect_url(self, q_jwoa_code, q_year, q_month):
+        base_url = "/active_users/"
+        query_params = []
+
+        if q_jwoa_code:
+            query_params.append(f"q_jwoa_code={q_jwoa_code}")
+        if q_year:
+            query_params.append(f"q_year={q_year}")
+        if q_month:
+            query_params.append(f"q_month={q_month}")
+
+        if query_params:
+            return base_url + "?" + "&".join(query_params)
+        return base_url

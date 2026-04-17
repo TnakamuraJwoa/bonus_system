@@ -59,11 +59,26 @@
             font-weight: 600;
             color: #111827;
             letter-spacing: 0.2px;
+            white-space: nowrap;
         }
 
-        .date-input-inline {
-            width: 170px;
-            min-width: 170px;
+        .name-text {
+            white-space: nowrap;
+        }
+
+        .year-input-inline {
+            width: 100px;
+            min-width: 100px;
+        }
+
+        .month-input-inline {
+            width: 80px;
+            min-width: 80px;
+        }
+
+        .code-input-inline {
+            width: 180px;
+            min-width: 180px;
         }
 
         .inline-update-form {
@@ -75,6 +90,12 @@
         }
 
         .action-cell {
+            white-space: nowrap;
+        }
+
+        .created-at {
+            color: #4b5563;
+            font-size: 0.95rem;
             white-space: nowrap;
         }
 
@@ -150,16 +171,20 @@
             background: #fafafa;
         }
 
-        .created-at {
-            color: #4b5563;
-            font-size: 0.95rem;
-            white-space: nowrap;
-        }
-
         @media (max-width: 767.98px) {
-            .date-input-inline {
-                width: 140px;
-                min-width: 140px;
+            .code-input-inline {
+                width: 150px;
+                min-width: 150px;
+            }
+
+            .year-input-inline {
+                width: 90px;
+                min-width: 90px;
+            }
+
+            .month-input-inline {
+                width: 70px;
+                min-width: 70px;
             }
 
             .inline-update-form {
@@ -177,31 +202,61 @@
             {% endif %}
         </div>
 
-        {% include "com/_sidebar.html" with active_menu="bonus_payment_date" %}
+        {% include "com/_sidebar.html" with active_menu="active_users" %}
 
         <main class="col-12 col-md-9 col-lg-10">
             <div class="custom-card bg-white p-3 p-md-4 mb-3">
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                    <h5 class="page-title">【設定 - 注文別ボーナス支払日】</h5>
+                    <h5 class="page-title">【設定 - アクティブ会員管理】</h5>
                     <span class="summary-badge">登録データ管理</span>
                 </div>
+
                 <div class="row g-3">
                     <div class="col-12 col-xl-5">
                         <div class="search-box">
                             <div class="section-title mb-3">検索</div>
 
                             <form method="get">
-                                <label class="sub-label">注文番号</label>
-                                <div class="d-flex flex-wrap gap-2">
-                                    <input
-                                        type="text"
-                                        name="q_order_code"
-                                        class="form-control"
-                                        value="{{ q_order_code|default:'' }}"
-                                        placeholder="例: MF05621663365"
-                                    >
-                                    <button type="submit" class="btn btn-soft-primary">検索</button>
-                                    <a href="{% url 'connect:bonus_payment_date' %}" class="btn btn-outline-secondary">リセット</a>
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-12">
+                                        <label class="sub-label">会員コード</label>
+                                        <input
+                                            type="text"
+                                            name="q_jwoa_code"
+                                            class="form-control"
+                                            value="{{ q_jwoa_code|default:'' }}"
+                                            placeholder="例: JP04167973"
+                                        >
+                                    </div>
+
+                                    <div class="col-6">
+                                        <label class="sub-label">年</label>
+                                        <input
+                                            type="number"
+                                            name="q_year"
+                                            class="form-control"
+                                            value="{{ q_year|default:'' }}"
+                                            placeholder="例: 2026"
+                                        >
+                                    </div>
+
+                                    <div class="col-6">
+                                        <label class="sub-label">月</label>
+                                        <input
+                                            type="number"
+                                            name="q_month"
+                                            class="form-control"
+                                            value="{{ q_month|default:'' }}"
+                                            placeholder="1〜12"
+                                            min="1"
+                                            max="12"
+                                        >
+                                    </div>
+
+                                    <div class="col-12 d-flex flex-wrap gap-2">
+                                        <button type="submit" class="btn btn-soft-primary">検索</button>
+                                        <a href="{% url 'connect:active_users' %}" class="btn btn-outline-secondary">リセット</a>
+                                    </div>
                                 </div>
                             </form>
                         </div>
@@ -214,27 +269,45 @@
                             <form method="post">
                                 {% csrf_token %}
                                 <input type="hidden" name="action" value="create">
-                                <input type="hidden" name="q_order_code" value="{{ q_order_code|default:'' }}">
+                                <input type="hidden" name="q_jwoa_code" value="{{ q_jwoa_code|default:'' }}">
+                                <input type="hidden" name="q_year" value="{{ q_year|default:'' }}">
+                                <input type="hidden" name="q_month" value="{{ q_month|default:'' }}">
 
                                 <div class="row g-2 align-items-end">
-                                    <div class="col-12 col-md-6">
-                                        <label class="sub-label">注文番号</label>
+                                    <div class="col-12 col-md-5">
+                                        <label class="sub-label">会員コード</label>
                                         <input
                                             type="text"
-                                            name="order_code"
+                                            name="jwoa_code"
                                             class="form-control"
-                                            placeholder="例: MF05621663365"
+                                            placeholder="例: JP04167973"
                                             required
                                         >
                                     </div>
 
-                                    <div class="col-12 col-md-4">
-                                        <label class="sub-label">ボーナス支払日</label>
+                                    <div class="col-6 col-md-3">
+                                        <label class="sub-label">年</label>
                                         <input
-                                            type="text"
-                                            name="bonus_payment_date"
-                                            placeholder="例: 2025-12-01"
+                                            type="number"
+                                            name="year"
                                             class="form-control"
+                                            placeholder="例: 2026"
+                                            min="1900"
+                                            max="2100"
+                                            required
+                                        >
+                                    </div>
+
+                                    <div class="col-6 col-md-2">
+                                        <label class="sub-label">月</label>
+                                        <input
+                                            type="number"
+                                            name="month"
+                                            class="form-control"
+                                            placeholder="1〜12"
+                                            min="1"
+                                            max="12"
+                                            required
                                         >
                                     </div>
 
@@ -260,46 +333,76 @@
                             <table class="table align-middle mb-0">
                                 <thead>
                                     <tr>
-                                        <th style="width: 20%;">注文番号</th>
-                                        <th style="width: 32%;">ボーナス支払日</th>
-                                        <th style="width: 24%;">作成日時</th>
-                                        <th style="width: 20%;">操作</th>
+                                        <th style="width: 10%;">会員コード</th>
+                                        <th style="width: 15%;">会員名</th>
+                                        <th style="width: 15%;">作成日時</th>
+                                        <th style="width: 10%;">表示用年月</th>
+                                        <th style="width: 35%;">更新</th>
+                                        <th style="width: 10%;">操作</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {% for r in rows %}
                                         <tr>
                                             <td>
-                                                <span class="code-text">{{ r.order_code }}</span>
+                                                <span class="code-text">{{ r.jwoa_code }}</span>
                                             </td>
 
                                             <td>
-                                                <form method="post" class="inline-update-form">
-                                                    {% csrf_token %}
-                                                    <input type="hidden" name="action" value="update">
-                                                    <input type="hidden" name="order_code" value="{{ r.order_code }}">
-                                                    <input type="hidden" name="q_order_code" value="{{ q_order_code|default:'' }}">
-
-                                                    <input
-                                                        type="date"
-                                                        name="bonus_payment_date"
-                                                        class="form-control form-control-sm date-input-inline"
-                                                        value="{% if r.bonus_payment_date %}{{ r.bonus_payment_date|date:'Y-m-d' }}{% endif %}"
-                                                    >
-                                                    <button type="submit" class="btn btn-sm btn-soft-warning">更新</button>
-                                                </form>
+                                                <span class="name-text">{{ r.send_bv_name|default:"" }}</span>
                                             </td>
 
                                             <td class="created-at">
                                                 {{ r.created_at }}
                                             </td>
 
+                                            <td>
+                                                {{ r.year }}/{{ r.month }}
+                                            </td>
+
+                                            <td>
+                                                <form method="post" class="inline-update-form">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="action" value="update">
+                                                    <input type="hidden" name="id" value="{{ r.id }}">
+                                                    <input type="hidden" name="q_jwoa_code" value="{{ q_jwoa_code|default:'' }}">
+                                                    <input type="hidden" name="q_year" value="{{ q_year|default:'' }}">
+                                                    <input type="hidden" name="q_month" value="{{ q_month|default:'' }}">
+
+                                                    <input
+                                                        type="text"
+                                                        name="jwoa_code"
+                                                        class="form-control form-control-sm code-input-inline"
+                                                        value="{{ r.jwoa_code }}"
+                                                        required
+                                                    >
+
+                                                    <span>年</span>
+
+                                                    <input
+                                                        type="number"
+                                                        name="month"
+                                                        class="form-control form-control-sm month-input-inline"
+                                                        value="{{ r.month }}"
+                                                        min="1"
+                                                        max="12"
+                                                        required
+                                                    >
+
+                                                    <span>月</span>
+
+                                                    <button type="submit" class="btn btn-sm btn-soft-warning">更新</button>
+                                                </form>
+                                            </td>
+
                                             <td class="action-cell">
                                                 <form method="post" class="mb-0" onsubmit="return confirm('削除しますか？');">
                                                     {% csrf_token %}
                                                     <input type="hidden" name="action" value="delete">
-                                                    <input type="hidden" name="order_code" value="{{ r.order_code }}">
-                                                    <input type="hidden" name="q_order_code" value="{{ q_order_code|default:'' }}">
+                                                    <input type="hidden" name="id" value="{{ r.id }}">
+                                                    <input type="hidden" name="q_jwoa_code" value="{{ q_jwoa_code|default:'' }}">
+                                                    <input type="hidden" name="q_year" value="{{ q_year|default:'' }}">
+                                                    <input type="hidden" name="q_month" value="{{ q_month|default:'' }}">
                                                     <button type="submit" class="btn btn-sm btn-soft-danger">削除</button>
                                                 </form>
                                             </td>

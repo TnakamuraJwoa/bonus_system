@@ -17,6 +17,9 @@
         <a class="list-group-item list-group-item-action {% if active_menu == 'title_list' %}active{% endif %}"
            href="{% url 'connect:title_list' %}">タイトル表</a>
 
+        <a class="list-group-item list-group-item-action {% if active_menu == 'active_users' %}active{% endif %}"
+           href="{% url 'connect:active_users' %}">アクティブ会員</a>
+
         <a class="list-group-item list-group-item-action {% if active_menu == 'title_registration' %}active{% endif %}"
            href="{% url 'connect:title_registration' %}">タイトルユーザー登録</a>
 
