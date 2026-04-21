@@ -151,7 +151,9 @@ SELECT
     CASE
         WHEN b.jwoa_code IS NOT NULL THEN 1
         ELSE 0
-    END AS is_active
+    END AS is_active,
+    IFNULL(ut.title_id, 0) as title_id,
+    tm.title_name
 FROM bonus_db.users_target_rank AS a
 LEFT JOIN (
     SELECT DISTINCT jwoa_code
@@ -159,9 +161,14 @@ LEFT JOIN (
     where year = %s AND month = %s
 ) AS b
 ON a.jmoa_code = b.jwoa_code
+LEFT JOIN bonus_db.user_titles as ut
+ON a.jmoa_code = ut.jmoa_code
+LEFT JOIN bonus_db.title_master as tm
+ON ut.title_id = tm.title_id
 ),
 
-repurchase_list AS (  -- 再購入リスト
+-- 再購入リスト
+repurchase_list AS (
     SELECT
         order_code,
         jwoa_code,
@@ -204,16 +211,14 @@ purchasers_list AS (
 -- group_by(購入者リスト)
 -- 前月の購入情報
 sum_purchasers_list AS (
-    SELECT
-        a.jwoa_code,
-        SUM(a.bv) AS bv
-    FROM (
-        SELECT jwoa_code, bv
-        FROM bonus_db.purchase_info_list
-        WHERE bonus_payment_date >=  %s
-        AND bonus_payment_date <  %s
-    ) AS a
-    GROUP BY a.jwoa_code
+SELECT
+    p.jwoa_code,
+    SUM(IFNULL(p.bv, 0)) AS bv
+FROM bonus_db.purchase_info_list p
+WHERE p.bonus_payment_date >= %s
+  AND p.bonus_payment_date <  %s
+GROUP BY p.jwoa_code
+HAVING SUM(IFNULL(p.bv, 0)) >= 50
 ),
 
 
@@ -322,33 +327,91 @@ LEFT JOIN bonus_db.users_target_rank u
 ),
 
 
--- ランクアップ、初回購入情報
--- non9にタイトルを追加(全購入者情報)をjoin
-rank_up_add_non9_addTitle AS (
+rank_chain_find AS (
+    -- 1段目：購入者の直紹介者を評価
     SELECT
-        non9.introducer_title_name as title_name,
-        non9.introducer_code,
-        non9.jmoa_code as jwoa_code,
-        non9.send_bv_name as jwoa_name,
-        rank_up.custom_bv,
+        up.title_name,
+        up.title_id,
+        u.introducer_code AS introducer_code,
+        r.jwoa_code,
+        u.send_bv_name AS jwoa_name,
+        r.custom_bv,
+        1 AS lvl,
         CASE
-            WHEN non9.introducer_title_id >= 4
-                THEN TRUNCATE(COALESCE(rank_up.custom_bv, 0) * 0.20, 2)
+            WHEN up.is_active = 1 OR up.new_rank <> 9 THEN 1
+            ELSE 0
+        END AS found,
+        up.introducer_code AS next_code
+    FROM rank_up_list r
+    JOIN users_target_rank_add_activeUser u
+      ON u.jmoa_code = r.jwoa_code
+    LEFT JOIN users_target_rank_add_activeUser up
+      ON up.jmoa_code = u.introducer_code
 
-            WHEN non9.introducer_title_id = 3
-                THEN TRUNCATE(COALESCE(rank_up.custom_bv, 0) * 0.15, 2)
+    UNION ALL
 
-            ELSE
-                TRUNCATE(COALESCE(rank_up.custom_bv, 0) * 0.10, 2)
-        END AS bonus_amount
-    FROM rank_up_list AS rank_up
-    LEFT JOIN user_in_purchasers_list_non9_addTitle AS non9
-      ON rank_up.jwoa_code = non9.jmoa_code
-    where rank_up.custom_bv > 0
+    -- 2段目以降
+    SELECT
+        up.title_name,
+        up.title_id,
+        c.next_code AS introducer_code,
+        c.jwoa_code,
+        c.jwoa_name,
+        c.custom_bv,
+        c.lvl + 1 AS lvl,
+        CASE
+            WHEN up.is_active = 1 OR up.new_rank <> 9 THEN 1
+            ELSE 0
+        END AS found,
+        up.introducer_code AS next_code
+    FROM rank_chain_find  c
+    JOIN users_target_rank_add_activeUser up
+      ON up.jmoa_code = c.next_code
+    WHERE c.next_code IS NOT NULL
+      AND c.found = 0
+      AND c.lvl < 100
+),
+
+rank_first_found AS (
+    SELECT
+        jwoa_code,
+        MIN(lvl) AS hit_lvl
+    FROM rank_chain_find
+    WHERE found = 1
+    GROUP BY jwoa_code
 ),
 
 
+-- ランクアップ、初回購入情報
+-- non9にタイトルを追加(全購入者情報)をjoin
+rank_up_add_non9_addTitle AS (
+SELECT
+    c.title_name,
+    c.introducer_code,
+    c.jwoa_code,
+    c.jwoa_name,
+    c.custom_bv,
+    CASE
+        WHEN c.title_id >= 4
+            THEN TRUNCATE(COALESCE(c.custom_bv, 0) * 0.20, 2)
 
+        WHEN c.title_id = 3
+            THEN TRUNCATE(COALESCE(c.custom_bv, 0) * 0.15, 2)
+
+        ELSE
+            TRUNCATE(COALESCE(c.custom_bv, 0) * 0.10, 2)
+    END AS bonus_amount
+FROM rank_chain_find c
+JOIN rank_first_found f
+  ON f.jwoa_code = c.jwoa_code
+ AND f.hit_lvl = c.lvl
+LEFT JOIN users_target_rank_add_activeUser up
+  ON up.jmoa_code = c.introducer_code
+ORDER BY c.jwoa_code
+),
+
+
+-- 一般会員以外 & 前月再購入
 -- 条件を満たす紹介者（rank!=9 & bv>=50）が見つかるまで上へ辿る
 chain_find AS (
     -- 1段目：最初に評価する紹介者 = u.introducer_code
@@ -408,7 +471,6 @@ SELECT
     u.new_rank           AS introducer_rank,
     c.jmoa_code,
     c.jmoa_rank,
-    p.bv             AS introducer_bv, -- 使われてない
     c.lvl
 FROM chain_find c
 JOIN first_found f
@@ -416,8 +478,6 @@ JOIN first_found f
  AND f.hit_lvl   = c.lvl
 JOIN bonus_db.users_target_rank u
   ON u.jmoa_code = c.evaluated_code
-JOIN sum_purchasers_list p
-  ON p.jwoa_code = c.evaluated_code
 WHERE c.found = 1
 ORDER BY c.jmoa_code
 ),
