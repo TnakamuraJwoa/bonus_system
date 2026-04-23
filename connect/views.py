@@ -2825,3 +2825,219 @@ class ActiveUsersView(generic.TemplateView):
         if query_params:
             return base_url + "?" + "&".join(query_params)
         return base_url
+
+
+
+
+class PlacementTreeView(generic.TemplateView):
+    template_name = "placement_tree.html"
+
+    DEFAULT_PER_PAGE = 200
+    MAX_PER_PAGE = 500
+
+    def _build_where(self, q_jwoa_code: str, q_name: str, q_placement_code: str):
+        where = []
+        params = []
+
+        if q_jwoa_code:
+            where.append("c.jwoa_code LIKE %s")
+            params.append(f"%{q_jwoa_code}%")
+
+        if q_name:
+            where.append("c.send_bv_name LIKE %s")
+            params.append(f"%{q_name}%")
+
+        if q_placement_code:
+            where.append("c.placement_code LIKE %s")
+            params.append(f"%{q_placement_code}%")
+
+        where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+        return where_sql, params
+
+    def _fetch_total_count(self, q_jwoa_code: str, q_name: str, q_placement_code: str) -> int:
+        where_sql, params = self._build_where(q_jwoa_code, q_name, q_placement_code)
+
+        sql = f"""
+SELECT COUNT(*)
+FROM bonus_db.C_users_placement_tree_cache c
+{where_sql}
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            return int(cursor.fetchone()[0])
+
+    def _fetch_rows_keyset(
+        self,
+        q_jwoa_code: str,
+        q_name: str,
+        q_placement_code: str,
+        limit: int,
+        after_id: str = "",
+    ):
+        where_sql, params = self._build_where(q_jwoa_code, q_name, q_placement_code)
+
+        keyset_sql = ""
+        if after_id:
+            if where_sql:
+                keyset_sql = " AND c.id > %s"
+            else:
+                keyset_sql = "WHERE c.id > %s"
+            params.append(after_id)
+
+        sql = f"""
+SELECT
+    c.id,
+    c.placement_code,
+    c.placement_name,
+    c.placement_rank,
+    c.jwoa_code,
+    c.send_bv_name,
+    c.new_rank,
+    c.tree_level,
+    c.created_at
+FROM bonus_db.C_users_placement_tree_cache c
+{where_sql}
+{keyset_sql}
+ORDER BY c.id
+LIMIT %s
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params + [limit])
+            cols = [col[0] for col in cursor.description]
+            return [dict(zip(cols, row)) for row in cursor.fetchall()]
+
+    def _copy_from_view(self) -> int:
+        delete_sql = "DELETE FROM bonus_db.C_users_placement_tree_cache"
+
+        insert_sql = """
+INSERT INTO bonus_db.C_users_placement_tree_cache (
+    placement_code,
+    placement_name,
+    placement_rank,
+    jwoa_code,
+    send_bv_name,
+    new_rank,
+    tree_level
+)
+SELECT
+    placement_code,
+    placement_name,
+    placement_rank,
+    jmoa_code,
+    send_bv_name,
+    new_rank,
+    tree_level
+FROM bonus_db.v_user_placement_tree
+        """
+
+        with transaction.atomic(using="rds"):
+            with connections["rds"].cursor() as cursor:
+                cursor.execute(delete_sql)
+                cursor.execute(insert_sql)
+                inserted_count = cursor.rowcount
+
+        return inserted_count
+
+    def _delete_all_cache(self) -> int:
+        sql = "DELETE FROM bonus_db.C_users_placement_tree_cache"
+
+        with transaction.atomic(using="rds"):
+            with connections["rds"].cursor() as cursor:
+                cursor.execute(sql)
+                deleted_count = cursor.rowcount
+
+        return deleted_count
+
+    def post(self, request, *args, **kwargs):
+        action = (request.POST.get("action") or "").strip()
+
+        try:
+            if action == "copy":
+                inserted_count = self._copy_from_view()
+                messages.success(
+                    request,
+                    f"上位者ツリーテーブル へ {inserted_count} 件コピー登録しました。"
+                )
+            elif action == "delete":
+                deleted_count = self._delete_all_cache()
+                messages.success(
+                    request,
+                    f"上位者ツリーテーブルを全件削除しました。"
+                )
+            else:
+                messages.warning(request, "不正な操作です。")
+        except Exception as e:
+            messages.error(request, f"処理中にエラーが発生しました: {e}")
+
+        return redirect("connect:placement_tree")
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        q_jwoa_code = (self.request.GET.get("q_jwoa_code") or "").strip()
+        q_name = (self.request.GET.get("q_name") or "").strip()
+        q_placement_code = (self.request.GET.get("q_placement_code") or "").strip()
+
+        try:
+            per_page = int(self.request.GET.get("per_page") or str(self.DEFAULT_PER_PAGE))
+        except ValueError:
+            per_page = self.DEFAULT_PER_PAGE
+        per_page = max(1, min(per_page, self.MAX_PER_PAGE))
+
+        after_id = (self.request.GET.get("after_id") or "").strip()
+
+        total_count = self._fetch_total_count(q_jwoa_code, q_name, q_placement_code)
+        total_pages = max(1, math.ceil(total_count / per_page)) if total_count > 0 else 1
+
+        rows = self._fetch_rows_keyset(
+            q_jwoa_code=q_jwoa_code,
+            q_name=q_name,
+            q_placement_code=q_placement_code,
+            limit=per_page,
+            after_id=after_id,
+        )
+
+        next_after_id = ""
+        if rows:
+            next_after_id = str(rows[-1]["id"])
+
+        base_params = {}
+        if q_jwoa_code:
+            base_params["q_jwoa_code"] = q_jwoa_code
+        if q_name:
+            base_params["q_name"] = q_name
+        if q_placement_code:
+            base_params["q_placement_code"] = q_placement_code
+        if per_page != self.DEFAULT_PER_PAGE:
+            base_params["per_page"] = per_page
+
+        current_page = 1
+        if after_id:
+            req_page = self.request.GET.get("page")
+            try:
+                current_page = max(1, int(req_page)) if req_page else 2
+            except ValueError:
+                current_page = 2
+
+        ctx["rows"] = rows
+        ctx["total_count"] = total_count
+        ctx["per_page"] = per_page
+
+        ctx["q_jwoa_code"] = q_jwoa_code
+        ctx["q_name"] = q_name
+        ctx["q_placement_code"] = q_placement_code
+
+        ctx["page"] = current_page
+        ctx["total_pages"] = total_pages
+        ctx["base_qs"] = urlencode(base_params)
+
+        ctx["has_next"] = (
+            len(rows) == per_page
+            and bool(next_after_id)
+        )
+        ctx["next_after_id"] = next_after_id
+        ctx["has_prev_hint"] = bool(after_id)
+
+        return ctx
