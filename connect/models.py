@@ -139,6 +139,11 @@ class PeriodMaster(models.Model):
         blank=True
     )
 
+    payment_date = models.DateField(
+        null=True,
+        blank=True
+    )
+
     class Meta:
         managed = False                 # ← 既存RDSなので必須
         db_table = "period_master"      # ← 実テーブル名

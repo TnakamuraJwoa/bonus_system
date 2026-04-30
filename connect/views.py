@@ -1677,10 +1677,35 @@ class BasicBonusView(generic.ListView):
         sql = """
 WITH RECURSIVE
 
+-- 前週の期別
+prev_kibetu AS (
+    SELECT prev_kibetu
+    FROM (
+        SELECT
+            kibetu,
+            LAG(kibetu) OVER (ORDER BY st_date) AS prev_kibetu
+        FROM bonus_db.period_master
+    ) t
+    WHERE kibetu = %s
+),
+
+-- 前週のベーシック繰り越しBV
+prev_week_basic_carry_over_bv AS (
+    SELECT
+        placement_code,
+        jmoa_code AS jwoa_code,
+        carry_over_bv
+    FROM bonus_db.basic_bv_line
+    WHERE kibetu = (
+        SELECT prev_kibetu
+        FROM prev_kibetu
+    )
+),
+
 
 -- group_by(購入者リスト)
 -- 前月の購入情報
-sum_purchasers_list AS (
+sum_prev_purchasers_list AS (
 SELECT
     p.jwoa_code,
     SUM(IFNULL(p.bv, 0)) AS bv
@@ -1735,13 +1760,14 @@ purchase_list_union AS (
     WHERE custom_bv > 0
 ),
 
+
 -- 購入リストの合計
-purchase_sum_bv as (
-select
- jwoa_code,
- sum(custom_bv) as sum_bv
-from purchase_list_union
-group by jwoa_code
+purchase_sum_bv AS (
+    SELECT
+        jwoa_code,
+        SUM(custom_bv) AS sum_bv
+    FROM purchase_list_union
+    GROUP BY jwoa_code
 ),
 
 -- 購入者リスト
@@ -1808,7 +1834,7 @@ SELECT
     ur.new_rank as 上位者ランク,
     p_sum_bv.sum_bv
 FROM payer_list AS pl
-JOIN sum_purchasers_list AS spl
+JOIN sum_prev_purchasers_list AS spl
   ON spl.jwoa_code = pl.上位者コード
 left join bonus_db.users_target_rank as ur
  on pl.上位者コード = ur.jmoa_code
@@ -1820,27 +1846,37 @@ order by pl.上位者名, pl.ラインコード, 階層
 
 -- 収入ライン or 基本ラインの判定
 line_flg AS (
+SELECT
+    a.*,
+    IFNULL(b.carry_over_bv, 0) AS carry_over_bv,
+    a.line_bv + IFNULL(b.carry_over_bv, 0) AS plus_carry_bv,
+
+    ROW_NUMBER() OVER (
+        PARTITION BY a.上位者コード
+        ORDER BY a.line_bv + IFNULL(b.carry_over_bv, 0) DESC
+    ) AS rn
+
+FROM (
     SELECT
         上位者コード,
         上位者名,
         上位者ランク,
         ラインコード,
-        SUM(sum_bv) AS line_bv,
-
-        ROW_NUMBER() OVER (
-            PARTITION BY 上位者コード
-            ORDER BY SUM(sum_bv) DESC
-        ) AS rn
-
+        SUM(sum_bv) AS line_bv
     FROM payer_list_prevMonth_users
     GROUP BY
         上位者コード,
         上位者名,
         上位者ランク,
         ラインコード
-)
+) AS a
+LEFT JOIN prev_week_basic_carry_over_bv b
+  ON a.上位者コード = b.placement_code
+ AND a.ラインコード = b.jwoa_code
+),
 
-
+-- ans_basic_bonus
+ans_basic_bonus AS (
 SELECT
     a.上位者コード,
     a.上位者名,
@@ -1871,11 +1907,26 @@ FROM payer_list_prevMonth_users AS a
 JOIN line_flg AS b
   ON a.上位者コード = b.上位者コード
  AND a.ラインコード = b.ラインコード
-WHERE b.rn > 1;
+WHERE b.rn > 1
+)
+
+select
+ 上位者コード,
+ 上位者名,
+ ラインコード,
+ sum(sum_bv) as sum_bv,
+ sum(bonus_amount) as bonus_amount
+from ans_basic_bonus
+group by
+ 上位者コード,
+ 上位者名,
+ ラインコード,
+ sum_bv,
+ bonus_amount
         """
 
         params = [
-            be_start_dt, be_end_dt, start_dt, end_dt, start_dt, end_dt
+            selected_kibetu, be_start_dt, be_end_dt, start_dt, end_dt, start_dt, end_dt
         ]
 
         with connections["rds"].cursor() as cursor:

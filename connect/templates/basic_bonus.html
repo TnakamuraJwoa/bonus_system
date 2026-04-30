@@ -21,7 +21,7 @@
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <h5 class="mb-3">【【ボーナス一覧 - ベーシックボーナス】</h5>
+          <h5 class="mb-3">【ボーナス一覧 - ベーシックボーナス】</h5>
 
           <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
             <div>
@@ -70,13 +70,8 @@
                   <tr>
                     <th>上位者コード</th>
                     <th>上位者名</th>
-                    <th>上位者ランク</th>
                     <th>ラインコード</th>
-                    <th>購入者コード</th>
-                    <th>購入者名</th>
-                    <th>階層</th>
                     <th>sum_bv</th>
-                    <th>bonus_rate</th>
                     <th>bonus_amount</th>
                   </tr>
                 </thead>
@@ -85,13 +80,8 @@
                     <tr>
                       <td>{{ r.上位者コード }}</td>
                       <td>{{ r.上位者名 }}</td>
-                      <td>{{ r.上位者ランク }}</td>
                       <td>{{ r.ラインコード }}</td>
-                      <td>{{ r.購入者コード }}</td>
-                      <td>{{ r.購入者名 }}</td>
-                      <td>{{ r.階層 }}</td>
                       <td>{{ r.sum_bv }}</td>
-                      <td>{{ r.bonus_rate }}</td>
                       <td>{{ r.bonus_amount }}</td>
                     </tr>
                   {% endfor %}
