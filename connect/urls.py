@@ -15,6 +15,7 @@ urlpatterns = [
     path('repurchase_last_month/', views.RepurchaseLastMonthView.as_view(), name = "repurchase_last_month"),
     path('repurchase_list/', views.RepurchaseListView.as_view(), name = "repurchase_list"),
     path('drive_bonus/', views.DriveBonusView.as_view(), name = "drive_bonus"),
+    path('s_drive_bonus/', views.S_DriveBonusView.as_view(), name = "s_drive_bonus"),
     path('basic_bonus/', views.BasicBonusView.as_view(), name = "basic_bonus"),
     path('matching_bonus/', views.MatchingBonusView.as_view(), name = "matching_bonus"),
     path('inquiry/', views.InquiryView.as_view(), name = "inquiry"),
