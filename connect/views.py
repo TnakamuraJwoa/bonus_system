@@ -723,13 +723,6 @@ class TitleListView(generic.ListView):
         return ctx
 
 
-import math
-from datetime import date
-from urllib.parse import urlencode
-
-from dateutil.relativedelta import relativedelta
-from django.db import connections
-from django.views import generic
 
 
 class RepurchaseListView(generic.TemplateView):
@@ -773,7 +766,6 @@ class RepurchaseListView(generic.TemplateView):
             where.append("order_type = %s")
             params.append(q_order_type)
 
-        # ボーナス支払日
         if q_bonus_date_from:
             where.append("bonus_payment_date >= %s")
             params.append(q_bonus_date_from)
@@ -782,13 +774,13 @@ class RepurchaseListView(generic.TemplateView):
             where.append("bonus_payment_date < DATE_ADD(%s, INTERVAL 1 DAY)")
             params.append(q_bonus_date_to)
 
-        where_sql = "WHERE " + " AND ".join(where)
-        return where_sql, params
+        return "WHERE " + " AND ".join(where), params
 
     def _get_registered_months(self):
         sql = """
-        SELECT DISTINCT CONCAT(year, '-', LPAD(month, 2, '0')) AS ym
-        FROM bonus_db.purchase_info_list
+            SELECT DISTINCT CONCAT(year, '-', LPAD(month, 2, '0')) AS ym
+            FROM bonus_db.purchase_info_list
+            ORDER BY ym DESC
         """
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql)
@@ -819,24 +811,25 @@ class RepurchaseListView(generic.TemplateView):
         )
 
         sql = f"""
-SELECT
-    order_code,
-    order_type,
-    jwoa_code,
-    send_bv_name,
-    total_bv,
-    bv,
-    deposit_at,
-    order_at,
-    bonus_payment_date,
-    created_at,
-    year,
-    month
-FROM bonus_db.purchase_info_list
-{where_sql}
-ORDER BY bonus_payment_date DESC
-LIMIT %s OFFSET %s
-"""
+            SELECT
+                order_code,
+                order_type,
+                jwoa_code,
+                send_bv_name,
+                total_bv,
+                bv,
+                deposit_at,
+                order_at,
+                bonus_payment_date,
+                created_at,
+                year,
+                month
+            FROM bonus_db.purchase_info_list
+            {where_sql}
+            ORDER BY bonus_payment_date DESC, id DESC
+            LIMIT %s OFFSET %s
+        """
+
         params.extend([limit, offset])
 
         with connections["rds"].cursor() as cursor:
@@ -867,10 +860,11 @@ LIMIT %s OFFSET %s
         )
 
         sql = f"""
-SELECT COUNT(*) AS cnt
-FROM bonus_db.purchase_info_list
-{where_sql}
-"""
+            SELECT COUNT(*) AS cnt
+            FROM bonus_db.purchase_info_list
+            {where_sql}
+        """
+
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql, params)
             row = cursor.fetchone()
@@ -890,7 +884,8 @@ FROM bonus_db.purchase_info_list
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
-        selected_month = (self.request.GET.get("prev_month") or "").strip()
+        selected_month = (self.request.GET.get("target_month") or "").strip()
+
         q_code = (self.request.GET.get("q_code") or "").strip()
         q_name = (self.request.GET.get("q_name") or "").strip()
         q_order_code = (self.request.GET.get("q_order_code") or "").strip()
@@ -902,17 +897,20 @@ FROM bonus_db.purchase_info_list
             per_page = int(self.request.GET.get("per_page") or str(self.DEFAULT_PER_PAGE))
         except ValueError:
             per_page = self.DEFAULT_PER_PAGE
+
         per_page = max(1, min(per_page, self.MAX_PER_PAGE))
 
         try:
             page = int(self.request.GET.get("page") or "1")
         except ValueError:
             page = 1
+
         page = max(1, page)
 
         ctx["month_choices"] = self._get_month_choices()
         ctx["registered_months"] = self._get_registered_months()
-        ctx["selected_prev_month"] = selected_month
+
+        ctx["selected_month"] = selected_month
         ctx["q_code"] = q_code
         ctx["q_name"] = q_name
         ctx["q_order_code"] = q_order_code
@@ -928,7 +926,10 @@ FROM bonus_db.purchase_info_list
         if selected_month:
             try:
                 year, month = map(int, selected_month.split("-"))
-                ctx["selected_period"] = {"year": year, "month": month}
+                ctx["selected_period"] = {
+                    "year": year,
+                    "month": month,
+                }
             except ValueError:
                 year = None
                 month = None
@@ -965,8 +966,9 @@ FROM bonus_db.purchase_info_list
         )
 
         base_params = {}
+
         if selected_month:
-            base_params["prev_month"] = selected_month
+            base_params["target_month"] = selected_month
         if q_code:
             base_params["q_code"] = q_code
         if q_name:
@@ -993,6 +995,8 @@ FROM bonus_db.purchase_info_list
         ctx["base_qs"] = urlencode(base_params)
 
         return ctx
+
+
 
 
 class SettingsView(generic.ListView):
@@ -1875,6 +1879,17 @@ LEFT JOIN prev_week_basic_carry_over_bv b
  AND a.ラインコード = b.jwoa_code
 ),
 
+-- ブルーダイヤ
+blue_daiya as (
+SELECT 上位者コード
+FROM line_flg
+WHERE rn IN (1, 2)
+GROUP BY 上位者コード
+HAVING
+    COUNT(*) = 2
+    AND MIN(plus_carry_bv) >= 250000
+),
+
 -- ans_basic_bonus
 ans_basic_bonus AS (
 SELECT
@@ -1886,43 +1901,44 @@ SELECT
     a.購入者名,
     a.階層,
     a.sum_bv,
+    IFNULL(b.plus_carry_bv, 0) as plus_carry_bv,
 
     CASE
+        WHEN bd.上位者コード IS NOT NULL THEN 20
         WHEN a.上位者ランク = 1 THEN 10
         WHEN a.上位者ランク = 4 THEN 12
         ELSE 0
     END AS bonus_rate,
 
     TRUNCATE(
-        IFNULL(a.sum_bv, 0) *
         CASE
-            WHEN a.上位者ランク = 1 THEN 0.10
-            WHEN a.上位者ランク = 4 THEN 0.12
+            WHEN bd.上位者コード IS NOT NULL THEN LEAST(IFNULL(b.plus_carry_bv, 0), 250000) * 0.20
+            WHEN a.上位者ランク = 1 THEN LEAST(IFNULL(b.plus_carry_bv, 0), 5000) * 0.10
+            WHEN a.上位者ランク = 4 THEN LEAST(IFNULL(b.plus_carry_bv, 0), 125000) * 0.12
             ELSE 0
         END,
     2
-) AS bonus_amount
+    ) AS bonus_amount,
+
+    CASE
+        WHEN bd.上位者コード IS NOT NULL THEN 1
+        ELSE 0
+    END AS blue_daiya_flg
 
 FROM payer_list_prevMonth_users AS a
 JOIN line_flg AS b
   ON a.上位者コード = b.上位者コード
  AND a.ラインコード = b.ラインコード
+
+LEFT JOIN blue_daiya bd
+  ON a.上位者コード = bd.上位者コード
 WHERE b.rn > 1
 )
 
+
 select
- 上位者コード,
- 上位者名,
- ラインコード,
- sum(sum_bv) as sum_bv,
- sum(bonus_amount) as bonus_amount
+ *
 from ans_basic_bonus
-group by
- 上位者コード,
- 上位者名,
- ラインコード,
- sum_bv,
- bonus_amount
         """
 
         params = [

@@ -35,11 +35,21 @@
             <ul class="navbar-nav ml-auto"> <!-- ml-autoを追加 -->
                 {% if user.is_authenticated %}
                 <li class="nav-item">
+                    <a class="nav-link" href="">会員検索 </a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link" href="">注文情報 </a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'connect:drive_bonus' %}">ボーナス検索 </a>
+                </li>
+
+                <li class="nav-item">
                     <a class="nav-link" href="{% url 'connect:drive_bonus' %}">ボーナス計算 </a>
                 </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="{% url 'connect:drive_bonus' %}">ボーナス一覧 </a>
-                </li>
+
                 <li class="nav-item">
                     <a class="nav-link" href="{% url 'connect:kibetu' %}">設定 </a>
                 </li>

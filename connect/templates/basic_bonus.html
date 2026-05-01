@@ -70,9 +70,15 @@
                   <tr>
                     <th>上位者コード</th>
                     <th>上位者名</th>
+                    <th>上位者ランク</th>
                     <th>ラインコード</th>
+                    <th>購入者コード</th>
+                    <th>購入者名</th>
                     <th>sum_bv</th>
+                    <th>plus_carry_bv</th>
+                    <th>bonus_rate</th>
                     <th>bonus_amount</th>
+                    <th>blue_daiya_flg</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -80,9 +86,15 @@
                     <tr>
                       <td>{{ r.上位者コード }}</td>
                       <td>{{ r.上位者名 }}</td>
+                      <td>{{ r.上位者ランク }}</td>
                       <td>{{ r.ラインコード }}</td>
+                      <td>{{ r.購入者コード }}</td>
+                      <td>{{ r.購入者名 }}</td>
                       <td>{{ r.sum_bv }}</td>
+                      <td>{{ r.plus_carry_bv }}</td>
+                      <td>{{ r.bonus_rate }}</td>
                       <td>{{ r.bonus_amount }}</td>
+                      <td>{{ r.blue_daiya_flg }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>
