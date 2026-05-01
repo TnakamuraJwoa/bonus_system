@@ -3148,62 +3148,96 @@ class MatchingBonusView(generic.ListView):
     def get_queryset(self):
         return PeriodMaster.objects.using("rds").all()
 
-
     def get(self, request, *args, **kwargs):
-        # ListView の object_list を先にセット
         self.object_list = self.get_queryset()
         context = self.get_context_data()
-
-        # Excel出力
-        if request.GET.get("export") == "excel":
-            rows = context.get("rows", [])
-
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "BasicBonus"
-
-            # ヘッダー
-            headers = ["上位者コード", "上位者名", "上位者ランク", "ラインコード", "購入者コード", "購入者名", "階層", "sum_bv", "bonus_rate", "bonus_amount"]
-            ws.append(headers)
-
-            # データ
-            for r in rows:
-                ws.append([
-                    r.get("上位者コード"),
-                    r.get("上位者名"),
-                    r.get("上位者ランク"),
-                    r.get("ラインコード"),
-                    r.get("購入者コード"),
-                    r.get("購入者名"),
-                    r.get("階層"),
-                    r.get("sum_bv"),
-                    r.get("bonus_rate"),
-                    r.get("bonus_amount"),
-                ])
-
-            # 列幅調整
-            ws.column_dimensions["A"].width = 18
-            ws.column_dimensions["B"].width = 15
-            ws.column_dimensions["C"].width = 15
-            ws.column_dimensions["D"].width = 25
-            ws.column_dimensions["E"].width = 12
-            ws.column_dimensions["F"].width = 15
-
-            # 数値フォーマット
-            for row_idx in range(2, ws.max_row + 1):
-                ws[f"E{row_idx}"].number_format = '#,##0.00'
-                ws[f"F{row_idx}"].number_format = '#,##0.00'
-
-            response = HttpResponse(
-                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-            response["Content-Disposition"] = 'attachment; filename="basic_bonus.xlsx"'
-
-            wb.save(response)
-            return response
-
         return self.render_to_response(context)
 
+    def post(self, request, *args, **kwargs):
+        action = request.POST.get("action", "")
+        selected_kibetu = request.POST.get("kibetu", "").strip()
+
+        if action != "register_basic_bonus":
+            messages.error(request, "不正な操作です。")
+            return redirect("connect:basic_bonus")
+
+        if not selected_kibetu:
+            messages.error(request, "期別を選択してください。")
+            return redirect("connect:basic_bonus")
+
+        period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
+        if not period:
+            messages.error(request, "選択された期別が存在しません。")
+            return redirect("connect:basic_bonus")
+
+        try:
+            rows = self._get_basic_bonus_rows(selected_kibetu, period)
+
+            if not rows:
+                messages.warning(request, "登録対象データがありません。")
+                return redirect(f"/basic_bonus/?kibetu={selected_kibetu}")
+
+            insert_sql = """
+                INSERT INTO bonus_db.B_basic_bonus_result (
+                    kibetu,
+                    placement_code,
+                    placement_name,
+                    placement_rank,
+                    line_code,
+                    purchaser_code,
+                    purchaser_name,
+                    level,
+                    sum_bv,
+                    plus_carry_bv,
+                    bonus_rate,
+                    bonus_amount,
+                    blue_daiya_flg,
+                    created_at
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
+                )
+                ON DUPLICATE KEY UPDATE
+                    placement_name = VALUES(placement_name),
+                    placement_rank = VALUES(placement_rank),
+                    purchaser_name = VALUES(purchaser_name),
+                    level = VALUES(level),
+                    sum_bv = VALUES(sum_bv),
+                    plus_carry_bv = VALUES(plus_carry_bv),
+                    bonus_rate = VALUES(bonus_rate),
+                    bonus_amount = VALUES(bonus_amount),
+                    blue_daiya_flg = VALUES(blue_daiya_flg),
+                    created_at = NOW()
+            """
+
+            insert_params = []
+            for r in rows:
+                insert_params.append([
+                    selected_kibetu,
+                    r.get("placement_code") or "",
+                    r.get("placement_name") or "",
+                    r.get("placement_rank") or 0,
+                    r.get("line_code") or "",
+                    r.get("purchaser_code") or "",
+                    r.get("purchaser_name") or "",
+                    r.get("level") or 0,
+                    r.get("sum_bv") or 0,
+                    r.get("plus_carry_bv") or 0,
+                    r.get("bonus_rate") or 0,
+                    r.get("bonus_amount") or 0,
+                    r.get("blue_daiya_flg") or 0,
+                ])
+
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    cursor.executemany(insert_sql, insert_params)
+
+            messages.success(request, f"{len(rows)}件をベーシックボーナス結果に登録しました。")
+
+        except Exception as e:
+            logger.exception("ベーシックボーナス結果登録エラー")
+            messages.error(request, f"登録中にエラーが発生しました: {e}")
+
+        return redirect(f"/basic_bonus/?kibetu={selected_kibetu}")
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -3216,26 +3250,25 @@ class MatchingBonusView(generic.ListView):
         if not selected_kibetu:
             return ctx
 
-        # 期別マスタ取得
         period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
         if not period:
             return ctx
 
         ctx["selected_period"] = period
+        ctx["rows"] = self._get_basic_bonus_rows(selected_kibetu, period)
 
+        return ctx
+
+    def _get_basic_bonus_rows(self, selected_kibetu, period):
         st_date = period.st_date
         end_date = period.end_date
 
-        # kibetu 例: 2026C01W3 → 2026 / 01
         kibetu_year = int(selected_kibetu[0:4])
         kibetu_month = int(selected_kibetu[5:7])
 
-        # 対象期間（開始は00:00:00、終了は翌日00:00:00未満）
-        # 購入情報の絞込条件の日付　from ~ to
         start_dt = make_aware(datetime.combine(st_date, time.min))
         end_dt = make_aware(datetime.combine(end_date + timedelta(days=1), time.min))
 
-        # 前月購入範囲
         current_month_first = datetime(kibetu_year, kibetu_month, 1)
         prev_month_last = current_month_first - timedelta(days=1)
 
@@ -3460,13 +3493,13 @@ HAVING
 -- ans_basic_bonus
 ans_basic_bonus AS (
 SELECT
-    a.上位者コード,
-    a.上位者名,
-    a.上位者ランク,
-    a.ラインコード,
-    a.購入者コード,
-    a.購入者名,
-    a.階層,
+    a.上位者コード as placement_code,
+    a.上位者名 as placement_name,
+    a.上位者ランク as placement_rank,
+    a.ラインコード as line_code,
+    a.購入者コード as purchaser_code,
+    a.購入者名 as purchaser_name,
+    a.階層 as level,
     a.sum_bv,
     IFNULL(b.plus_carry_bv, 0) as plus_carry_bv,
 
@@ -3509,7 +3542,13 @@ from ans_basic_bonus
         """
 
         params = [
-            selected_kibetu, be_start_dt, be_end_dt, start_dt, end_dt, start_dt, end_dt
+            selected_kibetu,
+            be_start_dt,
+            be_end_dt,
+            start_dt,
+            end_dt,
+            start_dt,
+            end_dt,
         ]
 
         with connections["rds"].cursor() as cursor:
@@ -3518,8 +3557,8 @@ from ans_basic_bonus
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
 
-        ctx["rows"] = rows
-        return ctx
+        return rows
+
 
 
 
