@@ -2638,6 +2638,7 @@ LIMIT 2000
         messages.error(request, "不正な操作です。")
         return redirect(redirect_path)
 
+
 class ActiveUsersView(generic.TemplateView):
     template_name = "active_users.html"
 
@@ -2662,11 +2663,11 @@ class ActiveUsersView(generic.TemplateView):
 
         if q_year:
             where_clauses.append("a.year = %s")
-            params.append(q_year)
+            params.append(int(q_year))
 
         if q_month:
             where_clauses.append("a.month = %s")
-            params.append(q_month)
+            params.append(int(q_month))
 
         where_sql = ""
         if where_clauses:
@@ -2696,15 +2697,18 @@ class ActiveUsersView(generic.TemplateView):
 
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action")
+
         q_jwoa_code = request.POST.get("q_jwoa_code", "").strip()
         q_year = request.POST.get("q_year", "").strip()
         q_month = request.POST.get("q_month", "").strip()
 
         if action == "create":
             return self._create(request, q_jwoa_code, q_year, q_month)
-        elif action == "update":
+
+        if action == "update":
             return self._update(request, q_jwoa_code, q_year, q_month)
-        elif action == "delete":
+
+        if action == "delete":
             return self._delete(request, q_jwoa_code, q_year, q_month)
 
         messages.error(request, "不正な操作です。")
@@ -2735,11 +2739,20 @@ class ActiveUsersView(generic.TemplateView):
         """
 
         try:
-            with connections["rds"].cursor() as cursor:
-                cursor.execute(sql, [jwoa_code, int(year), int(month)])
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    cursor.execute(sql, [jwoa_code, int(year), int(month)])
+
             messages.success(request, "登録しました。")
-        except IntegrityError:
-            messages.error(request, "登録に失敗しました。会員コードが存在しないか、整合性エラーです。")
+
+        except IntegrityError as e:
+            error_text = str(e)
+
+            if "uq_active_users_jwoa_year_month" in error_text or "Duplicate entry" in error_text:
+                messages.error(request, "この会員コード・年・月のデータはすでに登録されています。")
+            else:
+                messages.error(request, "登録に失敗しました。会員コードが存在しない可能性があります。")
+
         except Exception as e:
             messages.error(request, f"登録中にエラーが発生しました: {e}")
 
@@ -2753,6 +2766,12 @@ class ActiveUsersView(generic.TemplateView):
 
         if not row_id:
             messages.error(request, "更新対象IDがありません。")
+            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+
+        try:
+            row_id_int = int(row_id)
+        except ValueError:
+            messages.error(request, "更新対象IDが不正です。")
             return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
 
         error_message = self._validate_input(jwoa_code, year, month)
@@ -2770,11 +2789,20 @@ class ActiveUsersView(generic.TemplateView):
         """
 
         try:
-            with connections["rds"].cursor() as cursor:
-                cursor.execute(sql, [jwoa_code, int(year), int(month), int(row_id)])
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    cursor.execute(sql, [jwoa_code, int(year), int(month), row_id_int])
+
             messages.success(request, "更新しました。")
-        except IntegrityError:
-            messages.error(request, "更新に失敗しました。会員コードが存在しないか、整合性エラーです。")
+
+        except IntegrityError as e:
+            error_text = str(e)
+
+            if "uq_active_users_jwoa_year_month" in error_text or "Duplicate entry" in error_text:
+                messages.error(request, "この会員コード・年・月のデータはすでに登録されています。")
+            else:
+                messages.error(request, "更新に失敗しました。会員コードが存在しない可能性があります。")
+
         except Exception as e:
             messages.error(request, f"更新中にエラーが発生しました: {e}")
 
@@ -2787,15 +2815,24 @@ class ActiveUsersView(generic.TemplateView):
             messages.error(request, "削除対象IDがありません。")
             return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
 
+        try:
+            row_id_int = int(row_id)
+        except ValueError:
+            messages.error(request, "削除対象IDが不正です。")
+            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+
         sql = """
             DELETE FROM active_users
             WHERE id = %s
         """
 
         try:
-            with connections["rds"].cursor() as cursor:
-                cursor.execute(sql, [int(row_id)])
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    cursor.execute(sql, [row_id_int])
+
             messages.success(request, "削除しました。")
+
         except Exception as e:
             messages.error(request, f"削除中にエラーが発生しました: {e}")
 
@@ -2831,19 +2868,22 @@ class ActiveUsersView(generic.TemplateView):
 
     def _get_redirect_url(self, q_jwoa_code, q_year, q_month):
         base_url = "/active_users/"
-        query_params = []
+
+        query_params = {}
 
         if q_jwoa_code:
-            query_params.append(f"q_jwoa_code={q_jwoa_code}")
+            query_params["q_jwoa_code"] = q_jwoa_code
+
         if q_year:
-            query_params.append(f"q_year={q_year}")
+            query_params["q_year"] = q_year
+
         if q_month:
-            query_params.append(f"q_month={q_month}")
+            query_params["q_month"] = q_month
 
         if query_params:
-            return base_url + "?" + "&".join(query_params)
-        return base_url
+            return base_url + "?" + urlencode(query_params)
 
+        return base_url
 
 
 
@@ -3058,4 +3098,387 @@ FROM bonus_db.v_user_placement_tree
         ctx["next_after_id"] = next_after_id
         ctx["has_prev_hint"] = bool(after_id)
 
+        return ctx
+
+
+
+class MatchingBonusView(generic.ListView):
+    template_name = "matching_bonus.html"
+    context_object_name = "object_list"
+    model = PeriodMaster
+
+    def get_queryset(self):
+        return PeriodMaster.objects.using("rds").all()
+
+
+    def get(self, request, *args, **kwargs):
+        # ListView の object_list を先にセット
+        self.object_list = self.get_queryset()
+        context = self.get_context_data()
+
+        # Excel出力
+        if request.GET.get("export") == "excel":
+            rows = context.get("rows", [])
+
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "BasicBonus"
+
+            # ヘッダー
+            headers = ["上位者コード", "上位者名", "上位者ランク", "ラインコード", "購入者コード", "購入者名", "階層", "sum_bv", "bonus_rate", "bonus_amount"]
+            ws.append(headers)
+
+            # データ
+            for r in rows:
+                ws.append([
+                    r.get("上位者コード"),
+                    r.get("上位者名"),
+                    r.get("上位者ランク"),
+                    r.get("ラインコード"),
+                    r.get("購入者コード"),
+                    r.get("購入者名"),
+                    r.get("階層"),
+                    r.get("sum_bv"),
+                    r.get("bonus_rate"),
+                    r.get("bonus_amount"),
+                ])
+
+            # 列幅調整
+            ws.column_dimensions["A"].width = 18
+            ws.column_dimensions["B"].width = 15
+            ws.column_dimensions["C"].width = 15
+            ws.column_dimensions["D"].width = 25
+            ws.column_dimensions["E"].width = 12
+            ws.column_dimensions["F"].width = 15
+
+            # 数値フォーマット
+            for row_idx in range(2, ws.max_row + 1):
+                ws[f"E{row_idx}"].number_format = '#,##0.00'
+                ws[f"F{row_idx}"].number_format = '#,##0.00'
+
+            response = HttpResponse(
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            response["Content-Disposition"] = 'attachment; filename="basic_bonus.xlsx"'
+
+            wb.save(response)
+            return response
+
+        return self.render_to_response(context)
+
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        selected_kibetu = self.request.GET.get("kibetu")
+        ctx["selected_kibetu"] = selected_kibetu
+        ctx["rows"] = []
+        ctx["selected_period"] = None
+
+        if not selected_kibetu:
+            return ctx
+
+        # 期別マスタ取得
+        period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
+        if not period:
+            return ctx
+
+        ctx["selected_period"] = period
+
+        st_date = period.st_date
+        end_date = period.end_date
+
+        # kibetu 例: 2026C01W3 → 2026 / 01
+        kibetu_year = int(selected_kibetu[0:4])
+        kibetu_month = int(selected_kibetu[5:7])
+
+        # 対象期間（開始は00:00:00、終了は翌日00:00:00未満）
+        # 購入情報の絞込条件の日付　from ~ to
+        start_dt = make_aware(datetime.combine(st_date, time.min))
+        end_dt = make_aware(datetime.combine(end_date + timedelta(days=1), time.min))
+
+        # 前月購入範囲
+        current_month_first = datetime(kibetu_year, kibetu_month, 1)
+        prev_month_last = current_month_first - timedelta(days=1)
+
+        prev_year = prev_month_last.year
+        prev_month = prev_month_last.month
+
+        be_start_dt = make_aware(datetime(prev_year, prev_month, 1, 0, 0, 0))
+        be_end_dt = make_aware(datetime(kibetu_year, kibetu_month, 1, 0, 0, 0))
+
+        sql = """
+WITH RECURSIVE
+
+-- 前週の期別
+prev_kibetu AS (
+    SELECT prev_kibetu
+    FROM (
+        SELECT
+            kibetu,
+            LAG(kibetu) OVER (ORDER BY st_date) AS prev_kibetu
+        FROM bonus_db.period_master
+    ) t
+    WHERE kibetu = %s
+),
+
+-- 前週のベーシック繰り越しBV
+prev_week_basic_carry_over_bv AS (
+    SELECT
+        placement_code,
+        jmoa_code AS jwoa_code,
+        carry_over_bv
+    FROM bonus_db.basic_bv_line
+    WHERE kibetu = (
+        SELECT prev_kibetu
+        FROM prev_kibetu
+    )
+),
+
+
+-- group_by(購入者リスト)
+-- 前月の購入情報
+sum_prev_purchasers_list AS (
+SELECT
+    p.jwoa_code,
+    SUM(IFNULL(p.bv, 0)) AS bv
+FROM bonus_db.purchase_info_list p
+WHERE p.bonus_payment_date >= %s
+  AND p.bonus_payment_date <  %s
+GROUP BY p.jwoa_code
+HAVING SUM(IFNULL(p.bv, 0)) >= 50
+),
+
+
+-- 再購入リスト
+repurchase_list AS (
+    SELECT
+        order_code,
+        jwoa_code,
+        bonus_payment_date,
+        order_type,
+        bv,
+        LEAST(IFNULL(bv, 0), 50) AS custom_bv
+    FROM bonus_db.purchase_info_list AS p
+    WHERE order_type IN (101, 105)
+      AND bonus_payment_date >= %s
+      AND bonus_payment_date <  %s
+),
+
+-- ランクアップ、初回購入情報リスト
+rank_up_list AS (
+    SELECT
+        order_code,
+        jwoa_code,
+        bonus_payment_date,
+        order_type,
+        bv,
+        IFNULL(bv, 0) AS custom_bv
+    FROM bonus_db.purchase_info_list AS p
+    WHERE order_type IN (102, 103)
+      AND bonus_payment_date >= %s
+      AND bonus_payment_date <  %s
+),
+
+-- 再購入リスト + ランクアップ、初回購入情報リスト
+purchase_list_union AS (
+    SELECT *
+    FROM repurchase_list
+    WHERE custom_bv > 0
+
+    UNION ALL
+
+    SELECT *
+    FROM rank_up_list
+    WHERE custom_bv > 0
+),
+
+
+-- 購入リストの合計
+purchase_sum_bv AS (
+    SELECT
+        jwoa_code,
+        SUM(custom_bv) AS sum_bv
+    FROM purchase_list_union
+    GROUP BY jwoa_code
+),
+
+-- 購入者リスト
+purchase_users AS (
+    SELECT DISTINCT
+        jwoa_code
+    FROM purchase_list_union
+),
+
+-- 支払い者のtree
+payer_tree AS (
+
+    -- ① 起点 = 支払い者本人
+    SELECT
+        u.jmoa_code AS payer_code,
+        u.send_bv_name AS payer_name,
+        u.jmoa_code AS line_code,
+        u.placement_code AS upper_code,
+        0 AS lvl
+    FROM bonus_db.users AS u
+    JOIN purchase_users AS pu
+      ON pu.jwoa_code = u.jmoa_code
+
+    UNION ALL
+
+    -- ② 上にさかのぼる
+    SELECT
+        t.payer_code,
+        t.payer_name,
+        up.jmoa_code AS line_code,
+        up.placement_code AS upper_code,
+        t.lvl + 1 AS lvl
+    FROM payer_tree AS t
+    JOIN bonus_db.users AS up
+      ON up.jmoa_code = t.upper_code
+    WHERE t.lvl < 1000
+      AND t.upper_code IS NOT NULL
+      AND t.upper_code <> ''
+),
+
+
+-- 支払い者のリスト
+payer_list AS (
+    SELECT
+        t.payer_code AS 購入者コード,
+        t.payer_name AS 購入者名,
+        t.line_code AS ラインコード,
+        t.upper_code AS 上位者コード,
+        up.send_bv_name AS 上位者名,
+        t.lvl + 1 AS 階層
+    FROM payer_tree AS t
+    LEFT JOIN bonus_db.users AS up
+      ON up.jmoa_code = t.upper_code
+    WHERE t.upper_code IS NOT NULL
+      AND t.upper_code <> ''
+    order by 購入者コード, 階層
+),
+
+
+-- 支払い者のリスト_in_前月の購入情報
+payer_list_prevMonth_users as (
+SELECT
+    pl.*,
+    ur.new_rank as 上位者ランク,
+    p_sum_bv.sum_bv
+FROM payer_list AS pl
+JOIN sum_prev_purchasers_list AS spl
+  ON spl.jwoa_code = pl.上位者コード
+left join bonus_db.users_target_rank as ur
+ on pl.上位者コード = ur.jmoa_code
+left join purchase_sum_bv as p_sum_bv
+ on pl.購入者コード = p_sum_bv.jwoa_code
+order by pl.上位者名, pl.ラインコード, 階層
+),
+
+
+-- 収入ライン or 基本ラインの判定
+line_flg AS (
+SELECT
+    a.*,
+    IFNULL(b.carry_over_bv, 0) AS carry_over_bv,
+    a.line_bv + IFNULL(b.carry_over_bv, 0) AS plus_carry_bv,
+
+    ROW_NUMBER() OVER (
+        PARTITION BY a.上位者コード
+        ORDER BY a.line_bv + IFNULL(b.carry_over_bv, 0) DESC
+    ) AS rn
+
+FROM (
+    SELECT
+        上位者コード,
+        上位者名,
+        上位者ランク,
+        ラインコード,
+        SUM(sum_bv) AS line_bv
+    FROM payer_list_prevMonth_users
+    GROUP BY
+        上位者コード,
+        上位者名,
+        上位者ランク,
+        ラインコード
+) AS a
+LEFT JOIN prev_week_basic_carry_over_bv b
+  ON a.上位者コード = b.placement_code
+ AND a.ラインコード = b.jwoa_code
+),
+
+-- ブルーダイヤ
+blue_daiya as (
+SELECT 上位者コード
+FROM line_flg
+WHERE rn IN (1, 2)
+GROUP BY 上位者コード
+HAVING
+    COUNT(*) = 2
+    AND MIN(plus_carry_bv) >= 250000
+),
+
+-- ans_basic_bonus
+ans_basic_bonus AS (
+SELECT
+    a.上位者コード,
+    a.上位者名,
+    a.上位者ランク,
+    a.ラインコード,
+    a.購入者コード,
+    a.購入者名,
+    a.階層,
+    a.sum_bv,
+    IFNULL(b.plus_carry_bv, 0) as plus_carry_bv,
+
+    CASE
+        WHEN bd.上位者コード IS NOT NULL THEN 20
+        WHEN a.上位者ランク = 1 THEN 10
+        WHEN a.上位者ランク = 4 THEN 12
+        ELSE 0
+    END AS bonus_rate,
+
+    TRUNCATE(
+        CASE
+            WHEN bd.上位者コード IS NOT NULL THEN LEAST(IFNULL(b.plus_carry_bv, 0), 250000) * 0.20
+            WHEN a.上位者ランク = 1 THEN LEAST(IFNULL(b.plus_carry_bv, 0), 5000) * 0.10
+            WHEN a.上位者ランク = 4 THEN LEAST(IFNULL(b.plus_carry_bv, 0), 125000) * 0.12
+            ELSE 0
+        END,
+    2
+    ) AS bonus_amount,
+
+    CASE
+        WHEN bd.上位者コード IS NOT NULL THEN 1
+        ELSE 0
+    END AS blue_daiya_flg
+
+FROM payer_list_prevMonth_users AS a
+JOIN line_flg AS b
+  ON a.上位者コード = b.上位者コード
+ AND a.ラインコード = b.ラインコード
+
+LEFT JOIN blue_daiya bd
+  ON a.上位者コード = bd.上位者コード
+WHERE b.rn > 1
+)
+
+
+select
+ *
+from ans_basic_bonus
+        """
+
+        params = [
+            selected_kibetu, be_start_dt, be_end_dt, start_dt, end_dt, start_dt, end_dt
+        ]
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            logger.info(f"Executed SQL: {cursor._executed}")
+            cols = [c[0] for c in cursor.description]
+            rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+        ctx["rows"] = rows
         return ctx

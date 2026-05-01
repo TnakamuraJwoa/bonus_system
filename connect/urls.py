@@ -16,6 +16,7 @@ urlpatterns = [
     path('repurchase_list/', views.RepurchaseListView.as_view(), name = "repurchase_list"),
     path('drive_bonus/', views.DriveBonusView.as_view(), name = "drive_bonus"),
     path('basic_bonus/', views.BasicBonusView.as_view(), name = "basic_bonus"),
+    path('matching_bonus/', views.MatchingBonusView.as_view(), name = "matching_bonus"),
     path('inquiry/', views.InquiryView.as_view(), name = "inquiry"),
     path('plan-list/', views.PlanListView.as_view(), name="plan-list"),
     path('plan-detail/<int:pk>/', views.PlanDetailView.as_view(), name="plan-detail"),

@@ -66,29 +66,6 @@
             white-space: nowrap;
         }
 
-        .year-input-inline {
-            width: 100px;
-            min-width: 100px;
-        }
-
-        .month-input-inline {
-            width: 80px;
-            min-width: 80px;
-        }
-
-        .code-input-inline {
-            width: 180px;
-            min-width: 180px;
-        }
-
-        .inline-update-form {
-            display: flex;
-            flex-wrap: nowrap;
-            align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 0;
-        }
-
         .action-cell {
             white-space: nowrap;
         }
@@ -170,27 +147,6 @@
             color: #6b7280;
             background: #fafafa;
         }
-
-        @media (max-width: 767.98px) {
-            .code-input-inline {
-                width: 150px;
-                min-width: 150px;
-            }
-
-            .year-input-inline {
-                width: 90px;
-                min-width: 90px;
-            }
-
-            .month-input-inline {
-                width: 70px;
-                min-width: 70px;
-            }
-
-            .inline-update-form {
-                gap: 0.4rem;
-            }
-        }
     </style>
 {% endblock %}
 
@@ -205,6 +161,7 @@
         {% include "com/_sidebar.html" with active_menu="active_users" %}
 
         <main class="col-12 col-md-9 col-lg-10">
+
             <div class="custom-card bg-white p-3 p-md-4 mb-3">
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
                     <h5 class="page-title">【設定 - アクティブ会員管理】</h5>
@@ -237,6 +194,8 @@
                                             class="form-control"
                                             value="{{ q_year|default:'' }}"
                                             placeholder="例: 2026"
+                                            min="1900"
+                                            max="2100"
                                         >
                                     </div>
 
@@ -333,14 +292,15 @@
                             <table class="table align-middle mb-0">
                                 <thead>
                                     <tr>
-                                        <th style="width: 10%;">会員コード</th>
-                                        <th style="width: 15%;">会員名</th>
-                                        <th style="width: 15%;">作成日時</th>
-                                        <th style="width: 10%;">表示用年月</th>
-                                        <th style="width: 35%;">更新</th>
-                                        <th style="width: 10%;">操作</th>
+                                        <th>会員コード</th>
+                                        <th>会員名</th>
+                                        <th>作成日時</th>
+                                        <th>表示用年月</th>
+                                        <th>更新</th>
+                                        <th>操作</th>
                                     </tr>
                                 </thead>
+
                                 <tbody>
                                     {% for r in rows %}
                                         <tr>
@@ -353,7 +313,7 @@
                                             </td>
 
                                             <td class="created-at">
-                                                {{ r.created_at }}
+                                                {{ r.created_at|date:"Y-m-d H:i:s" }}
                                             </td>
 
                                             <td>
@@ -361,38 +321,104 @@
                                             </td>
 
                                             <td>
-                                                <form method="post" class="inline-update-form">
-                                                    {% csrf_token %}
-                                                    <input type="hidden" name="action" value="update">
-                                                    <input type="hidden" name="id" value="{{ r.id }}">
-                                                    <input type="hidden" name="q_jwoa_code" value="{{ q_jwoa_code|default:'' }}">
-                                                    <input type="hidden" name="q_year" value="{{ q_year|default:'' }}">
-                                                    <input type="hidden" name="q_month" value="{{ q_month|default:'' }}">
+                                                <button
+                                                    type="button"
+                                                    class="btn btn-sm btn-soft-warning"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#updateModal{{ r.id }}"
+                                                >
+                                                    更新
+                                                </button>
 
-                                                    <input
-                                                        type="text"
-                                                        name="jwoa_code"
-                                                        class="form-control form-control-sm code-input-inline"
-                                                        value="{{ r.jwoa_code }}"
-                                                        required
-                                                    >
+                                                <div
+                                                    class="modal fade"
+                                                    id="updateModal{{ r.id }}"
+                                                    tabindex="-1"
+                                                    aria-labelledby="updateModalLabel{{ r.id }}"
+                                                    aria-hidden="true"
+                                                >
+                                                    <div class="modal-dialog modal-dialog-centered">
+                                                        <div class="modal-content">
 
-                                                    <span>年</span>
+                                                            <form method="post">
+                                                                {% csrf_token %}
+                                                                <input type="hidden" name="action" value="update">
+                                                                <input type="hidden" name="id" value="{{ r.id }}">
+                                                                <input type="hidden" name="q_jwoa_code" value="{{ q_jwoa_code|default:'' }}">
+                                                                <input type="hidden" name="q_year" value="{{ q_year|default:'' }}">
+                                                                <input type="hidden" name="q_month" value="{{ q_month|default:'' }}">
 
-                                                    <input
-                                                        type="number"
-                                                        name="month"
-                                                        class="form-control form-control-sm month-input-inline"
-                                                        value="{{ r.month }}"
-                                                        min="1"
-                                                        max="12"
-                                                        required
-                                                    >
+                                                                <div class="modal-header">
+                                                                    <h5 class="modal-title" id="updateModalLabel{{ r.id }}">
+                                                                        アクティブ会員 更新
+                                                                    </h5>
+                                                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+                                                                </div>
 
-                                                    <span>月</span>
+                                                                <div class="modal-body">
+                                                                    <div class="mb-3">
+                                                                        <label class="form-label">会員コード</label>
+                                                                        <input
+                                                                            type="text"
+                                                                            name="jwoa_code"
+                                                                            class="form-control"
+                                                                            value="{{ r.jwoa_code }}"
+                                                                            required
+                                                                        >
+                                                                    </div>
 
-                                                    <button type="submit" class="btn btn-sm btn-soft-warning">更新</button>
-                                                </form>
+                                                                    <div class="mb-3">
+                                                                        <label class="form-label">会員名</label>
+                                                                        <input
+                                                                            type="text"
+                                                                            class="form-control"
+                                                                            value="{{ r.send_bv_name|default:'' }}"
+                                                                            readonly
+                                                                        >
+                                                                    </div>
+
+                                                                    <div class="row g-2">
+                                                                        <div class="col-6">
+                                                                            <label class="form-label">年</label>
+                                                                            <input
+                                                                                type="number"
+                                                                                name="year"
+                                                                                class="form-control"
+                                                                                value="{{ r.year }}"
+                                                                                min="1900"
+                                                                                max="2100"
+                                                                                required
+                                                                            >
+                                                                        </div>
+
+                                                                        <div class="col-6">
+                                                                            <label class="form-label">月</label>
+                                                                            <input
+                                                                                type="number"
+                                                                                name="month"
+                                                                                class="form-control"
+                                                                                value="{{ r.month }}"
+                                                                                min="1"
+                                                                                max="12"
+                                                                                required
+                                                                            >
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div class="modal-footer">
+                                                                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                                                                        キャンセル
+                                                                    </button>
+                                                                    <button type="submit" class="btn btn-soft-warning">
+                                                                        更新する
+                                                                    </button>
+                                                                </div>
+                                                            </form>
+
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </td>
 
                                             <td class="action-cell">
@@ -403,7 +429,10 @@
                                                     <input type="hidden" name="q_jwoa_code" value="{{ q_jwoa_code|default:'' }}">
                                                     <input type="hidden" name="q_year" value="{{ q_year|default:'' }}">
                                                     <input type="hidden" name="q_month" value="{{ q_month|default:'' }}">
-                                                    <button type="submit" class="btn btn-sm btn-soft-danger">削除</button>
+
+                                                    <button type="submit" class="btn btn-sm btn-soft-danger">
+                                                        削除
+                                                    </button>
                                                 </form>
                                             </td>
                                         </tr>
