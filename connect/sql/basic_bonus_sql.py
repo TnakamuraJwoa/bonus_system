@@ -1,6 +1,13 @@
 BASIC_BONUS_SQL = """
 WITH RECURSIVE
 
+-- アクティブ会員
+is_active_users as (
+select *, 50 as bv
+from bonus_db.active_users
+where year = %s and month = %s
+),
+
 -- 前週の期別
 prev_kibetu AS (
     SELECT prev_kibetu
@@ -16,6 +23,7 @@ prev_kibetu AS (
 -- 前週のベーシック繰り越しBV
 prev_week_basic_carry_over_bv AS (
     SELECT
+        kibetu,
         placement_code,
         jmoa_code AS jwoa_code,
         carry_over_bv
@@ -28,16 +36,30 @@ prev_week_basic_carry_over_bv AS (
 
 
 -- group_by(購入者リスト)
--- 前月の購入情報
+-- 前月の購入情報（active_users含む)
 sum_prev_purchasers_list AS (
-SELECT
-    p.jwoa_code,
-    SUM(IFNULL(p.bv, 0)) AS bv
-FROM bonus_db.purchase_info_list p
-WHERE p.bonus_payment_date >= %s
-  AND p.bonus_payment_date <  %s
-GROUP BY p.jwoa_code
-HAVING SUM(IFNULL(p.bv, 0)) >= 50
+    SELECT
+        x.jwoa_code,
+        SUM(IFNULL(x.bv, 0)) AS bv
+    FROM (
+        -- 前月の購入情報
+        SELECT
+            p.jwoa_code,
+            p.bv
+        FROM bonus_db.purchase_info_list p
+        WHERE p.bonus_payment_date >= %s
+          AND p.bonus_payment_date <  %s
+
+        UNION ALL
+
+        -- アクティブ会員分を追加
+        SELECT
+            iau.jwoa_code,
+            iau.bv
+        FROM is_active_users iau
+    ) x
+    GROUP BY x.jwoa_code
+    HAVING SUM(IFNULL(x.bv, 0)) >= 50
 ),
 
 
@@ -101,6 +123,7 @@ purchase_users AS (
     FROM purchase_list_union
 ),
 
+-- line_codeは購入者　⇒上位者(ラインコード) ⇒　その上位者(上位者こーど)
 -- 支払い者のtree
 payer_tree AS (
 
@@ -175,10 +198,18 @@ SELECT
     IFNULL(b.carry_over_bv, 0) AS carry_over_bv,
     a.line_bv + IFNULL(b.carry_over_bv, 0) AS plus_carry_bv,
 
-    ROW_NUMBER() OVER (
-        PARTITION BY a.上位者コード
-        ORDER BY a.line_bv + IFNULL(b.carry_over_bv, 0) DESC
-    ) AS rn
+    CASE
+        WHEN ROW_NUMBER() OVER (
+            PARTITION BY a.上位者コード
+            ORDER BY a.line_bv + IFNULL(b.carry_over_bv, 0) DESC
+        ) >= 3
+        THEN 2
+
+        ELSE ROW_NUMBER() OVER (
+            PARTITION BY a.上位者コード
+            ORDER BY a.line_bv + IFNULL(b.carry_over_bv, 0) DESC
+        )
+    END AS rn
 
 FROM (
     SELECT
