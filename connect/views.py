@@ -3145,6 +3145,7 @@ class MatchingBonusView(generic.ListView):
     context_object_name = "object_list"
     model = PeriodMaster
 
+
     def get_queryset(self):
         return PeriodMaster.objects.using("rds").all()
 
@@ -3153,88 +3154,70 @@ class MatchingBonusView(generic.ListView):
         context = self.get_context_data()
         return self.render_to_response(context)
 
+
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
 
         if action != "register_basic_bonus":
             messages.error(request, "不正な操作です。")
-            return redirect("connect:basic_bonus")
+            return redirect("connect:matching_bonus")
 
         if not selected_kibetu:
             messages.error(request, "期別を選択してください。")
-            return redirect("connect:basic_bonus")
+            return redirect("connect:matching_bonus")
 
         period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
         if not period:
             messages.error(request, "選択された期別が存在しません。")
-            return redirect("connect:basic_bonus")
+            return redirect("connect:matching_bonus")
 
         try:
             rows = self._get_basic_bonus_rows(selected_kibetu, period)
 
             if not rows:
                 messages.warning(request, "登録対象データがありません。")
-                return redirect(f"/basic_bonus/?kibetu={selected_kibetu}")
+                return redirect(f"/matching_bonus/?kibetu={selected_kibetu}")
 
             insert_sql = """
-                INSERT INTO bonus_db.B_basic_bonus_result (
+                INSERT INTO bonus_db.B_matching_bonus_result (
                     kibetu,
-                    placement_code,
-                    placement_name,
-                    placement_rank,
-                    line_code,
-                    purchaser_code,
-                    purchaser_name,
-                    level,
-                    sum_bv,
-                    plus_carry_bv,
-                    bonus_rate,
-                    bonus_amount,
-                    blue_daiya_flg,
+                    introducer_code,
+                    introducer_name,
+                    active_count,
+                    basic_bv,
+                    matching_bv,
                     created_at
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
+                    %s, %s, %s, %s, %s, %s, NOW()
                 )
                 ON DUPLICATE KEY UPDATE
-                    placement_name = VALUES(placement_name),
-                    placement_rank = VALUES(placement_rank),
-                    purchaser_name = VALUES(purchaser_name),
-                    level = VALUES(level),
-                    sum_bv = VALUES(sum_bv),
-                    plus_carry_bv = VALUES(plus_carry_bv),
-                    bonus_rate = VALUES(bonus_rate),
-                    bonus_amount = VALUES(bonus_amount),
-                    blue_daiya_flg = VALUES(blue_daiya_flg),
-                    created_at = NOW()
+                    introducer_name = VALUES(introducer_name),
+                    active_count    = VALUES(active_count),
+                    basic_bv        = VALUES(basic_bv),
+                    matching_bv     = VALUES(matching_bv),
+                    created_at      = NOW()
             """
 
             insert_params = []
             for r in rows:
                 insert_params.append([
                     selected_kibetu,
-                    r.get("placement_code") or "",
-                    r.get("placement_name") or "",
-                    r.get("placement_rank") or 0,
-                    r.get("line_code") or "",
-                    r.get("purchaser_code") or "",
-                    r.get("purchaser_name") or "",
-                    r.get("level") or 0,
-                    r.get("sum_bv") or 0,
-                    r.get("plus_carry_bv") or 0,
-                    r.get("bonus_rate") or 0,
-                    r.get("bonus_amount") or 0,
-                    r.get("blue_daiya_flg") or 0,
+                    r.get("introducer_code") or "",
+                    r.get("jwoa_name") or "",
+                    r.get("active_count") or 0,
+                    r.get("sum_bonus_amount") or 0,
+                    r.get("matching_bonus_amount") or 0,
                 ])
 
             with transaction.atomic(using="rds"):
                 with connections["rds"].cursor() as cursor:
                     cursor.executemany(insert_sql, insert_params)
 
-            messages.success(request, f"{len(rows)}件をベーシックボーナス結果に登録しました。")
+            messages.success(request, f"{len(rows)}件をマッチングボーナス結果に登録しました。")
 
         except Exception as e:
-            logger.exception("ベーシックボーナス結果登録エラー")
+            logger.exception("マッチングボーナス結果登録エラー")
             messages.error(request, f"登録中にエラーが発生しました: {e}")
 
         return redirect(f"/basic_bonus/?kibetu={selected_kibetu}")
@@ -3281,32 +3264,6 @@ class MatchingBonusView(generic.ListView):
         sql = """
 WITH RECURSIVE
 
--- 前週の期別
-prev_kibetu AS (
-    SELECT prev_kibetu
-    FROM (
-        SELECT
-            kibetu,
-            LAG(kibetu) OVER (ORDER BY st_date) AS prev_kibetu
-        FROM bonus_db.period_master
-    ) t
-    WHERE kibetu = %s
-),
-
--- 前週のベーシック繰り越しBV
-prev_week_basic_carry_over_bv AS (
-    SELECT
-        placement_code,
-        jmoa_code AS jwoa_code,
-        carry_over_bv
-    FROM bonus_db.basic_bv_line
-    WHERE kibetu = (
-        SELECT prev_kibetu
-        FROM prev_kibetu
-    )
-),
-
-
 -- group_by(購入者リスト)
 -- 前月の購入情報
 sum_prev_purchasers_list AS (
@@ -3320,235 +3277,239 @@ GROUP BY p.jwoa_code
 HAVING SUM(IFNULL(p.bv, 0)) >= 50
 ),
 
-
--- 再購入リスト
-repurchase_list AS (
-    SELECT
-        order_code,
-        jwoa_code,
-        bonus_payment_date,
-        order_type,
-        bv,
-        LEAST(IFNULL(bv, 0), 50) AS custom_bv
-    FROM bonus_db.purchase_info_list AS p
-    WHERE order_type IN (101, 105)
-      AND bonus_payment_date >= %s
-      AND bonus_payment_date <  %s
+-- アクティブuser
+active_users as (
+select jwoa_code
+from bonus_db.active_users
+union
+select jwoa_code
+from sum_prev_purchasers_list
 ),
 
--- ランクアップ、初回購入情報リスト
-rank_up_list AS (
-    SELECT
-        order_code,
-        jwoa_code,
-        bonus_payment_date,
-        order_type,
-        bv,
-        IFNULL(bv, 0) AS custom_bv
-    FROM bonus_db.purchase_info_list AS p
-    WHERE order_type IN (102, 103)
-      AND bonus_payment_date >= %s
-      AND bonus_payment_date <  %s
-),
-
--- 再購入リスト + ランクアップ、初回購入情報リスト
-purchase_list_union AS (
+-- ベーシックボーナス結果
+basic_bonus_result AS (
     SELECT *
-    FROM repurchase_list
-    WHERE custom_bv > 0
-
-    UNION ALL
-
-    SELECT *
-    FROM rank_up_list
-    WHERE custom_bv > 0
+    FROM bonus_db.B_basic_bonus_result
+    WHERE kibetu = %s
 ),
 
-
--- 購入リストの合計
-purchase_sum_bv AS (
+-- ベーシックボーナス取得者一覧
+basic_id_list AS (
     SELECT
-        jwoa_code,
-        SUM(custom_bv) AS sum_bv
-    FROM purchase_list_union
-    GROUP BY jwoa_code
-),
-
--- 購入者リスト
-purchase_users AS (
-    SELECT DISTINCT
-        jwoa_code
-    FROM purchase_list_union
-),
-
--- 支払い者のtree
-payer_tree AS (
-
-    -- ① 起点 = 支払い者本人
-    SELECT
-        u.jmoa_code AS payer_code,
-        u.send_bv_name AS payer_name,
-        u.jmoa_code AS line_code,
-        u.placement_code AS upper_code,
-        0 AS lvl
-    FROM bonus_db.users AS u
-    JOIN purchase_users AS pu
-      ON pu.jwoa_code = u.jmoa_code
-
-    UNION ALL
-
-    -- ② 上にさかのぼる
-    SELECT
-        t.payer_code,
-        t.payer_name,
-        up.jmoa_code AS line_code,
-        up.placement_code AS upper_code,
-        t.lvl + 1 AS lvl
-    FROM payer_tree AS t
-    JOIN bonus_db.users AS up
-      ON up.jmoa_code = t.upper_code
-    WHERE t.lvl < 1000
-      AND t.upper_code IS NOT NULL
-      AND t.upper_code <> ''
-),
-
-
--- 支払い者のリスト
-payer_list AS (
-    SELECT
-        t.payer_code AS 購入者コード,
-        t.payer_name AS 購入者名,
-        t.line_code AS ラインコード,
-        t.upper_code AS 上位者コード,
-        up.send_bv_name AS 上位者名,
-        t.lvl + 1 AS 階層
-    FROM payer_tree AS t
-    LEFT JOIN bonus_db.users AS up
-      ON up.jmoa_code = t.upper_code
-    WHERE t.upper_code IS NOT NULL
-      AND t.upper_code <> ''
-    order by 購入者コード, 階層
-),
-
-
--- 支払い者のリスト_in_前月の購入情報
-payer_list_prevMonth_users as (
-SELECT
-    pl.*,
-    ur.new_rank as 上位者ランク,
-    p_sum_bv.sum_bv
-FROM payer_list AS pl
-JOIN sum_prev_purchasers_list AS spl
-  ON spl.jwoa_code = pl.上位者コード
-left join bonus_db.users_target_rank as ur
- on pl.上位者コード = ur.jmoa_code
-left join purchase_sum_bv as p_sum_bv
- on pl.購入者コード = p_sum_bv.jwoa_code
-order by pl.上位者名, pl.ラインコード, 階層
-),
-
-
--- 収入ライン or 基本ラインの判定
-line_flg AS (
-SELECT
-    a.*,
-    IFNULL(b.carry_over_bv, 0) AS carry_over_bv,
-    a.line_bv + IFNULL(b.carry_over_bv, 0) AS plus_carry_bv,
-
-    ROW_NUMBER() OVER (
-        PARTITION BY a.上位者コード
-        ORDER BY a.line_bv + IFNULL(b.carry_over_bv, 0) DESC
-    ) AS rn
-
-FROM (
-    SELECT
-        上位者コード,
-        上位者名,
-        上位者ランク,
-        ラインコード,
-        SUM(sum_bv) AS line_bv
-    FROM payer_list_prevMonth_users
+        placement_code AS get_basic_bonus_code,
+        placement_name AS get_basic_bonus_name,
+        SUM(bonus_amount) AS sum_bonus_amount
+    FROM basic_bonus_result
     GROUP BY
-        上位者コード,
-        上位者名,
-        上位者ランク,
-        ラインコード
-) AS a
-LEFT JOIN prev_week_basic_carry_over_bv b
-  ON a.上位者コード = b.placement_code
- AND a.ラインコード = b.jwoa_code
+        placement_code,
+        placement_name
 ),
 
--- ブルーダイヤ
-blue_daiya as (
-SELECT 上位者コード
-FROM line_flg
-WHERE rn IN (1, 2)
-GROUP BY 上位者コード
-HAVING
-    COUNT(*) = 2
-    AND MIN(plus_carry_bv) >= 250000
-),
+-- ベーシックボーナス取得者の紹介元確認
+basic_bonus_with_direct_downline AS (
+    SELECT
+        a.*,
+        b.introducer_code,
+        c.send_bv_name,
 
--- ans_basic_bonus
-ans_basic_bonus AS (
-SELECT
-    a.上位者コード as placement_code,
-    a.上位者名 as placement_name,
-    a.上位者ランク as placement_rank,
-    a.ラインコード as line_code,
-    a.購入者コード as purchaser_code,
-    a.購入者名 as purchaser_name,
-    a.階層 as level,
-    a.sum_bv,
-    IFNULL(b.plus_carry_bv, 0) as plus_carry_bv,
-
-    CASE
-        WHEN bd.上位者コード IS NOT NULL THEN 20
-        WHEN a.上位者ランク = 1 THEN 10
-        WHEN a.上位者ランク = 4 THEN 12
-        ELSE 0
-    END AS bonus_rate,
-
-    TRUNCATE(
         CASE
-            WHEN bd.上位者コード IS NOT NULL THEN LEAST(IFNULL(b.plus_carry_bv, 0), 250000) * 0.20
-            WHEN a.上位者ランク = 1 THEN LEAST(IFNULL(b.plus_carry_bv, 0), 5000) * 0.10
-            WHEN a.上位者ランク = 4 THEN LEAST(IFNULL(b.plus_carry_bv, 0), 125000) * 0.12
+            WHEN parent.get_basic_bonus_code IS NOT NULL THEN 1
             ELSE 0
-        END,
-    2
-    ) AS bonus_amount,
+        END AS parent_exists_in_basic_flg
 
-    CASE
-        WHEN bd.上位者コード IS NOT NULL THEN 1
-        ELSE 0
-    END AS blue_daiya_flg
+    FROM basic_id_list AS a
 
-FROM payer_list_prevMonth_users AS a
-JOIN line_flg AS b
-  ON a.上位者コード = b.上位者コード
- AND a.ラインコード = b.ラインコード
+    LEFT JOIN bonus_db.users AS b
+        ON a.get_basic_bonus_code = b.jmoa_code
 
-LEFT JOIN blue_daiya bd
-  ON a.上位者コード = bd.上位者コード
-WHERE b.rn > 1
+    LEFT JOIN bonus_db.users AS c
+        ON b.introducer_code = c.jmoa_code
+
+    LEFT JOIN basic_id_list AS parent
+        ON b.introducer_code = parent.get_basic_bonus_code
+),
+
+-- マッチングの支払いリスト
+pay_matching_list AS (
+    SELECT
+        introducer_code,
+        send_bv_name AS jwoa_name,
+        get_basic_bonus_code,
+        get_basic_bonus_name,
+        sum_bonus_amount,
+        parent_exists_in_basic_flg
+    FROM basic_bonus_with_direct_downline
+    WHERE parent_exists_in_basic_flg = 1
+    order by introducer_code
+),
+
+-- マッチングボーナスの支払い対象者
+matching_root_list AS (
+    SELECT DISTINCT
+        introducer_code
+    FROM pay_matching_list
+    WHERE introducer_code IS NOT NULL
+),
+
+-- マッチングボーナスの支払い対象者のアクティブ紹介者数
+matching_active_cnt AS (
+    SELECT
+        a.introducer_code,
+        COUNT(DISTINCT b.jmoa_code) AS active_count
+    FROM matching_root_list AS a
+    LEFT JOIN bonus_db.users AS b
+        ON a.introducer_code = b.introducer_code
+    INNER JOIN active_users AS au
+        ON au.jwoa_code = b.jmoa_code
+    GROUP BY
+        a.introducer_code
+),
+
+-- ベーシックボーナスの支払い対象者
+basic_paid_list AS (
+    SELECT DISTINCT
+        get_basic_bonus_code
+    FROM pay_matching_list
+    WHERE get_basic_bonus_code IS NOT NULL
+),
+
+-- introducer_code を起点に配置ツリーを下にたどる
+introducer_downline_tree AS (
+
+    -- 起点
+    SELECT
+        r.introducer_code AS root_introducer_code,
+
+        u.placement_code,
+        p.send_bv_name AS placement_name,
+
+        u.jmoa_code,
+        u.send_bv_name,
+
+        0 AS tree_level,
+
+        -- 起点が basic_paid_list に存在する場合
+        CASE
+            WHEN bp.get_basic_bonus_code IS NOT NULL THEN 1
+            ELSE NULL
+        END AS matching_level
+
+    FROM matching_root_list AS r
+
+    INNER JOIN bonus_db.users AS u
+        ON u.jmoa_code = r.introducer_code
+
+    LEFT JOIN bonus_db.users AS p
+        ON p.jmoa_code = u.placement_code
+
+    LEFT JOIN basic_paid_list AS bp
+        ON bp.get_basic_bonus_code = u.jmoa_code
+
+    UNION ALL
+
+    -- 下にたどる
+    SELECT
+        t.root_introducer_code,
+
+        u.placement_code,
+        parent.send_bv_name AS placement_name,
+
+        u.jmoa_code,
+        u.send_bv_name,
+
+        t.tree_level + 1 AS tree_level,
+
+        -- basic_paid_list に一致した時だけ番号を増やす
+        CASE
+            WHEN bp.get_basic_bonus_code IS NOT NULL
+                THEN COALESCE(t.matching_level, 0) + 1
+            ELSE NULL
+        END AS matching_level
+
+    FROM introducer_downline_tree AS t
+
+    INNER JOIN bonus_db.users AS u
+        ON u.placement_code = t.jmoa_code
+
+    LEFT JOIN bonus_db.users AS parent
+        ON parent.jmoa_code = u.placement_code
+
+    LEFT JOIN basic_paid_list AS bp
+        ON bp.get_basic_bonus_code = u.jmoa_code
+),
+
+-- ツリー階層リスト
+introducer_tree_level AS (
+    SELECT
+        root_introducer_code,
+        placement_code,
+        placement_name,
+        jmoa_code,
+        send_bv_name,
+        tree_level,
+        matching_level
+    FROM introducer_downline_tree
+),
+
+-- pay_matching_list に level と matching_level を追加
+pay_matching_with_level AS (
+    SELECT
+        pml.*,
+        itl.tree_level,
+        itl.matching_level
+
+    FROM pay_matching_list AS pml
+
+    LEFT JOIN introducer_tree_level AS itl
+        ON pml.introducer_code = itl.root_introducer_code
+       AND pml.get_basic_bonus_code = itl.jmoa_code
+
+    ORDER BY
+        pml.introducer_code,
+        itl.tree_level,
+        pml.get_basic_bonus_code
+),
+
+--
+pay_matching_with_level_addcount as (
+SELECT
+ a.*,
+ b.active_count
+FROM pay_matching_with_level as a
+left join matching_active_cnt as b
+on a.introducer_code = b.introducer_code
+order by a.introducer_code
 )
 
 
-select
- *
-from ans_basic_bonus
+SELECT
+    introducer_code,
+    jwoa_name,
+    active_count,
+
+    SUM(sum_bonus_amount) AS sum_bonus_amount,
+
+    TRUNCATE(SUM(sum_bonus_amount) * 0.10, 2) AS matching_bonus_amount
+
+FROM pay_matching_with_level_addcount
+WHERE
+    matching_level IS NOT NULL
+    AND matching_level <= CASE
+        WHEN active_count >= 3 THEN 3
+        ELSE active_count
+    END
+GROUP BY
+    introducer_code,
+    jwoa_name,
+    active_count
+ORDER BY
+    introducer_code;
         """
 
         params = [
-            selected_kibetu,
             be_start_dt,
             be_end_dt,
-            start_dt,
-            end_dt,
-            start_dt,
-            end_dt,
+            selected_kibetu,
         ]
 
         with connections["rds"].cursor() as cursor:
@@ -3787,6 +3748,126 @@ class S_BasicBonusView(generic.ListView):
             FROM bonus_db.B_drive_bonus_result
             WHERE kibetu = %s
             ORDER BY introducer_code, jwoa_code
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, [selected_kibetu])
+            logger.info(f"Executed SQL: {cursor._executed}")
+            cols = [c[0] for c in cursor.description]
+            rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+        ctx["rows"] = rows
+
+        return ctx
+
+
+
+
+class S_MatchingBonusView(generic.ListView):
+    template_name = "s_matching_bonus.html"
+    context_object_name = "object_list"
+    model = PeriodMaster
+
+    def get_queryset(self):
+        # B_drive_bonus_result に登録済みの期別だけ取得
+        with connections["rds"].cursor() as cursor:
+            cursor.execute("""
+                SELECT DISTINCT kibetu
+                FROM bonus_db.B_matching_bonus_result
+                ORDER BY kibetu
+            """)
+            registered_kibetu_list = [row[0] for row in cursor.fetchall()]
+
+        if not registered_kibetu_list:
+            return PeriodMaster.objects.using("rds").none()
+
+        return (
+            PeriodMaster.objects.using("rds")
+            .filter(kibetu__in=registered_kibetu_list)
+            .order_by("kibetu")
+        )
+
+    def get(self, request, *args, **kwargs):
+        self.object_list = self.get_queryset()
+        context = self.get_context_data()
+
+        if request.GET.get("export") == "excel":
+            rows = context.get("rows", [])
+
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "MatchingBonusResult"
+
+            headers = ["kibetu", "introducer_code", "introducer_name", "active_count", "basic_bv", "matching_bv", "created_at"]
+            ws.append(headers)
+
+            for r in rows:
+                ws.append([
+                    r.get("kibetu"),
+                    r.get("introducer_code"),
+                    r.get("introducer_name"),
+                    r.get("active_count"),
+                    r.get("basic_bv"),
+                    r.get("matching_bv"),
+                    r.get("created_at"),
+                ])
+
+            ws.column_dimensions["A"].width = 18
+            ws.column_dimensions["B"].width = 15
+            ws.column_dimensions["C"].width = 15
+            ws.column_dimensions["D"].width = 25
+            ws.column_dimensions["E"].width = 12
+            ws.column_dimensions["F"].width = 15
+
+            for row_idx in range(2, ws.max_row + 1):
+                ws[f"E{row_idx}"].number_format = '#,##0'
+                ws[f"F{row_idx}"].number_format = '#,##0.00'
+
+            response = HttpResponse(
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            response["Content-Disposition"] = 'attachment; filename="matching_bonus_result.xlsx"'
+
+            wb.save(response)
+            return response
+
+        return self.render_to_response(context)
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        selected_kibetu = self.request.GET.get("kibetu")
+
+        # 期別未選択なら、登録済み期別の先頭を自動選択
+        if not selected_kibetu and self.object_list:
+            selected_kibetu = self.object_list[0].kibetu
+
+        ctx["selected_kibetu"] = selected_kibetu
+        ctx["rows"] = []
+        ctx["selected_period"] = None
+
+        if not selected_kibetu:
+            return ctx
+
+        period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
+        if not period:
+            return ctx
+
+        ctx["selected_period"] = period
+
+        sql = """
+            SELECT
+                id,
+                kibetu,
+                introducer_code,
+                introducer_name,
+                active_count,
+                basic_bv,
+                matching_bv,
+                created_at
+            FROM bonus_db.B_matching_bonus_result
+            WHERE kibetu = %s
+            ORDER BY introducer_code
         """
 
         with connections["rds"].cursor() as cursor:

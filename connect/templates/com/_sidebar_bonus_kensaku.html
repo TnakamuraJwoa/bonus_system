@@ -12,7 +12,7 @@
            href="{% url 'connect:s_basic_bonus' %}">ベーシックボーナス</a>
 
         <a class="list-group-item list-group-item-action {% if active_menu == 'matching_bonus' %}active{% endif %}"
-           href="#">#マッチングボーナス</a>
+           href="{% url 'connect:s_matching_bonus' %}">マッチングボーナス</a>
 
         <a class="list-group-item list-group-item-action {% if active_menu == 'title_bonus' %}active{% endif %}"
            href="#">#タイトルボーナス</a>
@@ -24,7 +24,10 @@
            href="#">#再購入オーバーボーナス</a>
 
         <a class="list-group-item list-group-item-action {% if active_menu == 'three_star' %}active{% endif %}"
-           href="#">#3スター</a>
+           href="#">#3スターダイヤグローバル配当(Q)</a>
+
+        <a class="list-group-item list-group-item-action {% if active_menu == 'three_star' %}active{% endif %}"
+           href="#">#クラウンダイヤグローバル配当(Y)</a>
 
 
       </div>

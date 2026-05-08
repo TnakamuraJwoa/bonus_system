@@ -29,6 +29,7 @@ urlpatterns = [
 
     path('s_drive_bonus/', views.S_DriveBonusView.as_view(), name = "s_drive_bonus"),
     path('s_basic_bonus/', views.S_BasicBonusView.as_view(), name = "s_basic_bonus"),
+    path('s_matching_bonus/', views.S_MatchingBonusView.as_view(), name = "s_matching_bonus"),
 
 
 ]

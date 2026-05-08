@@ -15,50 +15,33 @@
       {% endif %}
     </div>
 
-    {% include "com/_sidebar_bonus_keisan.html" with active_menu="matching_bonus" %}
+    {% include "com/_sidebar_bonus_kensaku.html" with active_menu="matching_bonus" %}
 
     <main class="col-12 col-md-9 col-lg-10 d-flex flex-column" style="height: calc(100% - 24px); overflow: hidden;">
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <h5 class="mb-3">【ボーナス計算 - マッチングボーナス】</h5>
+          <h5 class="mb-3">【ボーナス検索 - マッチングボーナス】</h5>
 
-          <div class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+          <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+            <div>
+              <label class="form-label mb-0 small text-muted">期別</label>
+              <select name="kibetu" class="form-select">
+                {% for obj in object_list %}
+                  <option value="{{ obj.kibetu }}"
+                          {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
+                    【{{ obj.kibetu }}】 ({{ obj.st_date }} - {{ obj.end_date }})
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
 
-            <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
-              <div>
-                <label class="form-label mb-0 small text-muted">期別</label>
-                <select name="kibetu" class="form-select">
-                  {% for obj in object_list %}
-                    <option value="{{ obj.kibetu }}"
-                            {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
-                      【{{ obj.kibetu }}】 ({{ obj.st_date }} - {{ obj.end_date }})
-                    </option>
-                  {% endfor %}
-                </select>
-              </div>
-
-              <button type="submit" class="btn btn-primary">表示</button>
-
-              <a class="btn btn-outline-secondary" href="{% url 'connect:basic_bonus' %}">
-                リセット
-              </a>
-            </form>
-
-            {% if selected_period and rows %}
-              <form method="post" class="mb-0"
-                    onsubmit="return confirm('表示中のマッチングボーナス結果を登録しますか？すでに登録済みの場合は上書き更新されます。');">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="register_basic_bonus">
-                <input type="hidden" name="kibetu" value="{{ selected_kibetu }}">
-
-                <button type="submit" class="btn btn-warning">
-                  この期別の結果を登録
-                </button>
-              </form>
-            {% endif %}
-
-          </div>
+            <button type="submit" class="btn btn-primary">表示</button>
+            <a class="btn btn-outline-secondary" href="{% url 'connect:drive_bonus' %}">リセット</a>
+            <button type="submit" name="export" value="excel" class="btn btn-success">
+              Excel出力
+            </button>
+          </form>
 
           {% if selected_period %}
             <div class="text-muted small mt-3">
@@ -85,22 +68,25 @@
               <table class="table table-bordered table-sm align-middle mb-0">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                   <tr>
+                    <th>期別</th>
                     <th>紹介者コード</th>
                     <th>紹介者名</th>
-                    <th>直紹介数(アクティブ)</th>
+                    <th>直紹介アクティブ人数</th>
                     <th>ベーシックBV</th>
                     <th>マッチングBV</th>
+                    <th>作成日時</th>
                   </tr>
                 </thead>
-
                 <tbody>
                   {% for r in rows %}
                     <tr>
+                      <td>{{ r.kibetu }}</td>
                       <td>{{ r.introducer_code }}</td>
-                      <td>{{ r.jwoa_name }}</td>
+                      <td>{{ r.introducer_name }}</td>
                       <td>{{ r.active_count }}</td>
-                      <td>{{ r.sum_bonus_amount }}</td>
-                      <td>{{ r.matching_bonus_amount }}</td>
+                      <td>{{ r.basic_bv }}</td>
+                      <td>{{ r.matching_bv }}</td>
+                      <td>{{ r.created_at }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>
@@ -111,7 +97,7 @@
             {% if selected_kibetu %}
               <p class="mb-0">この期間のデータはありません。</p>
             {% else %}
-              <p class="mb-0 text-muted">期別を選択して「表示」を押してください。</p>
+              <p class="mb-0 text-muted">期別を選択して「選択」を押してください。</p>
             {% endif %}
           {% endif %}
 
