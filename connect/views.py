@@ -1354,9 +1354,9 @@ class BasicBonusView(generic.ListView):
 
 
         params = [
+            selected_kibetu,
             prev_year,
             prev_month,
-            selected_kibetu,
             be_start_dt,
             be_end_dt,
             start_dt,

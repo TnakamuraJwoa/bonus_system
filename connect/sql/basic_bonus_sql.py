@@ -1,12 +1,6 @@
 BASIC_BONUS_SQL = """
 WITH RECURSIVE
 
--- アクティブ会員
-is_active_users as (
-select *, 50 as bv
-from bonus_db.active_users
-where year = %s and month = %s
-),
 
 -- 前週の期別
 prev_kibetu AS (
@@ -20,8 +14,17 @@ prev_kibetu AS (
     WHERE kibetu = %s
 ),
 
+
+-- アクティブ会員
+is_active_users as (
+select *, 50 as bv
+from bonus_db.active_users
+where year = %s and month = %s
+),
+
+
 -- 前週のベーシック繰り越しBV
-prev_week_basic_carry_over_bv AS (
+prev_basic_carry_over_bv AS (
     SELECT
         kibetu,
         placement_code,
@@ -48,7 +51,7 @@ sum_prev_purchasers_list AS (
             p.bv
         FROM bonus_db.purchase_info_list p
         WHERE p.bonus_payment_date >= %s
-          AND p.bonus_payment_date <  %s
+          AND p.bonus_payment_date < %s
 
         UNION ALL
 
@@ -60,6 +63,15 @@ sum_prev_purchasers_list AS (
     ) x
     GROUP BY x.jwoa_code
     HAVING SUM(IFNULL(x.bv, 0)) >= 50
+),
+
+
+-- 繰り越しBV(アクティブ会員だけ)
+active_prev_basic_carry_over_bv as (
+select a.*
+from prev_basic_carry_over_bv as a
+join sum_prev_purchasers_list as b
+on a.placement_code = b.jwoa_code
 ),
 
 
@@ -75,7 +87,7 @@ repurchase_list AS (
     FROM bonus_db.purchase_info_list AS p
     WHERE order_type IN (101, 105)
       AND bonus_payment_date >= %s
-      AND bonus_payment_date <  %s
+      AND bonus_payment_date < %s
 ),
 
 -- ランクアップ、初回購入情報リスト
@@ -90,7 +102,7 @@ rank_up_list AS (
     FROM bonus_db.purchase_info_list AS p
     WHERE order_type IN (102, 103)
       AND bonus_payment_date >= %s
-      AND bonus_payment_date <  %s
+      AND bonus_payment_date < %s
 ),
 
 -- 再購入リスト + ランクアップ、初回購入情報リスト
@@ -190,44 +202,71 @@ left join purchase_sum_bv as p_sum_bv
 order by pl.上位者名, pl.ラインコード, 階層
 ),
 
+-- 支払い者のリスト_in_前月の購入情報 + 繰り越しBV
+payer_list_prevMonth_users_add_carry_bv as (
+SELECT
+    上位者コード,
+    上位者名,
+    ラインコード,
+    購入者コード,
+    購入者名,
+    sum_bv,
+    0 AS carry_flg
+FROM payer_list_prevMonth_users
+
+UNION ALL
+
+SELECT
+    placement_code AS 上位者コード,
+    '' AS 上位者名,
+    jwoa_code AS ラインコード,
+    '' AS 購入者コード,
+    '' AS 購入者名,
+    carry_over_bv AS sum_bv,
+    1 AS carry_flg
+FROM active_prev_basic_carry_over_bv
+),
+
+sum_payer_list_prevMonth_users_add_carry_bv as (
+select 
+ 上位者コード,
+ ラインコード,
+ sum(sum_bv) as line_bv
+from payer_list_prevMonth_users_add_carry_bv
+group by
+ 上位者コード,
+ ラインコード
+),
 
 -- 収入ライン or 基本ラインの判定
 line_flg AS (
 SELECT
     a.*,
-    IFNULL(b.carry_over_bv, 0) AS carry_over_bv,
-    a.line_bv + IFNULL(b.carry_over_bv, 0) AS plus_carry_bv,
 
     CASE
         WHEN ROW_NUMBER() OVER (
             PARTITION BY a.上位者コード
-            ORDER BY a.line_bv + IFNULL(b.carry_over_bv, 0) DESC
+            ORDER BY a.plus_carry_bv DESC
         ) >= 3
         THEN 2
 
         ELSE ROW_NUMBER() OVER (
             PARTITION BY a.上位者コード
-            ORDER BY a.line_bv + IFNULL(b.carry_over_bv, 0) DESC
+            ORDER BY a.plus_carry_bv DESC
         )
     END AS rn
 
 FROM (
     SELECT
         上位者コード,
-        上位者名,
-        上位者ランク,
         ラインコード,
-        SUM(sum_bv) AS line_bv
-    FROM payer_list_prevMonth_users
+        SUM(line_bv) AS plus_carry_bv
+    FROM sum_payer_list_prevMonth_users_add_carry_bv
     GROUP BY
         上位者コード,
-        上位者名,
-        上位者ランク,
         ラインコード
 ) AS a
-LEFT JOIN prev_week_basic_carry_over_bv b
-  ON a.上位者コード = b.placement_code
- AND a.ラインコード = b.jwoa_code
+order by 上位者コード
 ),
 
 -- ブルーダイヤ
@@ -244,28 +283,26 @@ HAVING
 -- ans_basic_bonus
 ans_basic_bonus AS (
 SELECT
-    a.上位者コード as placement_code,
-    a.上位者名 as placement_name,
-    a.上位者ランク as placement_rank,
+    a.上位者コード,
+    a.上位者名,
+    b.new_rank as 上位者ランク,
     a.ラインコード as line_code,
-    a.購入者コード as purchaser_code,
-    a.購入者名 as purchaser_name,
-    a.階層 as level,
+    a.購入者コード,
+    a.購入者名,
     a.sum_bv,
-    IFNULL(b.plus_carry_bv, 0) as plus_carry_bv,
 
     CASE
         WHEN bd.上位者コード IS NOT NULL THEN 20
-        WHEN a.上位者ランク = 1 THEN 10
-        WHEN a.上位者ランク = 4 THEN 12
+        WHEN b.new_rank = 1 THEN 10
+        WHEN b.new_rank = 4 THEN 12
         ELSE 0
     END AS bonus_rate,
 
     TRUNCATE(
         CASE
-            WHEN bd.上位者コード IS NOT NULL THEN LEAST(IFNULL(b.plus_carry_bv, 0), 250000) * 0.20
-            WHEN a.上位者ランク = 1 THEN LEAST(IFNULL(b.plus_carry_bv, 0), 5000) * 0.10
-            WHEN a.上位者ランク = 4 THEN LEAST(IFNULL(b.plus_carry_bv, 0), 125000) * 0.12
+            WHEN bd.上位者コード IS NOT NULL THEN LEAST(IFNULL(a.sum_bv, 0), 250000) * 0.20
+            WHEN b.new_rank = 1 THEN LEAST(IFNULL(a.sum_bv, 0), 5000) * 0.10
+            WHEN b.new_rank = 4 THEN LEAST(IFNULL(a.sum_bv, 0), 125000) * 0.12
             ELSE 0
         END,
     2
@@ -276,18 +313,24 @@ SELECT
         ELSE 0
     END AS blue_daiya_flg
 
-FROM payer_list_prevMonth_users AS a
-JOIN line_flg AS b
-  ON a.上位者コード = b.上位者コード
- AND a.ラインコード = b.ラインコード
+FROM payer_list_prevMonth_users_add_carry_bv AS a
+
+JOIN line_flg
+  ON a.上位者コード = line_flg.上位者コード
+ AND a.ラインコード = line_flg.ラインコード
+ AND line_flg.rn = 2
+
+left join bonus_db.users_target_rank as b
+on a.上位者コード = b.jmoa_code
 
 LEFT JOIN blue_daiya bd
   ON a.上位者コード = bd.上位者コード
-WHERE b.rn > 1
 )
 
 
 select
  *
 from ans_basic_bonus
+where bonus_amount > 0
+order by 上位者コード, 購入者コード
 """

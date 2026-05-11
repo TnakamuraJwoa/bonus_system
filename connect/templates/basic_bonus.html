@@ -91,10 +91,8 @@
                     <th>ラインコード</th>
                     <th>購入者コード</th>
                     <th>購入者名</th>
-                    <th>階層</th>
                     <th>sum_bv</th>
-                    <th>plus_carry_bv</th>
-                    <th>bonus_rate</th>
+                    <th>rate</th>
                     <th>bonus_amount</th>
                     <th>blue_daiya_flg</th>
                   </tr>
@@ -103,15 +101,13 @@
                 <tbody>
                   {% for r in rows %}
                     <tr>
-                      <td>{{ r.placement_code }}</td>
-                      <td>{{ r.placement_name }}</td>
-                      <td>{{ r.placement_rank }}</td>
+                      <td>{{ r.上位者コード }}</td>
+                      <td>{{ r.上位者名 }}</td>
+                      <td>{{ r.上位者ランク }}</td>
                       <td>{{ r.line_code }}</td>
-                      <td>{{ r.purchaser_code }}</td>
-                      <td>{{ r.purchaser_name }}</td>
-                      <td>{{ r.level }}</td>
+                      <td>{{ r.購入者コード }}</td>
+                      <td>{{ r.購入者名 }}</td>
                       <td class="text-end">{{ r.sum_bv }}</td>
-                      <td class="text-end">{{ r.plus_carry_bv }}</td>
                       <td class="text-end">{{ r.bonus_rate }}</td>
                       <td class="text-end">{{ r.bonus_amount }}</td>
                       <td class="text-end">{{ r.blue_daiya_flg }}</td>
