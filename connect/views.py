@@ -1260,23 +1260,19 @@ class BasicBonusView(generic.ListView):
                     line_code,
                     purchaser_code,
                     purchaser_name,
-                    level,
                     sum_bv,
-                    plus_carry_bv,
                     bonus_rate,
                     bonus_amount,
                     blue_daiya_flg,
                     created_at
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
+                    %s, %s, %s, %s, %s,%s, %s, %s, %s, %s, %s, NOW()
                 )
                 ON DUPLICATE KEY UPDATE
                     placement_name = VALUES(placement_name),
                     placement_rank = VALUES(placement_rank),
                     purchaser_name = VALUES(purchaser_name),
-                    level = VALUES(level),
                     sum_bv = VALUES(sum_bv),
-                    plus_carry_bv = VALUES(plus_carry_bv),
                     bonus_rate = VALUES(bonus_rate),
                     bonus_amount = VALUES(bonus_amount),
                     blue_daiya_flg = VALUES(blue_daiya_flg),
@@ -1287,15 +1283,13 @@ class BasicBonusView(generic.ListView):
             for r in rows:
                 insert_params.append([
                     selected_kibetu,
-                    r.get("placement_code") or "",
-                    r.get("placement_name") or "",
-                    r.get("placement_rank") or 0,
+                    r.get("上位者コード") or "",
+                    r.get("上位者名") or "",
+                    r.get("上位者ランク") or 0,
                     r.get("line_code") or "",
-                    r.get("purchaser_code") or "",
-                    r.get("purchaser_name") or "",
-                    r.get("level") or 0,
+                    r.get("購入者コード") or "",
+                    r.get("購入者名") or "",
                     r.get("sum_bv") or 0,
-                    r.get("plus_carry_bv") or 0,
                     r.get("bonus_rate") or 0,
                     r.get("bonus_amount") or 0,
                     r.get("blue_daiya_flg") or 0,
