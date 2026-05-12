@@ -68,23 +68,35 @@
               <table class="table table-bordered table-sm align-middle mb-0">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                   <tr>
-                    <th>タイトル</th>
-                    <th>紹介者ID</th>
-                    <th>会員ID</th>
-                    <th>会員名</th>
+                    <th>期別</th>
+                    <th>上位者コード</th>
+                    <th>上位者名</th>
+                    <th>上位者ランク</th>
+                    <th>ラインコード</th>
+                    <th>購入者コード</th>
+                    <th>購入者名</th>
                     <th>BV合計</th>
-                    <th>報酬</th>
+                    <th>レート</th>
+                    <th>ボーナス金額</th>
+                    <th>ブルーダイヤ判定</th>
+                    <th>作成日時</th>
                   </tr>
                 </thead>
                 <tbody>
                   {% for r in rows %}
                     <tr>
-                      <td>{{ r.title_name }}</td>
-                      <td>{{ r.introducer_code }}</td>
-                      <td>{{ r.jwoa_code }}</td>
-                      <td>{{ r.jwoa_name }}</td>
+                      <td>{{ r.kibetu }}</td>
+                      <td>{{ r.placement_code }}</td>
+                      <td>{{ r.placement_name }}</td>
+                      <td>{{ r.placement_rank }}</td>
+                      <td>{{ r.line_code }}</td>
+                      <td>{{ r.purchaser_code }}</td>
+                      <td>{{ r.purchaser_name }}</td>
                       <td>{{ r.sum_bv }}</td>
-                      <td>{{ r.sum_bonus_amount }}</td>
+                      <td>{{ r.bonus_rate }}</td>
+                      <td>{{ r.bonus_amount }}</td>
+                      <td>{{ r.blue_daiya_flg }}</td>
+                      <td>{{ r.created_at }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

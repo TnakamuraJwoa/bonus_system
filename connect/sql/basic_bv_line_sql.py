@@ -269,68 +269,57 @@ FROM (
 order by 上位者コード
 ),
 
--- ブルーダイヤ
-blue_daiya as (
-SELECT 上位者コード
-FROM line_flg
-WHERE rn IN (1, 2)
-GROUP BY 上位者コード
-HAVING
-    COUNT(*) = 2
-    AND MIN(plus_carry_bv) >= 250000
+-- 基本ライン、収入ラインごとに合計
+sum_line_flg as (
+select
+ 上位者コード,
+ rn,
+ sum(plus_carry_bv) as sum_plus_carry_bv
+from line_flg
+group by
+ 上位者コード,
+ rn
+order by
+ 上位者コード,
+ rn
 ),
 
--- ans_basic_bonus
-ans_basic_bonus AS (
+-- rn1 - rn2
+line_diff AS (
 SELECT
-    a.上位者コード,
-    a.上位者名,
-    b.new_rank as 上位者ランク,
-    a.ラインコード as line_code,
-    a.購入者コード,
-    a.購入者名,
-    a.sum_bv,
+    上位者コード,
 
-    CASE
-        WHEN bd.上位者コード IS NOT NULL THEN 20
-        WHEN b.new_rank = 1 THEN 10
-        WHEN b.new_rank = 4 THEN 12
-        ELSE 0
-    END AS bonus_rate,
+    IFNULL(
+        MAX(CASE WHEN rn = 1 THEN sum_plus_carry_bv END),
+        0
+    ) AS rn1_bv,
 
-    TRUNCATE(
-        CASE
-            WHEN bd.上位者コード IS NOT NULL THEN LEAST(IFNULL(a.sum_bv, 0), 250000) * 0.20
-            WHEN b.new_rank = 1 THEN LEAST(IFNULL(a.sum_bv, 0), 5000) * 0.10
-            WHEN b.new_rank = 4 THEN LEAST(IFNULL(a.sum_bv, 0), 125000) * 0.12
-            ELSE 0
-        END,
-    2
-    ) AS bonus_amount,
+    IFNULL(
+        MAX(CASE WHEN rn = 2 THEN sum_plus_carry_bv END),
+        0
+    ) AS rn2_bv,
 
-    CASE
-        WHEN bd.上位者コード IS NOT NULL THEN 1
-        ELSE 0
-    END AS blue_daiya_flg
+    IFNULL(
+        MAX(CASE WHEN rn = 1 THEN sum_plus_carry_bv END),
+        0
+    )
+    -
+    IFNULL(
+        MAX(CASE WHEN rn = 2 THEN sum_plus_carry_bv END),
+        0
+    ) AS diff_bv
 
-FROM payer_list_prevMonth_users_add_carry_bv AS a
-
-JOIN line_flg
-  ON a.上位者コード = line_flg.上位者コード
- AND a.ラインコード = line_flg.ラインコード
- AND line_flg.rn = 2
-
-left join bonus_db.users_target_rank as b
-on a.上位者コード = b.jmoa_code
-
-LEFT JOIN blue_daiya bd
-  ON a.上位者コード = bd.上位者コード
+FROM sum_line_flg
+GROUP BY 上位者コード
 )
 
-
 select
- 'JP05209624' as placement_code,
- 'JP05209633' as jmoa_code,
- 50 as bv,
- 100 as carry_over_bv
+ a.上位者コード as placement_code,
+ a.ラインコード as jmoa_code,
+ 0 as bv,
+ b.diff_bv as carry_over_bv
+from line_flg as a
+left join line_diff as b
+on a.上位者コード = b.上位者コード
+where a.rn = 1
 """

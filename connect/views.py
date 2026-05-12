@@ -2893,16 +2893,20 @@ class S_BasicBonusView(generic.ListView):
             SELECT
                 id,
                 kibetu,
-                title_name,
-                introducer_code,
-                jwoa_code,
-                jwoa_name,
+                placement_code,
+                placement_name,
+                placement_rank,
+                line_code,
+                purchaser_code,
+                purchaser_name,
                 sum_bv,
-                sum_bonus_amount,
+                bonus_rate,
+                bonus_amount,
+                blue_daiya_flg,
                 created_at
-            FROM bonus_db.B_drive_bonus_result
+            FROM bonus_db.B_basic_bonus_result
             WHERE kibetu = %s
-            ORDER BY introducer_code, jwoa_code
+            ORDER BY placement_code, line_code, purchaser_code
         """
 
         with connections["rds"].cursor() as cursor:
