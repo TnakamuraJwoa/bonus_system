@@ -2,7 +2,7 @@
 <nav class="col-12 col-md-3 col-lg-2">
   <div class="card shadow-sm position-sticky" style="top: 1rem;">
     <div class="card-body">
-      <div class="fw-bold mb-2">■ ボーナス計算</div>
+      <div class="fw-bold mb-2">■ 週ボーナス</div>
 
       <div class="list-group">
         <a class="list-group-item list-group-item-action {% if active_menu == 'drive_bonus' %}active{% endif %}"
@@ -13,23 +13,33 @@
 
         <a class="list-group-item list-group-item-action {% if active_menu == 'matching_bonus' %}active{% endif %}"
            href="{% url 'connect:matching_bonus' %}">マッチングボーナス</a>
+      </div>
+    </div>
 
+    <div class="card-body">
+      <div class="fw-bold mb-2">■ 月ボーナス</div>
+
+      <div class="list-group">
         <a class="list-group-item list-group-item-action {% if active_menu == 'title_bonus' %}active{% endif %}"
-           href="#">#タイトルボーナス</a>
+           href="{% url 'connect:title_bonus' %}">タイトルボーナス</a>
 
         <a class="list-group-item list-group-item-action {% if active_menu == 'title_diff_bonus' %}active{% endif %}"
            href="#">#タイトル差額ボーナス</a>
 
         <a class="list-group-item list-group-item-action {% if active_menu == 'repurchase_over_bonus' %}active{% endif %}"
            href="#">#再購入オーバーボーナス</a>
+      </div>
+    </div>
 
+    <div class="card-body">
+      <div class="fw-bold mb-2">■ 特別ボーナス</div>
+
+      <div class="list-group">
         <a class="list-group-item list-group-item-action {% if active_menu == 'three_star' %}active{% endif %}"
            href="#">#3スターダイヤグローバル配当(Q)</a>
 
         <a class="list-group-item list-group-item-action {% if active_menu == 'three_star' %}active{% endif %}"
            href="#">#クラウンダイヤグローバル配当(Y)</a>
-
-
       </div>
     </div>
   </div>
