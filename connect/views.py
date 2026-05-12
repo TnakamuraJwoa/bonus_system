@@ -40,6 +40,10 @@ from connect.sql.repurchase_over_bonus_sql import REPURCHASE_OVER_BONUS_SQL
 from connect.sql.three_star_diamond_global_bonus_q_sql import THREE_STAR_DIAMOND_GLOBAL_BONUS_Q_SQL
 from connect.sql.crown_diamond_global_bonus_y_sql import CROWN_DIAMOND_GLOBAL_BONUS_Y_SQL
 
+from connect.sql.basic_bv_line_sql import BASIC_BV_LINE_SQL
+
+from connect.sql import register_sql
+
 
 logger = logging.getLogger(__name__)
 
@@ -1245,61 +1249,40 @@ class BasicBonusView(generic.ListView):
             return redirect("connect:basic_bonus")
 
         try:
-            rows = self._get_basic_bonus_rows(selected_kibetu, period)
+            basic_bonus_rows = self._get_basic_bonus_rows(selected_kibetu, period)
+            basic_bv_line_rows = self._get_basic_bv_line_rows(selected_kibetu, period)
 
-            if not rows:
+            if not basic_bonus_rows:
                 messages.warning(request, "登録対象データがありません。")
                 return redirect(f"/basic_bonus/?kibetu={selected_kibetu}")
 
-            insert_sql = """
-                INSERT INTO bonus_db.B_basic_bonus_result (
-                    kibetu,
-                    placement_code,
-                    placement_name,
-                    placement_rank,
-                    line_code,
-                    purchaser_code,
-                    purchaser_name,
-                    sum_bv,
-                    bonus_rate,
-                    bonus_amount,
-                    blue_daiya_flg,
-                    created_at
-                ) VALUES (
-                    %s, %s, %s, %s, %s,%s, %s, %s, %s, %s, %s, NOW()
-                )
-                ON DUPLICATE KEY UPDATE
-                    placement_name = VALUES(placement_name),
-                    placement_rank = VALUES(placement_rank),
-                    purchaser_name = VALUES(purchaser_name),
-                    sum_bv = VALUES(sum_bv),
-                    bonus_rate = VALUES(bonus_rate),
-                    bonus_amount = VALUES(bonus_amount),
-                    blue_daiya_flg = VALUES(blue_daiya_flg),
-                    created_at = NOW()
-            """
-
-            insert_params = []
-            for r in rows:
-                insert_params.append([
+            #B_basic_bonus_result
+            insert_sql, insert_params = (
+                register_sql.get_basic_bonus_insert_data(
                     selected_kibetu,
-                    r.get("上位者コード") or "",
-                    r.get("上位者名") or "",
-                    r.get("上位者ランク") or 0,
-                    r.get("line_code") or "",
-                    r.get("購入者コード") or "",
-                    r.get("購入者名") or "",
-                    r.get("sum_bv") or 0,
-                    r.get("bonus_rate") or 0,
-                    r.get("bonus_amount") or 0,
-                    r.get("blue_daiya_flg") or 0,
-                ])
+                    basic_bonus_rows
+                )
+            )
 
+            # 繰り越しBV
+            basic_bv_line_insert_sql, basic_bv_line_insert_params = (
+                register_sql.get_basic_bv_line_insert_data(
+                    selected_kibetu,
+                    basic_bv_line_rows
+                )
+            )
+
+            #登録
             with transaction.atomic(using="rds"):
                 with connections["rds"].cursor() as cursor:
                     cursor.executemany(insert_sql, insert_params)
 
-            messages.success(request, f"{len(rows)}件をベーシックボーナス結果に登録しました。")
+                    if basic_bv_line_insert_params:
+                        cursor.executemany(
+                            basic_bv_line_insert_sql, basic_bv_line_insert_params
+                        )
+
+            messages.success(request, f"{len(basic_bonus_rows)}件をベーシックボーナス結果に登録しました。")
 
         except Exception as e:
             logger.exception("ベーシックボーナス結果登録エラー")
@@ -1361,6 +1344,47 @@ class BasicBonusView(generic.ListView):
 
         with connections["rds"].cursor() as cursor:
             cursor.execute(BASIC_BONUS_SQL, params)
+            logger.info(f"Executed SQL: {cursor._executed}")
+            cols = [c[0] for c in cursor.description]
+            rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+        return rows
+
+
+    def _get_basic_bv_line_rows(self, selected_kibetu, period):
+        st_date = period.st_date
+        end_date = period.end_date
+
+        kibetu_year = int(selected_kibetu[0:4])
+        kibetu_month = int(selected_kibetu[5:7])
+
+        start_dt = make_aware(datetime.combine(st_date, time.min))
+        end_dt = make_aware(datetime.combine(end_date + timedelta(days=1), time.min))
+
+        current_month_first = datetime(kibetu_year, kibetu_month, 1)
+        prev_month_last = current_month_first - timedelta(days=1)
+
+        prev_year = prev_month_last.year
+        prev_month = prev_month_last.month
+
+        be_start_dt = make_aware(datetime(prev_year, prev_month, 1, 0, 0, 0))
+        be_end_dt = make_aware(datetime(kibetu_year, kibetu_month, 1, 0, 0, 0))
+
+
+        params = [
+            selected_kibetu,
+            prev_year,
+            prev_month,
+            be_start_dt,
+            be_end_dt,
+            start_dt,
+            end_dt,
+            start_dt,
+            end_dt,
+        ]
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(BASIC_BV_LINE_SQL, params)
             logger.info(f"Executed SQL: {cursor._executed}")
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
