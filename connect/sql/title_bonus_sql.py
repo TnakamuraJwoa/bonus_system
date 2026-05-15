@@ -475,5 +475,7 @@ LEFT JOIN title_result AS c
 
 
 select * from match_level_add_bv
+where bonus_amount > 0
 order by root_jmoa_code, tree_level, match_level
+
 """

@@ -135,7 +135,36 @@ class DriveBonusView(generic.ListView):
 
             with transaction.atomic(using="rds"):
                 with connections["rds"].cursor() as cursor:
+                    # ドライブボーナス登録
                     cursor.executemany(insert_sql, insert_params)
+
+                    # 履歴登録
+                    history_sql = """
+                        INSERT INTO bonus_db.bonus_register_history (
+                            bonus_name,
+                            kibetu,
+                            registered_at,
+                            registered_by,
+                            comment_text
+                        )
+                        VALUES (
+                            %s,
+                            %s,
+                            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'),
+                            %s,
+                            %s
+                        )
+                    """
+
+                    cursor.execute(
+                        history_sql,
+                        [
+                            "drive_bonus",
+                            selected_kibetu,
+                            request.user.username,
+                            f"{len(rows)}件登録"
+                        ]
+                    )
 
             messages.success(request, f"{len(rows)}件をドライブボーナス結果に登録しました。")
 
@@ -1279,12 +1308,41 @@ class BasicBonusView(generic.ListView):
             #登録
             with transaction.atomic(using="rds"):
                 with connections["rds"].cursor() as cursor:
+                    # ベーシックボーナス登録
                     cursor.executemany(insert_sql, insert_params)
 
                     if basic_bv_line_insert_params:
                         cursor.executemany(
                             basic_bv_line_insert_sql, basic_bv_line_insert_params
                         )
+
+                    # 履歴登録
+                    history_sql = """
+                        INSERT INTO bonus_db.bonus_register_history (
+                            bonus_name,
+                            kibetu,
+                            registered_at,
+                            registered_by,
+                            comment_text
+                        )
+                        VALUES (
+                            %s,
+                            %s,
+                            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'),
+                            %s,
+                            %s
+                        )
+                    """
+
+                    cursor.execute(
+                        history_sql,
+                        [
+                            "basic_bonus",
+                            selected_kibetu,
+                            request.user.username,
+                            f"{len(basic_bonus_rows)}件登録"
+                        ]
+                    )
 
             messages.success(request, f"{len(basic_bonus_rows)}件をベーシックボーナス結果に登録しました。")
 
@@ -2561,8 +2619,36 @@ class MatchingBonusView(generic.ListView):
 
             with transaction.atomic(using="rds"):
                 with connections["rds"].cursor() as cursor:
+                    # マッチングボーナス登録
                     cursor.executemany(insert_sql, insert_params)
 
+                    # 履歴登録
+                    history_sql = """
+                        INSERT INTO bonus_db.bonus_register_history (
+                            bonus_name,
+                            kibetu,
+                            registered_at,
+                            registered_by,
+                            comment_text
+                        )
+                        VALUES (
+                            %s,
+                            %s,
+                            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'),
+                            %s,
+                            %s
+                        )
+                    """
+
+                    cursor.execute(
+                        history_sql,
+                        [
+                            "matching_bonus",
+                            selected_kibetu,
+                            request.user.username,
+                            f"{len(rows)}件登録"
+                        ]
+                    )
             messages.success(request, f"{len(rows)}件をマッチングボーナス結果に登録しました。")
 
         except Exception as e:
@@ -3035,12 +3121,39 @@ class TitleBonusView(generic.ListView):
                 )
             )
 
-
             #登録
             with transaction.atomic(using="rds"):
                 with connections["rds"].cursor() as cursor:
+                    # タイトルボーナス登録
                     cursor.executemany(insert_sql, insert_params)
 
+                    # 履歴登録
+                    history_sql = """
+                        INSERT INTO bonus_db.bonus_register_history (
+                            bonus_name,
+                            kibetu,
+                            registered_at,
+                            registered_by,
+                            comment_text
+                        )
+                        VALUES (
+                            %s,
+                            %s,
+                            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'),
+                            %s,
+                            %s
+                        )
+                    """
+
+                    cursor.execute(
+                        history_sql,
+                        [
+                            "title_bonus",
+                            selected_kibetu,
+                            request.user.username,
+                            f"{len(title_bonus_rows)}件登録"
+                        ]
+                    )
 
             messages.success(request, f"{len(title_bonus_rows)}件をタイトルボーナス結果に登録しました。")
 
@@ -3112,3 +3225,176 @@ class TitleBonusView(generic.ListView):
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
 
         return rows
+
+
+
+class S_TitleBonusView(generic.ListView):
+    template_name = "s_title_bonus.html"
+    context_object_name = "object_list"
+    model = PeriodMaster
+
+    def get_queryset(self):
+
+        # B_title_bonus_result に登録済みの期別だけ取得
+        with connections["rds"].cursor() as cursor:
+            cursor.execute("""
+                SELECT DISTINCT kibetu
+                FROM bonus_db.B_title_bonus_result
+                ORDER BY kibetu DESC
+            """)
+            registered_kibetu_list = [row[0] for row in cursor.fetchall()]
+
+        if not registered_kibetu_list:
+            return PeriodMaster.objects.using("rds").none()
+
+        return (
+            PeriodMaster.objects.using("rds")
+            .filter(kibetu__in=registered_kibetu_list)
+            .order_by("-kibetu")
+        )
+
+    def get(self, request, *args, **kwargs):
+        self.object_list = self.get_queryset()
+        context = self.get_context_data()
+
+        # Excel export
+        if request.GET.get("export") == "excel":
+
+            rows = context.get("rows", [])
+
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "TitleBonusResult"
+
+            headers = [
+                "kibetu",
+                "root_jwoa_code",
+                "root_name",
+                "up_jwoa_code",
+                "down_jwoa_code",
+                "down_name",
+                "tree_level",
+                "match_level",
+                "title_id",
+                "sum_bv",
+                "rate",
+                "bonus_amount",
+                "created_at",
+            ]
+
+            ws.append(headers)
+
+            for r in rows:
+                ws.append([
+                    r.get("kibetu"),
+                    r.get("root_jwoa_code"),
+                    r.get("root_name"),
+                    r.get("up_jwoa_code"),
+                    r.get("down_jwoa_code"),
+                    r.get("down_name"),
+                    r.get("tree_level"),
+                    r.get("match_level"),
+                    r.get("title_id"),
+                    r.get("sum_bv"),
+                    r.get("rate"),
+                    r.get("bonus_amount"),
+                    r.get("created_at"),
+                ])
+
+            ws.column_dimensions["A"].width = 18
+            ws.column_dimensions["B"].width = 18
+            ws.column_dimensions["C"].width = 25
+            ws.column_dimensions["D"].width = 18
+            ws.column_dimensions["E"].width = 18
+            ws.column_dimensions["F"].width = 25
+            ws.column_dimensions["G"].width = 12
+            ws.column_dimensions["H"].width = 12
+            ws.column_dimensions["I"].width = 12
+            ws.column_dimensions["J"].width = 15
+            ws.column_dimensions["K"].width = 12
+            ws.column_dimensions["L"].width = 15
+            ws.column_dimensions["M"].width = 20
+
+            for row_idx in range(2, ws.max_row + 1):
+                ws[f"J{row_idx}"].number_format = '#,##0.00'
+                ws[f"L{row_idx}"].number_format = '#,##0.00'
+
+            response = HttpResponse(
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+            response["Content-Disposition"] = (
+                'attachment; filename="title_bonus_result.xlsx"'
+            )
+
+            wb.save(response)
+
+            return response
+
+        return self.render_to_response(context)
+
+    def get_context_data(self, **kwargs):
+
+        ctx = super().get_context_data(**kwargs)
+
+        selected_kibetu = self.request.GET.get("kibetu")
+
+        # 期別未選択なら先頭を自動選択
+        if not selected_kibetu and self.object_list:
+            selected_kibetu = self.object_list[0].kibetu
+
+        ctx["selected_kibetu"] = selected_kibetu
+        ctx["rows"] = []
+        ctx["selected_period"] = None
+
+        if not selected_kibetu:
+            return ctx
+
+        period = (
+            PeriodMaster.objects.using("rds")
+            .filter(kibetu=selected_kibetu)
+            .first()
+        )
+
+        if not period:
+            return ctx
+
+        ctx["selected_period"] = period
+
+        sql = """
+            SELECT
+                id,
+                kibetu,
+                root_jwoa_code,
+                root_name,
+                up_jwoa_code,
+                down_jwoa_code,
+                down_name,
+                tree_level,
+                match_level,
+                title_id,
+                sum_bv,
+                rate,
+                bonus_amount,
+                created_at
+            FROM bonus_db.B_title_bonus_result
+            WHERE kibetu = %s
+            ORDER BY root_jwoa_code, match_level
+        """
+
+        with connections["rds"].cursor() as cursor:
+
+            cursor.execute(sql, [selected_kibetu])
+
+            logger.info(f"Executed SQL: {cursor._executed}")
+
+            cols = [c[0] for c in cursor.description]
+
+            rows = [
+                dict(zip(cols, r))
+                for r in cursor.fetchall()
+            ]
+
+        ctx["rows"] = rows
+
+        return ctx
