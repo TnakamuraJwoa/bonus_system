@@ -49,7 +49,7 @@
               <form method="post" class="mb-0"
                     onsubmit="return confirm('表示中のマッチングボーナス結果を登録しますか？すでに登録済みの場合は上書き更新されます。');">
                 {% csrf_token %}
-                <input type="hidden" name="action" value="register_basic_bonus">
+                <input type="hidden" name="action" value="register_matching_bonus">
                 <input type="hidden" name="kibetu" value="{{ selected_kibetu }}">
 
                 <button type="submit" class="btn btn-warning">

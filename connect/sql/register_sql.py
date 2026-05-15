@@ -50,6 +50,65 @@ def get_basic_bonus_insert_data(selected_kibetu, rows):
     return insert_sql, insert_params
 
 
+## タイトルボーナス
+def get_title_bonus_insert_data(selected_kibetu, rows):
+
+    insert_sql = """
+        INSERT INTO bonus_db.B_title_bonus_result (
+            kibetu,
+            root_jwoa_code,
+            root_name,
+            up_jwoa_code,
+            down_jwoa_code,
+            down_name,
+            tree_level,
+            match_level,
+            title_id,
+            sum_bv,
+            rate,
+            bonus_amount,
+            created_at,
+            updated_at
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s,
+            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'),
+            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo')
+        )
+        ON DUPLICATE KEY UPDATE
+            root_name = VALUES(root_name),
+            up_jwoa_code = VALUES(up_jwoa_code),
+            down_name = VALUES(down_name),
+            tree_level = VALUES(tree_level),
+            match_level = VALUES(match_level),
+            title_id = VALUES(title_id),
+            sum_bv = VALUES(sum_bv),
+            rate = VALUES(rate),
+            bonus_amount = VALUES(bonus_amount),
+            updated_at = CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo')
+    """
+
+    insert_params = []
+
+    for r in rows:
+        insert_params.append([
+            selected_kibetu,
+            r.get("root_jmoa_code") or "",
+            r.get("root_name") or "",
+            r.get("up_jwoa_code") or "",
+            r.get("down_jwoa_code") or "",
+            r.get("down_name") or "",
+            r.get("tree_level") or 0,
+            r.get("match_level") or 0,
+            r.get("title_id") or 0,
+            r.get("sum_bv") or 0,
+            r.get("rate") or 0,
+            r.get("bonus_amount") or 0,
+        ])
+
+    return insert_sql, insert_params
+
+
 ## basic_bv_line
 ## 繰り越しBV
 def get_basic_bv_line_insert_data(selected_kibetu, rows):

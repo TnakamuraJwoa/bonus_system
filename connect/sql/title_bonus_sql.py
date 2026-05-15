@@ -413,50 +413,50 @@ SELECT
     c.title_id,
 
     CASE
-        WHEN c.title_id = 1 AND a.match_level <= 1
+        WHEN c.title_id = 6 AND a.match_level <= 1
         THEN 0.02
 
-        WHEN c.title_id = 2 AND a.match_level <= 2
+        WHEN c.title_id = 7 AND a.match_level <= 2
         THEN 0.02
 
-        WHEN c.title_id = 3 AND a.match_level <= 3
+        WHEN c.title_id = 8 AND a.match_level <= 3
         THEN 0.02
 
-        WHEN c.title_id = 4 AND a.match_level <= 3
+        WHEN c.title_id = 9 AND a.match_level <= 3
         THEN 0.02
 
-        WHEN c.title_id = 4 AND a.match_level = 4
+        WHEN c.title_id = 9 AND a.match_level = 4
         THEN 0.01
 
-        WHEN c.title_id IN (5, 6) AND a.match_level <= 3
+        WHEN c.title_id IN (10, 11) AND a.match_level <= 3
         THEN 0.02
 
-        WHEN c.title_id IN (5, 6) AND a.match_level IN (4, 5)
+        WHEN c.title_id IN (10, 11) AND a.match_level IN (4, 5)
         THEN 0.01
 
         ELSE 0
     END AS rate,
 
     CASE
-        WHEN c.title_id = 1 AND a.match_level <= 1
+        WHEN c.title_id = 6 AND a.match_level <= 1
         THEN b.sum_bv * 0.02
 
-        WHEN c.title_id = 2 AND a.match_level <= 2
+        WHEN c.title_id = 7 AND a.match_level <= 2
         THEN b.sum_bv * 0.02
 
-        WHEN c.title_id = 3 AND a.match_level <= 3
+        WHEN c.title_id = 8 AND a.match_level <= 3
         THEN b.sum_bv * 0.02
 
-        WHEN c.title_id = 4 AND a.match_level <= 3
+        WHEN c.title_id = 9 AND a.match_level <= 3
         THEN b.sum_bv * 0.02
 
-        WHEN c.title_id = 4 AND a.match_level = 4
+        WHEN c.title_id = 9 AND a.match_level = 4
         THEN b.sum_bv * 0.01
 
-        WHEN c.title_id IN (5, 6) AND a.match_level <= 3
+        WHEN c.title_id IN (10, 11) AND a.match_level <= 3
         THEN b.sum_bv * 0.02
 
-        WHEN c.title_id IN (5, 6) AND a.match_level IN (4, 5)
+        WHEN c.title_id IN (10, 11) AND a.match_level IN (4, 5)
         THEN b.sum_bv * 0.01
 
         ELSE 0

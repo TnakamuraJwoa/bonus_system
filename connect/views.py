@@ -2508,7 +2508,7 @@ class MatchingBonusView(generic.ListView):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
 
-        if action != "register_basic_bonus":
+        if action != "register_matching_bonus":
             messages.error(request, "不正な操作です。")
             return redirect("connect:matching_bonus")
 
@@ -3007,31 +3007,31 @@ class TitleBonusView(generic.ListView):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
 
-        if action != "register_basic_bonus":
+        if action != "register_title_bonus":
             messages.error(request, "不正な操作です。")
-            return redirect("connect:basic_bonus")
+            return redirect("connect:title_bonus")
 
         if not selected_kibetu:
             messages.error(request, "期別を選択してください。")
-            return redirect("connect:basic_bonus")
+            return redirect("connect:title_bonus")
 
         period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
         if not period:
             messages.error(request, "選択された期別が存在しません。")
-            return redirect("connect:basic_bonus")
+            return redirect("connect:title_bonus")
 
         try:
-            basic_bonus_rows = self._get_title_bonus_rows(selected_kibetu, period)
+            title_bonus_rows = self._get_title_bonus_rows(selected_kibetu, period)
 
-            if not basic_bonus_rows:
+            if not title_bonus_rows:
                 messages.warning(request, "登録対象データがありません。")
-                return redirect(f"/basic_bonus/?kibetu={selected_kibetu}")
+                return redirect(f"/title_bonus/?kibetu={selected_kibetu}")
 
             #B_basic_bonus_result
             insert_sql, insert_params = (
-                register_sql.get_basic_bonus_insert_data(
+                register_sql.get_title_bonus_insert_data(
                     selected_kibetu,
-                    basic_bonus_rows
+                    title_bonus_rows
                 )
             )
 
@@ -3042,7 +3042,7 @@ class TitleBonusView(generic.ListView):
                     cursor.executemany(insert_sql, insert_params)
 
 
-            messages.success(request, f"{len(basic_bonus_rows)}件をベーシックボーナス結果に登録しました。")
+            messages.success(request, f"{len(title_bonus_rows)}件をタイトルボーナス結果に登録しました。")
 
         except Exception as e:
             logger.exception("ベーシックボーナス結果登録エラー")
