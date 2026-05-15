@@ -27,6 +27,7 @@ urlpatterns = [
     path('basic_bonus/', views.BasicBonusView.as_view(), name = "basic_bonus"),
     path('matching_bonus/', views.MatchingBonusView.as_view(), name = "matching_bonus"),
     path('title_bonus/', views.TitleBonusView.as_view(), name = "title_bonus"),
+    path('title_diff_bonus/', views.TitleDiffBonusView.as_view(), name = "title_diff_bonus"),
 
     path('s_drive_bonus/', views.S_DriveBonusView.as_view(), name = "s_drive_bonus"),
     path('s_basic_bonus/', views.S_BasicBonusView.as_view(), name = "s_basic_bonus"),
