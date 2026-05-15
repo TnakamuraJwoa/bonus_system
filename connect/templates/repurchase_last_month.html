@@ -100,6 +100,8 @@
                     <th>deposit_at</th>
                     <th>order_at</th>
                     <th>payment_date</th>
+                    <th>order_year</th>
+                    <th>order_month</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -114,6 +116,8 @@
                       <td>{{ r.deposit_at }}</td>
                       <td>{{ r.order_at }}</td>
                       <td>{{ r.payment_date }}</td>
+                      <td>{{ r.order_year }}</td>
+                      <td>{{ r.order_month }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

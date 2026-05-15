@@ -40,7 +40,9 @@ from connect.sql.repurchase_over_bonus_sql import REPURCHASE_OVER_BONUS_SQL
 from connect.sql.three_star_diamond_global_bonus_q_sql import THREE_STAR_DIAMOND_GLOBAL_BONUS_Q_SQL
 from connect.sql.crown_diamond_global_bonus_y_sql import CROWN_DIAMOND_GLOBAL_BONUS_Y_SQL
 
+from connect.sql.repurchase_last_month_sql import REPURCHASE_LAST_MONTH
 from connect.sql.basic_bv_line_sql import BASIC_BV_LINE_SQL
+
 
 from connect.sql import register_sql
 
@@ -391,8 +393,8 @@ class RepurchaseListView(generic.TemplateView):
         params = []
 
         if year is not None and month is not None:
-            where.append("year = %s")
-            where.append("month = %s")
+            where.append("register_year = %s")
+            where.append("register_month = %s")
             params.extend([year, month])
 
         if q_code:
@@ -423,7 +425,7 @@ class RepurchaseListView(generic.TemplateView):
 
     def _get_registered_months(self):
         sql = """
-            SELECT DISTINCT CONCAT(year, '-', LPAD(month, 2, '0')) AS ym
+            SELECT DISTINCT CONCAT(register_year, '-', LPAD(register_month, 2, '0')) AS ym
             FROM bonus_db.purchase_info_list
             ORDER BY ym DESC
         """
@@ -467,8 +469,10 @@ class RepurchaseListView(generic.TemplateView):
                 order_at,
                 bonus_payment_date,
                 created_at,
-                year,
-                month
+                register_year,
+                register_month,
+                order_year,
+                order_month
             FROM bonus_db.purchase_info_list
             {where_sql}
             ORDER BY bonus_payment_date DESC, id DESC
@@ -1683,80 +1687,21 @@ class RepurchaseLastMonthView(generic.TemplateView):
 
     def _get_registered_months(self):
         sql = """
-        SELECT DISTINCT CONCAT(year, '-', LPAD(month,2,'0')) AS ym
+        SELECT DISTINCT CONCAT(register_year, '-', LPAD(register_month, 2, '0')) AS ym
         FROM bonus_db.purchase_info_list
         """
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql)
             return [row[0] for row in cursor.fetchall()]
 
-    def _get_sql(self):
-        return """
-WITH bonus_orders AS (
-    SELECT
-        o.*,
-        b.bonus_payment_date,
-        COALESCE(b.bonus_payment_date, o.deposit_at) AS payment_date
-    FROM bonus_db.orders AS o
-    LEFT JOIN bonus_db.bonus_payment_date AS b
-        ON o.order_code = b.order_code
-),
-
-aa as (
-SELECT
-    a.order_code,
-    b.jwoa_code,
-    u.send_bv_name,
-    a.order_type,
-    a.total_bv,
-    b.distribution_bv AS bv,
-    a.deposit_at,
-    a.order_at,
-    a.payment_date,
-    %s AS year,
-    %s AS month
-FROM bonus_orders AS a
-LEFT JOIN bonus_db.orders_distribution_bv AS b
-    ON a.order_code = b.order_code
-LEFT JOIN bonus_db.users AS u
-    ON b.jwoa_code = u.jmoa_code
-WHERE a.order_status NOT IN (206, 207, 208)
-  AND a.payment_date >= %s
-  AND a.payment_date < %s
-  AND a.bv_actived_flg = 1
-
-UNION ALL
-
-SELECT
-    doc_no AS order_code,
-    member_no AS jwoa_code,
-    firstname AS send_bv_name,
-    105 AS order_type,
-    0 AS total_bv,
-    total_bv AS bv,
-    payment_date AS deposit_at,
-    payment_date AS order_at,
-    payment_date AS bonus_payment_date,
-    %s AS year,
-    %s AS month
-FROM bonus_db.api_users_bv
-WHERE order_year = %s
-  AND order_month = %s
-)
-
-SELECT *
-FROM aa
-"""
-
     def _fetch_rows(self, year, month):
         start = datetime(year, month, 1)
         end = start + relativedelta(months=1)
 
-        sql = self._get_sql()
         params = [year, month, start, end, year, month, year, month]
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, params)
+            cursor.execute(REPURCHASE_LAST_MONTH, params)
             print(cursor._executed)
             cols = [c[0] for c in cursor.description]
             return [dict(zip(cols, r)) for r in cursor.fetchall()]
@@ -1764,8 +1709,8 @@ FROM aa
     def _delete_rows(self, year, month):
         sql = """
 DELETE FROM bonus_db.purchase_info_list
-WHERE year = %s
-  AND month = %s
+WHERE register_year = %s
+  AND register_month = %s
 """
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql, [year, month])
@@ -1774,8 +1719,10 @@ WHERE year = %s
         insert_sql = """
 INSERT INTO bonus_db.purchase_info_list
 (
-    year,
-    month,
+    register_year,
+    register_month,
+    order_year,
+    order_month,
     jwoa_code,
     send_bv_name,
     order_code,
@@ -1786,13 +1733,15 @@ INSERT INTO bonus_db.purchase_info_list
     order_at,
     bonus_payment_date
 )
-VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 """
 
         data = [
             (
-                r["year"],
-                r["month"],
+                r["register_year"],
+                r["register_month"],
+                r["order_year"],
+                r["order_month"],
                 r["jwoa_code"],
                 r["send_bv_name"],
                 r["order_code"],
@@ -1852,6 +1801,7 @@ WHERE name = 'set_title'
             return redirect("connect:repurchase_last_month")
 
         rows = self._fetch_rows(y, m)
+
         if not rows:
             messages.info(request, "対象データなし")
             return redirect(
@@ -3141,15 +3091,18 @@ class TitleBonusView(generic.ListView):
 
 
         params = [
-            selected_kibetu,
+            kibetu_year,
+            kibetu_month,
+            kibetu_year,
+            kibetu_month,
             prev_year,
             prev_month,
-            be_start_dt,
-            be_end_dt,
-            start_dt,
-            end_dt,
-            start_dt,
-            end_dt,
+            kibetu_year,
+            kibetu_month,
+            prev_year,
+            prev_month,
+            kibetu_year,
+            kibetu_month,
         ]
 
         with connections["rds"].cursor() as cursor:
