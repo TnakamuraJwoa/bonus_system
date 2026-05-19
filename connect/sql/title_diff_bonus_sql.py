@@ -214,8 +214,8 @@ FROM line_type_total_bv2
 -- 変数
 var as (
  select
-  2 as set_title,          -- ２スターダイヤ以上の実績を達成した会員が対象
-  1 as minimum_title_id    -- 一番低いタイトル
+  5 as set_title,          -- ２スターダイヤ以上の実績を達成した会員が対象
+  4 as minimum_title_id    -- 一番低いタイトル
 ),
 
 

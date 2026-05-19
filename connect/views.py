@@ -3432,17 +3432,17 @@ class TitleDiffBonusView(generic.ListView):
             return redirect("connect:title_diff_bonus")
 
         try:
-            title_bonus_rows = self._get_title_bonus_rows(selected_kibetu, period)
+            title_diff_bonus_rows = self._get_title_diff_bonus_rows(selected_kibetu, period)
 
-            if not title_bonus_rows:
+            if not title_diff_bonus_rows:
                 messages.warning(request, "登録対象データがありません。")
                 return redirect(f"/title_diff_bonus/?kibetu={selected_kibetu}")
 
             #B_basic_bonus_result
             insert_sql, insert_params = (
-                register_sql.get_title_bonus_insert_data(
+                register_sql.get_title_diff_bonus_insert_data(
                     selected_kibetu,
-                    title_bonus_rows
+                    title_diff_bonus_rows
                 )
             )
 
@@ -3473,20 +3473,20 @@ class TitleDiffBonusView(generic.ListView):
                     cursor.execute(
                         history_sql,
                         [
-                            "title_bonus",
+                            "title_diff_bonus",
                             selected_kibetu,
                             request.user.username,
-                            f"{len(title_bonus_rows)}件登録"
+                            f"{len(title_diff_bonus_rows)}件登録"
                         ]
                     )
 
-            messages.success(request, f"{len(title_bonus_rows)}件をタイトルボーナス結果に登録しました。")
+            messages.success(request, f"{len(title_diff_bonus_rows)}件をタイトルボーナス結果に登録しました。")
 
         except Exception as e:
             logger.exception("ベーシックボーナス結果登録エラー")
             messages.error(request, f"登録中にエラーが発生しました: {e}")
 
-        return redirect(f"/basic_bonus/?kibetu={selected_kibetu}")
+        return redirect(f"/title_diff_bonus/?kibetu={selected_kibetu}")
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -3504,13 +3504,11 @@ class TitleDiffBonusView(generic.ListView):
             return ctx
 
         ctx["selected_period"] = period
-        ctx["rows"] = self._get_title_bonus_rows(selected_kibetu, period)
+        ctx["rows"] = self._get_title_diff_bonus_rows(selected_kibetu, period)
 
         return ctx
 
-    def _get_title_bonus_rows(self, selected_kibetu, period):
-        st_date = period.st_date
-        end_date = period.end_date
+    def _get_title_diff_bonus_rows(self, selected_kibetu, period):
 
         kibetu_year = int(selected_kibetu[0:4])
         kibetu_month = int(selected_kibetu[5:7])
@@ -3518,33 +3516,6 @@ class TitleDiffBonusView(generic.ListView):
         kibetu_year_str = f"{kibetu_year}"
         kibetu_month_str = f"{kibetu_month:02d}"
 
-        start_dt = make_aware(datetime.combine(st_date, time.min))
-        end_dt = make_aware(datetime.combine(end_date + timedelta(days=1), time.min))
-
-        current_month_first = datetime(kibetu_year, kibetu_month, 1)
-        prev_month_last = current_month_first - timedelta(days=1)
-
-        prev_year = prev_month_last.year
-        prev_month = prev_month_last.month
-
-        be_start_dt = make_aware(datetime(prev_year, prev_month, 1, 0, 0, 0))
-        be_end_dt = make_aware(datetime(kibetu_year, kibetu_month, 1, 0, 0, 0))
-
-
-#         params = [
-#             kibetu_year,
-#             kibetu_month,
-#             kibetu_year,
-#             kibetu_month,
-#             prev_year,
-#             prev_month,
-#             kibetu_year,
-#             kibetu_month,
-#             prev_year,
-#             prev_month,
-#             kibetu_year,
-#             kibetu_month,
-#         ]
 
         params = [
             kibetu_month_str,

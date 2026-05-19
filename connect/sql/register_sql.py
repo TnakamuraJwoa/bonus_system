@@ -142,3 +142,71 @@ def get_basic_bv_line_insert_data(selected_kibetu, rows):
         ])
 
     return insert_sql, insert_params
+
+
+
+## タイトル差額ボーナス
+def get_title_diff_bonus_insert_data(selected_kibetu, rows):
+
+    insert_sql = """
+        INSERT INTO bonus_db.B_title_diff_bonus_result (
+            kibetu,
+            root_jwoa_code,
+            root_name,
+            up_title_id,
+            up_bonus_rate,
+            up_jwoa_code,
+            up_jwoa_name,
+            down_title_id,
+            down_bonus_rate,
+            down_jwoa_code,
+            down_name,
+            pay_bonus_rate,
+            tree_level,
+            sum_bv,
+            title_diff_bonus,
+            created_at,
+            updated_at
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s, %s, %s, %s,
+            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'),
+            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo')
+        )
+        ON DUPLICATE KEY UPDATE
+            root_name = VALUES(root_name),
+            up_title_id = VALUES(up_title_id),
+            up_bonus_rate = VALUES(up_bonus_rate),
+            up_jwoa_name = VALUES(up_jwoa_name),
+            down_title_id = VALUES(down_title_id),
+            down_bonus_rate = VALUES(down_bonus_rate),
+            down_name = VALUES(down_name),
+            pay_bonus_rate = VALUES(pay_bonus_rate),
+            tree_level = VALUES(tree_level),
+            sum_bv = VALUES(sum_bv),
+            title_diff_bonus = VALUES(title_diff_bonus),
+            updated_at = CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo')
+    """
+
+    insert_params = []
+
+    for r in rows:
+        insert_params.append([
+            selected_kibetu,
+            r.get("root_jwoa_code") or "",
+            r.get("root_name") or "",
+            r.get("up_title_id") or 0,
+            r.get("up_bonus_rate") or 0,
+            r.get("up_jwoa_code") or "",
+            r.get("up_jwoa_name") or "",
+            r.get("down_title_id") or 0,
+            r.get("down_bonus_rate") or 0,
+            r.get("down_jwoa_code") or "",
+            r.get("down_name") or "",
+            r.get("pay_bonus_rate") or 0,
+            r.get("tree_level") or 0,
+            r.get("sum_bv") or 0,
+            r.get("title_diff_bonus") or 0,
+        ])
+
+    return insert_sql, insert_params

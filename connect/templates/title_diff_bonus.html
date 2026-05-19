@@ -47,7 +47,7 @@
 
             {% if selected_period and rows %}
               <form method="post" class="mb-0"
-                    onsubmit="return confirm('表示中のタイトルボーナス結果を登録しますか？すでに登録済みの場合は上書き更新されます。');">
+                    onsubmit="return confirm('表示中のタイトル差額ボーナス結果を登録しますか？すでに登録済みの場合は上書き更新されます。');">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="register_title_diff_bonus">
                 <input type="hidden" name="kibetu" value="{{ selected_kibetu }}">
@@ -81,8 +81,8 @@
               <div class="text-end"><strong>件数：{{ rows|length }} 件</strong></div>
             </div>
 
-            <div class="table-responsive flex-grow-1" style="min-height: 0; overflow: auto;">
-              <table class="table table-bordered table-sm align-middle mb-0">
+            <div class="table-responsive flex-grow-1" style="min-height: 0; overflow-x: auto; overflow-y: auto;">
+              <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                   <tr>
                     <th>root_jwoa_code</th>
@@ -107,18 +107,18 @@
                     <tr>
                       <td>{{ r.root_jwoa_code }}</td>
                       <td>{{ r.root_name }}</td>
-                      <td>{{ r.up_title_id }}</td>
-                      <td>{{ r.up_bonus_rate }}</td>
+                      <td class="text-end">{{ r.up_title_id }}</td>
+                      <td class="text-end">{{ r.up_bonus_rate }}</td>
                       <td>{{ r.up_jwoa_code }}</td>
                       <td>{{ r.up_jwoa_name }}</td>
-                      <td>{{ r.down_title_id }}</td>
-                      <td>{{ r.down_bonus_rate }}</td>
+                      <td class="text-end">{{ r.down_title_id }}</td>
+                      <td class="text-end">{{ r.down_bonus_rate }}</td>
                       <td>{{ r.down_jwoa_code }}</td>
                       <td>{{ r.down_name }}</td>
-                      <td>{{ r.pay_bonus_rate }}</td>
-                      <td>{{ r.tree_level }}</td>
-                      <td>{{ r.sum_bv }}</td>
-                      <td class="fw-bold text-primary">
+                      <td class="text-end">{{ r.pay_bonus_rate }}</td>
+                      <td class="text-end">{{ r.tree_level }}</td>
+                      <td class="text-end">{{ r.sum_bv }}</td>
+                      <td class="fw-bold text-primary text-end">
                         {{ r.title_diff_bonus }}
                       </td>
                     </tr>
