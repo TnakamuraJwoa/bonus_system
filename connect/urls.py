@@ -33,6 +33,7 @@ urlpatterns = [
     path('s_basic_bonus/', views.S_BasicBonusView.as_view(), name = "s_basic_bonus"),
     path('s_matching_bonus/', views.S_MatchingBonusView.as_view(), name = "s_matching_bonus"),
     path('s_title_bonus/', views.S_TitleBonusView.as_view(), name = "s_title_bonus"),
+    path('s_title_diff_bonus/', views.S_TitleDiffBonusView.as_view(), name = "s_title_diff_bonus"),
 
 
 ]

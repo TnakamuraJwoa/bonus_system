@@ -191,7 +191,7 @@ FROM line_type_total_bv2
 this_month_three_star_dia as (
 select *
 from title_result
-where title_id >= 1
+where title_id >= 6
 ),
 
 
