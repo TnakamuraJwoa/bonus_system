@@ -8,6 +8,7 @@ urlpatterns = [
     path('', views.IndexView.as_view(), name="index"),
     path("repurchase/export/", views.RepurchaseExportView.as_view(), name="repurchase_export"),
     path('kibetu/', views.KibetuView.as_view(), name = "kibetu"),
+    path('kibetu_month/', views.KibetuMonthView.as_view(), name = "kibetu_month"),
     path('title_list/', views.TitleListView.as_view(), name = "title_list"),
     path('title_user/', views.TitleUserView.as_view(), name = "title_user"),
     path('placement_tree/', views.PlacementTreeView.as_view(), name = "placement_tree"),

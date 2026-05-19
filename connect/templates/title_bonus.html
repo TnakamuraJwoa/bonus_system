@@ -32,7 +32,8 @@
                   {% for obj in object_list %}
                     <option value="{{ obj.kibetu }}"
                             {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
-                      【{{ obj.kibetu }}】 ({{ obj.st_date }} - {{ obj.end_date }})
+                      {{ obj.kibetu }}
+                      ({{ obj.payment_date }})
                     </option>
                   {% endfor %}
                 </select>
@@ -40,7 +41,7 @@
 
               <button type="submit" class="btn btn-primary">表示</button>
 
-              <a class="btn btn-outline-secondary" href="{% url 'connect:basic_bonus' %}">
+              <a class="btn btn-outline-secondary" href="{% url 'connect:title_bonus' %}">
                 リセット
               </a>
             </form>
@@ -64,7 +65,7 @@
             <div class="text-muted small mt-3">
               選択中：
               <span class="badge bg-info text-dark">{{ selected_period.kibetu }}</span>
-              <span class="badge bg-secondary">{{ selected_period.st_date }} ～ {{ selected_period.end_date }}</span>
+              <span class="badge bg-secondary">{{ selected_period.payment_date }}</span>
             </div>
           {% else %}
             <div class="text-muted small mt-3">期別を選択してください</div>
@@ -85,7 +86,7 @@
               <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                   <tr>
-                    <th>root_jwoa_code</th>
+                    <th>root_jmoa_code</th>
                     <th>root_name</th>
                     <th>up_jwoa_code</th>
                     <th>down_jwoa_code</th>

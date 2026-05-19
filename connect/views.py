@@ -28,7 +28,7 @@ from django.db.models import Sum
 from django.utils.timezone import make_aware
 from .models import Plan, PlanDate, GenreList, Region, FavoritePlan
 
-from .models import TitleMaster, PeriodMaster, UserTitles, Orders, User, PurchaseInfoList
+from .models import TitleMaster, PeriodMaster, UserTitles, Orders, User, PurchaseInfoList, MonthlyPeriod
 from .models import Settings
 
 from connect.sql.drive_bonus_sql import DRIVE_BONUS_SQL
@@ -383,6 +383,9 @@ class KibetuView(generic.ListView):
         return ctx
 
 
+
+
+
 class TitleListView(generic.ListView):
     template_name = "title_list.html"
     context_object_name = "rows"
@@ -398,7 +401,58 @@ class TitleListView(generic.ListView):
         ctx["total_count"] = ctx["rows"].count()
         return ctx
 
+class KibetuMonthView(generic.ListView):
+    template_name = "kibetu_month.html"
+    context_object_name = "rows"
+    model = MonthlyPeriod
 
+    def get_queryset(self):
+
+        qs = MonthlyPeriod.objects.using("rds").all()
+
+        selected_kibetu = (
+            self.request.GET.get("kibetu") or ""
+        ).strip()
+
+        q_kibetu = (
+            self.request.GET.get("q_kibetu") or ""
+        ).strip()
+
+        if selected_kibetu:
+            qs = qs.filter(
+                kibetu=selected_kibetu
+            )
+
+        if q_kibetu:
+            qs = qs.filter(
+                kibetu__icontains=q_kibetu
+            )
+
+        return qs.order_by(
+            "-year",
+            "-month"
+        )
+
+    def get_context_data(self, **kwargs):
+
+        ctx = super().get_context_data(**kwargs)
+
+        ctx["selected_kibetu"] = (
+            self.request.GET.get("kibetu") or ""
+        ).strip()
+
+        ctx["q_kibetu"] = (
+            self.request.GET.get("q_kibetu") or ""
+        ).strip()
+
+        ctx["kibetu_choices"] = list(
+            MonthlyPeriod.objects.using("rds")
+            .order_by("-year", "-month")
+            .values_list("kibetu", flat=True)
+            .distinct()
+        )
+
+        return ctx
 
 
 class RepurchaseListView(generic.TemplateView):
@@ -3079,10 +3133,10 @@ class S_MatchingBonusView(generic.ListView):
 class TitleBonusView(generic.ListView):
     template_name = "title_bonus.html"
     context_object_name = "object_list"
-    model = PeriodMaster
+    model = MonthlyPeriod
 
     def get_queryset(self):
-        return PeriodMaster.objects.using("rds").all()
+        return MonthlyPeriod.objects.using("rds").all()
 
     def get(self, request, *args, **kwargs):
         self.object_list = self.get_queryset()
@@ -3090,6 +3144,7 @@ class TitleBonusView(generic.ListView):
         return self.render_to_response(context)
 
     def post(self, request, *args, **kwargs):
+
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
 
@@ -3101,19 +3156,26 @@ class TitleBonusView(generic.ListView):
             messages.error(request, "期別を選択してください。")
             return redirect("connect:title_bonus")
 
-        period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
+        period = (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu=selected_kibetu)
+            .first()
+        )
+
         if not period:
             messages.error(request, "選択された期別が存在しません。")
             return redirect("connect:title_bonus")
 
         try:
-            title_bonus_rows = self._get_title_bonus_rows(selected_kibetu, period)
+            title_bonus_rows = self._get_title_bonus_rows(
+                selected_kibetu,
+                period
+            )
 
             if not title_bonus_rows:
                 messages.warning(request, "登録対象データがありません。")
                 return redirect(f"/title_bonus/?kibetu={selected_kibetu}")
 
-            #B_basic_bonus_result
             insert_sql, insert_params = (
                 register_sql.get_title_bonus_insert_data(
                     selected_kibetu,
@@ -3121,13 +3183,10 @@ class TitleBonusView(generic.ListView):
                 )
             )
 
-            #登録
             with transaction.atomic(using="rds"):
                 with connections["rds"].cursor() as cursor:
-                    # タイトルボーナス登録
                     cursor.executemany(insert_sql, insert_params)
 
-                    # 履歴登録
                     history_sql = """
                         INSERT INTO bonus_db.bonus_register_history (
                             bonus_name,
@@ -3155,18 +3214,23 @@ class TitleBonusView(generic.ListView):
                         ]
                     )
 
-            messages.success(request, f"{len(title_bonus_rows)}件をタイトルボーナス結果に登録しました。")
+            messages.success(
+                request,
+                f"{len(title_bonus_rows)}件をタイトルボーナス結果に登録しました。"
+            )
 
         except Exception as e:
-            logger.exception("ベーシックボーナス結果登録エラー")
+            logger.exception("タイトルボーナス結果登録エラー")
             messages.error(request, f"登録中にエラーが発生しました: {e}")
 
-        return redirect(f"/basic_bonus/?kibetu={selected_kibetu}")
+        return redirect(f"/title_bonus/?kibetu={selected_kibetu}")
 
     def get_context_data(self, **kwargs):
+
         ctx = super().get_context_data(**kwargs)
 
         selected_kibetu = self.request.GET.get("kibetu")
+
         ctx["selected_kibetu"] = selected_kibetu
         ctx["rows"] = []
         ctx["selected_period"] = None
@@ -3174,34 +3238,39 @@ class TitleBonusView(generic.ListView):
         if not selected_kibetu:
             return ctx
 
-        period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
+        period = (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu=selected_kibetu)
+            .first()
+        )
+
         if not period:
             return ctx
 
         ctx["selected_period"] = period
-        ctx["rows"] = self._get_title_bonus_rows(selected_kibetu, period)
+
+        ctx["rows"] = self._get_title_bonus_rows(
+            selected_kibetu,
+            period
+        )
 
         return ctx
 
     def _get_title_bonus_rows(self, selected_kibetu, period):
-        st_date = period.st_date
-        end_date = period.end_date
 
-        kibetu_year = int(selected_kibetu[0:4])
-        kibetu_month = int(selected_kibetu[5:7])
+        kibetu_year = period.year
+        kibetu_month = period.month
 
-        start_dt = make_aware(datetime.combine(st_date, time.min))
-        end_dt = make_aware(datetime.combine(end_date + timedelta(days=1), time.min))
+        current_month_first = datetime(
+            kibetu_year,
+            kibetu_month,
+            1
+        )
 
-        current_month_first = datetime(kibetu_year, kibetu_month, 1)
         prev_month_last = current_month_first - timedelta(days=1)
 
         prev_year = prev_month_last.year
         prev_month = prev_month_last.month
-
-        be_start_dt = make_aware(datetime(prev_year, prev_month, 1, 0, 0, 0))
-        be_end_dt = make_aware(datetime(kibetu_year, kibetu_month, 1, 0, 0, 0))
-
 
         params = [
             kibetu_year,
@@ -3221,49 +3290,55 @@ class TitleBonusView(generic.ListView):
         with connections["rds"].cursor() as cursor:
             cursor.execute(TITLE_BONUS_SQL, params)
             logger.info(f"Executed SQL: {cursor._executed}")
+
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
 
         return rows
 
 
-
 class S_TitleBonusView(generic.ListView):
     template_name = "s_title_bonus.html"
     context_object_name = "object_list"
-    model = PeriodMaster
+    model = MonthlyPeriod
 
     def get_queryset(self):
 
-        # B_title_bonus_result に登録済みの期別だけ取得
         with connections["rds"].cursor() as cursor:
             cursor.execute("""
                 SELECT DISTINCT kibetu
                 FROM bonus_db.B_title_bonus_result
                 ORDER BY kibetu DESC
             """)
-            registered_kibetu_list = [row[0] for row in cursor.fetchall()]
+
+            registered_kibetu_list = [
+                row[0]
+                for row in cursor.fetchall()
+            ]
 
         if not registered_kibetu_list:
-            return PeriodMaster.objects.using("rds").none()
+            return MonthlyPeriod.objects.using("rds").none()
 
         return (
-            PeriodMaster.objects.using("rds")
+            MonthlyPeriod.objects.using("rds")
             .filter(kibetu__in=registered_kibetu_list)
-            .order_by("-kibetu")
+            .order_by("-year", "-month")
         )
 
     def get(self, request, *args, **kwargs):
+
         self.object_list = self.get_queryset()
+
         context = self.get_context_data()
 
-        # Excel export
         if request.GET.get("export") == "excel":
 
             rows = context.get("rows", [])
 
             wb = openpyxl.Workbook()
+
             ws = wb.active
+
             ws.title = "TitleBonusResult"
 
             headers = [
@@ -3285,6 +3360,7 @@ class S_TitleBonusView(generic.ListView):
             ws.append(headers)
 
             for r in rows:
+
                 ws.append([
                     r.get("kibetu"),
                     r.get("root_jwoa_code"),
@@ -3301,26 +3377,10 @@ class S_TitleBonusView(generic.ListView):
                     r.get("created_at"),
                 ])
 
-            ws.column_dimensions["A"].width = 18
-            ws.column_dimensions["B"].width = 18
-            ws.column_dimensions["C"].width = 25
-            ws.column_dimensions["D"].width = 18
-            ws.column_dimensions["E"].width = 18
-            ws.column_dimensions["F"].width = 25
-            ws.column_dimensions["G"].width = 12
-            ws.column_dimensions["H"].width = 12
-            ws.column_dimensions["I"].width = 12
-            ws.column_dimensions["J"].width = 15
-            ws.column_dimensions["K"].width = 12
-            ws.column_dimensions["L"].width = 15
-            ws.column_dimensions["M"].width = 20
-
-            for row_idx in range(2, ws.max_row + 1):
-                ws[f"J{row_idx}"].number_format = '#,##0.00'
-                ws[f"L{row_idx}"].number_format = '#,##0.00'
-
             response = HttpResponse(
-                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                content_type=(
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
             )
 
             response["Content-Disposition"] = (
@@ -3339,7 +3399,6 @@ class S_TitleBonusView(generic.ListView):
 
         selected_kibetu = self.request.GET.get("kibetu")
 
-        # 期別未選択なら先頭を自動選択
         if not selected_kibetu and self.object_list:
             selected_kibetu = self.object_list[0].kibetu
 
@@ -3351,7 +3410,7 @@ class S_TitleBonusView(generic.ListView):
             return ctx
 
         period = (
-            PeriodMaster.objects.using("rds")
+            MonthlyPeriod.objects.using("rds")
             .filter(kibetu=selected_kibetu)
             .first()
         )
@@ -3398,7 +3457,6 @@ class S_TitleBonusView(generic.ListView):
         ctx["rows"] = rows
 
         return ctx
-
 
 
 class TitleDiffBonusView(generic.ListView):

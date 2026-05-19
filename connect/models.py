@@ -149,6 +149,17 @@ class PeriodMaster(models.Model):
         db_table = "period_master"      # ← 実テーブル名
 
 
+class MonthlyPeriod(models.Model):
+    kibetu = models.CharField(max_length=20, primary_key=True)
+    year = models.IntegerField()
+    month = models.IntegerField()
+    payment_date = models.DateField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "monthly_period"
+
+
 class UserTitles(models.Model):
     id = models.BigAutoField(primary_key=True)
 

@@ -6,7 +6,10 @@
 
       <div class="list-group">
         <a class="list-group-item list-group-item-action {% if active_menu == 'kibetu' %}active{% endif %}"
-           href="{% url 'connect:kibetu' %}">期別</a>
+           href="{% url 'connect:kibetu' %}">期別 (週)</a>
+
+        <a class="list-group-item list-group-item-action {% if active_menu == 'kibetu_month' %}active{% endif %}"
+           href="{% url 'connect:kibetu_month' %}">期別 (月)</a>
 
         <a class="list-group-item list-group-item-action {% if active_menu == 'settings' %}active{% endif %}"
            href="{% url 'connect:settings' %}">設定</a>
@@ -18,13 +21,10 @@
            href="{% url 'connect:title_list' %}">タイトル表</a>
 
         <a class="list-group-item list-group-item-action {% if active_menu == 'active_users' %}active{% endif %}"
-           href="{% url 'connect:active_users' %}">アクティブ会員</a>
+           href="{% url 'connect:active_users' %}">アクティブ会員登録</a>
 
         <a class="list-group-item list-group-item-action {% if active_menu == 'title_registration' %}active{% endif %}"
            href="{% url 'connect:title_registration' %}">タイトルユーザー登録</a>
-
-        <a class="list-group-item list-group-item-action {% if active_menu == 'title_user' %}active{% endif %}"
-           href="{% url 'connect:title_user' %}">タイトルユーザー一覧</a>
 
         <a class="list-group-item list-group-item-action {% if active_menu == 'placement_tree' %}active{% endif %}"
            href="{% url 'connect:placement_tree' %}">上位者ツリー(登録&表示)</a>

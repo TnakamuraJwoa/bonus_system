@@ -35,7 +35,7 @@
             <ul class="navbar-nav ml-auto"> <!-- ml-autoを追加 -->
                 {% if user.is_authenticated %}
                 <li class="nav-item">
-                    <a class="nav-link" href="">会員検索 </a>
+                    <a class="nav-link" href="{% url 'connect:title_user' %}">会員検索 </a>
                 </li>
 
                 <li class="nav-item">

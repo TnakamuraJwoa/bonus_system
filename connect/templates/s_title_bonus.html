@@ -38,7 +38,7 @@
                   <option value="{{ obj.kibetu }}"
                           {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
                     【{{ obj.kibetu }}】
-                    ({{ obj.st_date }} - {{ obj.end_date }})
+                    ({{ obj.payment_date }})
                   </option>
                 {% endfor %}
               </select>
@@ -70,9 +70,7 @@
               </span>
 
               <span class="badge bg-secondary">
-                {{ selected_period.st_date }}
-                ～
-                {{ selected_period.end_date }}
+                {{ selected_period.payment_date }}
               </span>
             </div>
 
@@ -111,7 +109,7 @@
               <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                   <tr>
-                    <th>期別</th>
+                    <th>kibetu</th>
                     <th>root_jwoa_code</th>
                     <th>root_name</th>
                     <th>up_jwoa_code</th>
