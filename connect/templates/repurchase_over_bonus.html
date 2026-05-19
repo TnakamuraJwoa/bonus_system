@@ -15,13 +15,13 @@
       {% endif %}
     </div>
 
-    {% include "com/_sidebar_bonus_keisan.html" with active_menu="title_diff_bonus" %}
+    {% include "com/_sidebar_bonus_keisan.html" with active_menu="repurchase_over_bonus" %}
 
     <main class="col-12 col-md-9 col-lg-10 d-flex flex-column" style="height: calc(100% - 24px); overflow: hidden;">
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <h5 class="mb-3">【ボーナス計算 - タイトル差額ボーナス】</h5>
+          <h5 class="mb-3">【ボーナス計算 - 再購入オーバーボーナス】</h5>
 
           <div class="d-flex gap-2 align-items-end mb-0 flex-wrap">
 
@@ -49,7 +49,7 @@
               <form method="post" class="mb-0"
                     onsubmit="return confirm('表示中のタイトル差額ボーナス結果を登録しますか？すでに登録済みの場合は上書き更新されます。');">
                 {% csrf_token %}
-                <input type="hidden" name="action" value="register_title_diff_bonus">
+                <input type="hidden" name="action" value="repurchase_over_bonus">
                 <input type="hidden" name="kibetu" value="{{ selected_kibetu }}">
 
                 <button type="submit" class="btn btn-warning">

@@ -34,13 +34,19 @@
               </label>
 
               <select name="kibetu" class="form-select">
+
                 {% for obj in object_list %}
+
                   <option value="{{ obj.kibetu }}"
                           {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
+
                     【{{ obj.kibetu }}】
-                    ({{ obj.st_date }} - {{ obj.end_date }})
+                    {{ obj.payment_date }}
+
                   </option>
+
                 {% endfor %}
+
               </select>
             </div>
 
@@ -63,18 +69,14 @@
           </form>
 
           {% if selected_period %}
-
             <div class="text-muted small mt-3">
               選択中：
-
               <span class="badge bg-info text-dark">
                 {{ selected_period.kibetu }}
               </span>
 
               <span class="badge bg-secondary">
-                {{ selected_period.st_date }}
-                ～
-                {{ selected_period.end_date }}
+                {{ selected_period.payment_date }}
               </span>
             </div>
 

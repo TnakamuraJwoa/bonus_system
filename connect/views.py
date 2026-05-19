@@ -3462,10 +3462,10 @@ class S_TitleBonusView(generic.ListView):
 class TitleDiffBonusView(generic.ListView):
     template_name = "title_diff_bonus.html"
     context_object_name = "object_list"
-    model = PeriodMaster
+    model = MonthlyPeriod
 
     def get_queryset(self):
-        return PeriodMaster.objects.using("rds").all()
+        return MonthlyPeriod.objects.using("rds").all()
 
     def get(self, request, *args, **kwargs):
         self.object_list = self.get_queryset()
@@ -3484,19 +3484,26 @@ class TitleDiffBonusView(generic.ListView):
             messages.error(request, "期別を選択してください。")
             return redirect("connect:title_diff_bonus")
 
-        period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
+        period = (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu=selected_kibetu)
+            .first()
+        )
+
         if not period:
             messages.error(request, "選択された期別が存在しません。")
             return redirect("connect:title_diff_bonus")
 
         try:
-            title_diff_bonus_rows = self._get_title_diff_bonus_rows(selected_kibetu, period)
+            title_diff_bonus_rows = self._get_title_diff_bonus_rows(
+                selected_kibetu,
+                period
+            )
 
             if not title_diff_bonus_rows:
                 messages.warning(request, "登録対象データがありません。")
                 return redirect(f"/title_diff_bonus/?kibetu={selected_kibetu}")
 
-            #B_basic_bonus_result
             insert_sql, insert_params = (
                 register_sql.get_title_diff_bonus_insert_data(
                     selected_kibetu,
@@ -3504,13 +3511,10 @@ class TitleDiffBonusView(generic.ListView):
                 )
             )
 
-            #登録
             with transaction.atomic(using="rds"):
                 with connections["rds"].cursor() as cursor:
-                    # タイトルボーナス登録
                     cursor.executemany(insert_sql, insert_params)
 
-                    # 履歴登録
                     history_sql = """
                         INSERT INTO bonus_db.bonus_register_history (
                             bonus_name,
@@ -3538,10 +3542,13 @@ class TitleDiffBonusView(generic.ListView):
                         ]
                     )
 
-            messages.success(request, f"{len(title_diff_bonus_rows)}件をタイトルボーナス結果に登録しました。")
+            messages.success(
+                request,
+                f"{len(title_diff_bonus_rows)}件をタイトル差額ボーナス結果に登録しました。"
+            )
 
         except Exception as e:
-            logger.exception("ベーシックボーナス結果登録エラー")
+            logger.exception("タイトル差額ボーナス結果登録エラー")
             messages.error(request, f"登録中にエラーが発生しました: {e}")
 
         return redirect(f"/title_diff_bonus/?kibetu={selected_kibetu}")
@@ -3550,6 +3557,7 @@ class TitleDiffBonusView(generic.ListView):
         ctx = super().get_context_data(**kwargs)
 
         selected_kibetu = self.request.GET.get("kibetu")
+
         ctx["selected_kibetu"] = selected_kibetu
         ctx["rows"] = []
         ctx["selected_period"] = None
@@ -3557,23 +3565,31 @@ class TitleDiffBonusView(generic.ListView):
         if not selected_kibetu:
             return ctx
 
-        period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
+        period = (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu=selected_kibetu)
+            .first()
+        )
+
         if not period:
             return ctx
 
         ctx["selected_period"] = period
-        ctx["rows"] = self._get_title_diff_bonus_rows(selected_kibetu, period)
+
+        ctx["rows"] = self._get_title_diff_bonus_rows(
+            selected_kibetu,
+            period
+        )
 
         return ctx
 
     def _get_title_diff_bonus_rows(self, selected_kibetu, period):
 
-        kibetu_year = int(selected_kibetu[0:4])
-        kibetu_month = int(selected_kibetu[5:7])
+        kibetu_year = period.year
+        kibetu_month = period.month
 
         kibetu_year_str = f"{kibetu_year}"
         kibetu_month_str = f"{kibetu_month:02d}"
-
 
         params = [
             kibetu_month_str,
@@ -3583,17 +3599,17 @@ class TitleDiffBonusView(generic.ListView):
         with connections["rds"].cursor() as cursor:
             cursor.execute(TITLE_DIFF_BONUS_SQL, params)
             logger.info(f"Executed SQL: {cursor._executed}")
+
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
 
         return rows
 
 
-
 class S_TitleDiffBonusView(generic.ListView):
     template_name = "s_title_diff_bonus.html"
     context_object_name = "object_list"
-    model = PeriodMaster
+    model = MonthlyPeriod
 
     def get_queryset(self):
 
@@ -3603,15 +3619,19 @@ class S_TitleDiffBonusView(generic.ListView):
                 FROM bonus_db.B_title_diff_bonus_result
                 ORDER BY kibetu DESC
             """)
-            registered_kibetu_list = [row[0] for row in cursor.fetchall()]
+
+            registered_kibetu_list = [
+                row[0]
+                for row in cursor.fetchall()
+            ]
 
         if not registered_kibetu_list:
-            return PeriodMaster.objects.using("rds").none()
+            return MonthlyPeriod.objects.using("rds").none()
 
         return (
-            PeriodMaster.objects.using("rds")
+            MonthlyPeriod.objects.using("rds")
             .filter(kibetu__in=registered_kibetu_list)
-            .order_by("-kibetu")
+            .order_by("-year", "-month")
         )
 
     def get(self, request, *args, **kwargs):
@@ -3699,7 +3719,7 @@ class S_TitleDiffBonusView(generic.ListView):
             return ctx
 
         period = (
-            PeriodMaster.objects.using("rds")
+            MonthlyPeriod.objects.using("rds")
             .filter(kibetu=selected_kibetu)
             .first()
         )
@@ -3744,3 +3764,155 @@ class S_TitleDiffBonusView(generic.ListView):
         ctx["rows"] = rows
 
         return ctx
+
+
+
+class RepurchaseOverBonusView(generic.ListView):
+    template_name = "repurchase_over_bonus.html"
+    context_object_name = "object_list"
+    model = MonthlyPeriod
+
+    def get_queryset(self):
+        return MonthlyPeriod.objects.using("rds").all()
+
+    def get(self, request, *args, **kwargs):
+        self.object_list = self.get_queryset()
+        context = self.get_context_data()
+        return self.render_to_response(context)
+
+    def post(self, request, *args, **kwargs):
+        action = request.POST.get("action", "")
+        selected_kibetu = request.POST.get("kibetu", "").strip()
+
+        if action != "register_repurchase_over_bonus":
+            messages.error(request, "不正な操作です。")
+            return redirect("connect:repurchase_over_bonus")
+
+        if not selected_kibetu:
+            messages.error(request, "期別を選択してください。")
+            return redirect("connect:repurchase_over_bonus")
+
+        period = (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu=selected_kibetu)
+            .first()
+        )
+
+        if not period:
+            messages.error(request, "選択された期別が存在しません。")
+            return redirect("connect:repurchase_over_bonus")
+
+        try:
+            repurchase_over_bonus_rows = self._get_repurchase_over_bonus_rows(
+                selected_kibetu,
+                period
+            )
+
+            if not repurchase_over_bonus_rows:
+                messages.warning(request, "登録対象データがありません。")
+                return redirect(
+                    f"/repurchase_over_bonus/?kibetu={selected_kibetu}"
+                )
+
+            insert_sql, insert_params = (
+                register_sql.get_repurchase_over_bonus_insert_data(
+                    selected_kibetu,
+                    repurchase_over_bonus_rows
+                )
+            )
+
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    cursor.executemany(insert_sql, insert_params)
+
+                    history_sql = """
+                        INSERT INTO bonus_db.bonus_register_history (
+                            bonus_name,
+                            kibetu,
+                            registered_at,
+                            registered_by,
+                            comment_text
+                        )
+                        VALUES (
+                            %s,
+                            %s,
+                            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'),
+                            %s,
+                            %s
+                        )
+                    """
+
+                    cursor.execute(
+                        history_sql,
+                        [
+                            "repurchase_over_bonus",
+                            selected_kibetu,
+                            request.user.username,
+                            f"{len(repurchase_over_bonus_rows)}件登録"
+                        ]
+                    )
+
+            messages.success(
+                request,
+                f"{len(repurchase_over_bonus_rows)}件を再購入オーバーボーナス結果に登録しました。"
+            )
+
+        except Exception as e:
+            logger.exception("再購入オーバーボーナス結果登録エラー")
+            messages.error(request, f"登録中にエラーが発生しました: {e}")
+
+        return redirect(
+            f"/repurchase_over_bonus/?kibetu={selected_kibetu}"
+        )
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        selected_kibetu = self.request.GET.get("kibetu")
+
+        ctx["selected_kibetu"] = selected_kibetu
+        ctx["rows"] = []
+        ctx["selected_period"] = None
+
+        if not selected_kibetu:
+            return ctx
+
+        period = (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu=selected_kibetu)
+            .first()
+        )
+
+        if not period:
+            return ctx
+
+        ctx["selected_period"] = period
+
+        ctx["rows"] = self._get_repurchase_over_bonus_rows(
+            selected_kibetu,
+            period
+        )
+
+        return ctx
+
+    def _get_repurchase_over_bonus_rows(self, selected_kibetu, period):
+
+        kibetu_year = period.year
+        kibetu_month = period.month
+
+        kibetu_year_str = f"{kibetu_year}"
+        kibetu_month_str = f"{kibetu_month:02d}"
+
+        params = [
+            kibetu_month_str,
+            kibetu_year_str,
+        ]
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(REPURCHASE_OVER_BONUS_SQL, params)
+            logger.info(f"Executed SQL: {cursor._executed}")
+
+            cols = [c[0] for c in cursor.description]
+            rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+        return rows
