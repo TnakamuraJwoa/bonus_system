@@ -3515,6 +3515,9 @@ class TitleDiffBonusView(generic.ListView):
         kibetu_year = int(selected_kibetu[0:4])
         kibetu_month = int(selected_kibetu[5:7])
 
+        kibetu_year_str = f"{kibetu_year}"
+        kibetu_month_str = f"{kibetu_month:02d}"
+
         start_dt = make_aware(datetime.combine(st_date, time.min))
         end_dt = make_aware(datetime.combine(end_date + timedelta(days=1), time.min))
 
@@ -3528,23 +3531,28 @@ class TitleDiffBonusView(generic.ListView):
         be_end_dt = make_aware(datetime(kibetu_year, kibetu_month, 1, 0, 0, 0))
 
 
+#         params = [
+#             kibetu_year,
+#             kibetu_month,
+#             kibetu_year,
+#             kibetu_month,
+#             prev_year,
+#             prev_month,
+#             kibetu_year,
+#             kibetu_month,
+#             prev_year,
+#             prev_month,
+#             kibetu_year,
+#             kibetu_month,
+#         ]
+
         params = [
-            kibetu_year,
-            kibetu_month,
-            kibetu_year,
-            kibetu_month,
-            prev_year,
-            prev_month,
-            kibetu_year,
-            kibetu_month,
-            prev_year,
-            prev_month,
-            kibetu_year,
-            kibetu_month,
+            kibetu_month_str,
+            kibetu_year_str,
         ]
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(TITLE_BONUS_SQL, params)
+            cursor.execute(TITLE_DIFF_BONUS_SQL, params)
             logger.info(f"Executed SQL: {cursor._executed}")
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]

@@ -87,32 +87,40 @@
                   <tr>
                     <th>root_jwoa_code</th>
                     <th>root_name</th>
+                    <th>up_title_id</th>
+                    <th>up_bonus_rate</th>
                     <th>up_jwoa_code</th>
+                    <th>up_jwoa_name</th>
+                    <th>down_title_id</th>
+                    <th>down_bonus_rate</th>
                     <th>down_jwoa_code</th>
                     <th>down_name</th>
+                    <th>pay_bonus_rate</th>
                     <th>tree_level</th>
-                    <th>match_level</th>
                     <th>sum_bv</th>
-                    <th>title_id</th>
-                    <th>rate</th>
-                    <th>bonus_amount</th>
+                    <th>title_diff_bonus</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {% for r in rows %}
                     <tr>
-                      <td>{{ r.root_jmoa_code }}</td>
+                      <td>{{ r.root_jwoa_code }}</td>
                       <td>{{ r.root_name }}</td>
+                      <td>{{ r.up_title_id }}</td>
+                      <td>{{ r.up_bonus_rate }}</td>
                       <td>{{ r.up_jwoa_code }}</td>
+                      <td>{{ r.up_jwoa_name }}</td>
+                      <td>{{ r.down_title_id }}</td>
+                      <td>{{ r.down_bonus_rate }}</td>
                       <td>{{ r.down_jwoa_code }}</td>
                       <td>{{ r.down_name }}</td>
+                      <td>{{ r.pay_bonus_rate }}</td>
                       <td>{{ r.tree_level }}</td>
-                      <td class="text-end">{{ r.match_level }}</td>
-                      <td class="text-end">{{ r.sum_bv }}</td>
-                      <td class="text-end">{{ r.title_id }}</td>
-                      <td class="text-end">{{ r.rate }}</td>
-                      <td class="text-end">{{ r.bonus_amount }}</td>
+                      <td>{{ r.sum_bv }}</td>
+                      <td class="fw-bold text-primary">
+                        {{ r.title_diff_bonus }}
+                      </td>
                     </tr>
                   {% endfor %}
                 </tbody>
