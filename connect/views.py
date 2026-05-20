@@ -3927,3 +3927,148 @@ class RepurchaseOverBonusView(generic.ListView):
             ]
 
         return rows
+
+
+
+class S_RepurchaseOverBonusView(generic.ListView):
+    template_name = "s_repurchase_over_bonus.html"
+    context_object_name = "object_list"
+    model = MonthlyPeriod
+
+    def get_queryset(self):
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute("""
+                SELECT DISTINCT kibetu
+                FROM bonus_db.B_repurchase_over_bonus_result
+                ORDER BY kibetu DESC
+            """)
+
+            registered_kibetu_list = [
+                row[0]
+                for row in cursor.fetchall()
+            ]
+
+        if not registered_kibetu_list:
+            return MonthlyPeriod.objects.using("rds").none()
+
+        return (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu__in=registered_kibetu_list)
+            .order_by("-year", "-month")
+        )
+
+    def get(self, request, *args, **kwargs):
+        self.object_list = self.get_queryset()
+        context = self.get_context_data()
+
+        if request.GET.get("export") == "excel":
+
+            rows = context.get("rows", [])
+
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "RepurchaseOverBonusResult"
+
+            headers = [
+                "kibetu",
+                "root_code",
+                "root_name",
+                "up_code",
+                "up_name",
+                "down_code",
+                "down_name",
+                "tree_level",
+                "match_count",
+                "sum_bv",
+                "created_at",
+                "updated_at",
+            ]
+
+            ws.append(headers)
+
+            for r in rows:
+                ws.append([
+                    r.get("kibetu"),
+                    r.get("root_code"),
+                    r.get("root_name"),
+                    r.get("up_code"),
+                    r.get("up_name"),
+                    r.get("down_code"),
+                    r.get("down_name"),
+                    r.get("tree_level"),
+                    r.get("match_count"),
+                    r.get("sum_bv"),
+                    r.get("created_at"),
+                    r.get("updated_at"),
+                ])
+
+            response = HttpResponse(
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+            response["Content-Disposition"] = (
+                'attachment; filename="title_diff_bonus_result.xlsx"'
+            )
+
+            wb.save(response)
+            return response
+
+        return self.render_to_response(context)
+
+    def get_context_data(self, **kwargs):
+
+        ctx = super().get_context_data(**kwargs)
+
+        selected_kibetu = self.request.GET.get("kibetu")
+
+        if not selected_kibetu and self.object_list:
+            selected_kibetu = self.object_list[0].kibetu
+
+        ctx["selected_kibetu"] = selected_kibetu
+        ctx["rows"] = []
+        ctx["selected_period"] = None
+
+        if not selected_kibetu:
+            return ctx
+
+        period = (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu=selected_kibetu)
+            .first()
+        )
+
+        if not period:
+            return ctx
+
+        ctx["selected_period"] = period
+
+        sql = """
+            SELECT
+                id,
+                kibetu,
+                root_code,
+                root_name,
+                up_code,
+                up_name,
+                down_code,
+                down_name,
+                tree_level,
+                match_count,
+                sum_bv,
+                created_at,
+                updated_at
+            FROM bonus_db.B_repurchase_over_bonus_result
+            WHERE kibetu = %s
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, [selected_kibetu])
+            logger.info(f"Executed SQL: {cursor._executed}")
+
+            cols = [c[0] for c in cursor.description]
+            rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+        ctx["rows"] = rows
+
+        return ctx
