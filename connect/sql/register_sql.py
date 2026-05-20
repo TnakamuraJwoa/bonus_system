@@ -210,3 +210,56 @@ def get_title_diff_bonus_insert_data(selected_kibetu, rows):
         ])
 
     return insert_sql, insert_params
+
+
+
+## 再購入オーバーボーナス
+def get_repurchase_over_bonus_insert_data(selected_kibetu, rows):
+
+    insert_sql = """
+        INSERT INTO bonus_db.B_repurchase_over_bonus_result (
+            kibetu,
+            root_code,
+            root_name,
+            up_code,
+            up_name,
+            down_code,
+            down_name,
+            tree_level,
+            match_count,
+            sum_bv,
+            created_at,
+            updated_at
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'),
+            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo')
+        )
+        ON DUPLICATE KEY UPDATE
+            root_name = VALUES(root_name),
+            up_code = VALUES(up_code),
+            up_name = VALUES(up_name),
+            down_name = VALUES(down_name),
+            tree_level = VALUES(tree_level),
+            match_count = VALUES(match_count),
+            sum_bv = VALUES(sum_bv),
+            updated_at = CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo')
+    """
+
+    insert_params = []
+
+    for r in rows:
+        insert_params.append([
+            selected_kibetu,
+            r.get("root_code") or "",
+            r.get("root_name") or "",
+            r.get("up_code") or "",
+            r.get("up_name") or "",
+            r.get("down_code") or "",
+            r.get("down_name") or "",
+            r.get("tree_level") or 0,
+            r.get("match_count") or 0,
+            r.get("sum_bv") or 0,
+        ])
+
+    return insert_sql, insert_params

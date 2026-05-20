@@ -32,7 +32,7 @@
                   {% for obj in object_list %}
                     <option value="{{ obj.kibetu }}"
                             {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
-                      {{ obj.kibetu }}
+                      {{ obj.kibetu }} ({{ obj.payment_date }})
                     </option>
                   {% endfor %}
                 </select>
@@ -40,14 +40,14 @@
 
               <button type="submit" class="btn btn-primary">表示</button>
 
-              <a class="btn btn-outline-secondary" href="{% url 'connect:title_diff_bonus' %}">
+              <a class="btn btn-outline-secondary" href="{% url 'connect:repurchase_over_bonus' %}">
                 リセット
               </a>
             </form>
 
             {% if selected_period and rows %}
               <form method="post" class="mb-0"
-                    onsubmit="return confirm('表示中のタイトル差額ボーナス結果を登録しますか？すでに登録済みの場合は上書き更新されます。');">
+                    onsubmit="return confirm('表示中の再購入オーバーボーナス結果を登録しますか？すでに登録済みの場合は上書き更新されます。');">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="repurchase_over_bonus">
                 <input type="hidden" name="kibetu" value="{{ selected_kibetu }}">
@@ -90,41 +90,31 @@
               <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                   <tr>
-                    <th>root_jwoa_code</th>
+                    <th>root_code</th>
                     <th>root_name</th>
-                    <th>up_title_id</th>
-                    <th>up_bonus_rate</th>
-                    <th>up_jwoa_code</th>
-                    <th>up_jwoa_name</th>
-                    <th>down_title_id</th>
-                    <th>down_bonus_rate</th>
-                    <th>down_jwoa_code</th>
+                    <th>up_code</th>
+                    <th>up_name</th>
+                    <th>down_code</th>
                     <th>down_name</th>
-                    <th>pay_bonus_rate</th>
                     <th>tree_level</th>
+                    <th>match_count</th>
                     <th>sum_bv</th>
-                    <th>title_diff_bonus</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {% for r in rows %}
                     <tr>
-                      <td>{{ r.root_jwoa_code }}</td>
+                      <td>{{ r.root_code }}</td>
                       <td>{{ r.root_name }}</td>
-                      <td class="text-end">{{ r.up_title_id }}</td>
-                      <td class="text-end">{{ r.up_bonus_rate }}</td>
-                      <td>{{ r.up_jwoa_code }}</td>
-                      <td>{{ r.up_jwoa_name }}</td>
-                      <td class="text-end">{{ r.down_title_id }}</td>
-                      <td class="text-end">{{ r.down_bonus_rate }}</td>
-                      <td>{{ r.down_jwoa_code }}</td>
+                      <td>{{ r.up_code }}</td>
+                      <td>{{ r.up_name }}</td>
+                      <td>{{ r.down_code }}</td>
                       <td>{{ r.down_name }}</td>
-                      <td class="text-end">{{ r.pay_bonus_rate }}</td>
                       <td class="text-end">{{ r.tree_level }}</td>
-                      <td class="text-end">{{ r.sum_bv }}</td>
+                      <td class="text-end">{{ r.match_count }}</td>
                       <td class="fw-bold text-primary text-end">
-                        {{ r.title_diff_bonus }}
+                        {{ r.sum_bv }}
                       </td>
                     </tr>
                   {% endfor %}

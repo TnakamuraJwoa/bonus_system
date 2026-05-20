@@ -3773,7 +3773,11 @@ class RepurchaseOverBonusView(generic.ListView):
     model = MonthlyPeriod
 
     def get_queryset(self):
-        return MonthlyPeriod.objects.using("rds").all()
+        return (
+            MonthlyPeriod.objects.using("rds")
+            .all()
+            .order_by("-year", "-month")
+        )
 
     def get(self, request, *args, **kwargs):
         self.object_list = self.get_queryset()
@@ -3784,7 +3788,7 @@ class RepurchaseOverBonusView(generic.ListView):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
 
-        if action != "register_repurchase_over_bonus":
+        if action != "repurchase_over_bonus":
             messages.error(request, "不正な操作です。")
             return redirect("connect:repurchase_over_bonus")
 
@@ -3804,8 +3808,8 @@ class RepurchaseOverBonusView(generic.ListView):
 
         try:
             repurchase_over_bonus_rows = self._get_repurchase_over_bonus_rows(
-                selected_kibetu,
-                period
+                selected_kibetu=selected_kibetu,
+                period=period,
             )
 
             if not repurchase_over_bonus_rows:
@@ -3817,14 +3821,22 @@ class RepurchaseOverBonusView(generic.ListView):
             insert_sql, insert_params = (
                 register_sql.get_repurchase_over_bonus_insert_data(
                     selected_kibetu,
-                    repurchase_over_bonus_rows
+                    repurchase_over_bonus_rows,
                 )
             )
 
+            if not insert_params:
+                messages.warning(request, "登録対象データがありません。")
+                return redirect(
+                    f"/repurchase_over_bonus/?kibetu={selected_kibetu}"
+                )
+
             with transaction.atomic(using="rds"):
                 with connections["rds"].cursor() as cursor:
+                    # 再購入オーバーボーナス登録
                     cursor.executemany(insert_sql, insert_params)
 
+                    # 登録履歴
                     history_sql = """
                         INSERT INTO bonus_db.bonus_register_history (
                             bonus_name,
@@ -3848,13 +3860,13 @@ class RepurchaseOverBonusView(generic.ListView):
                             "repurchase_over_bonus",
                             selected_kibetu,
                             request.user.username,
-                            f"{len(repurchase_over_bonus_rows)}件登録"
-                        ]
+                            f"{len(insert_params)}件登録",
+                        ],
                     )
 
             messages.success(
                 request,
-                f"{len(repurchase_over_bonus_rows)}件を再購入オーバーボーナス結果に登録しました。"
+                f"{len(insert_params)}件を再購入オーバーボーナス結果に登録しました。"
             )
 
         except Exception as e:
@@ -3889,23 +3901,19 @@ class RepurchaseOverBonusView(generic.ListView):
         ctx["selected_period"] = period
 
         ctx["rows"] = self._get_repurchase_over_bonus_rows(
-            selected_kibetu,
-            period
+            selected_kibetu=selected_kibetu,
+            period=period,
         )
 
         return ctx
 
     def _get_repurchase_over_bonus_rows(self, selected_kibetu, period):
-
         kibetu_year = period.year
         kibetu_month = period.month
 
-        kibetu_year_str = f"{kibetu_year}"
-        kibetu_month_str = f"{kibetu_month:02d}"
-
         params = [
-            kibetu_month_str,
-            kibetu_year_str,
+            kibetu_year,
+            kibetu_month,
         ]
 
         with connections["rds"].cursor() as cursor:
@@ -3913,6 +3921,9 @@ class RepurchaseOverBonusView(generic.ListView):
             logger.info(f"Executed SQL: {cursor._executed}")
 
             cols = [c[0] for c in cursor.description]
-            rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
+            rows = [
+                dict(zip(cols, r))
+                for r in cursor.fetchall()
+            ]
 
         return rows

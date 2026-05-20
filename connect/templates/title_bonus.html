@@ -32,8 +32,7 @@
                   {% for obj in object_list %}
                     <option value="{{ obj.kibetu }}"
                             {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
-                      {{ obj.kibetu }}
-                      ({{ obj.payment_date }})
+                      {{ obj.kibetu }} ({{ obj.payment_date }})
                     </option>
                   {% endfor %}
                 </select>
