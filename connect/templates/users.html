@@ -1,0 +1,307 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block head %}
+  <link href="{% static 'css/common.css' %}" rel="stylesheet">
+{% endblock %}
+
+{% block contents %}
+<div class="container-fluid mt-3">
+  <div class="row g-1">
+
+    <div class="col-12 text-end">
+      {% if user.is_authenticated %}
+        <span class="small text-muted">👤 {{ user.username }}</span>
+      {% endif %}
+    </div>
+
+    {% include "com/_sidebar_users.html" with active_menu="users" %}
+
+    <main class="col-12 col-md-9 col-lg-10">
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+
+          <h5 class="mb-3">【会員 - 会員一覧】</h5>
+
+          <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+
+            <div>
+              <label class="form-label mb-0 small text-muted">会員ID</label>
+              <input type="text"
+                     name="q_jpid"
+                     class="form-control"
+                     value="{{ q_jpid|default:'' }}"
+                     placeholder="例: JP05198407">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">会員名</label>
+              <input type="text"
+                     name="q_name"
+                     class="form-control"
+                     value="{{ q_name|default:'' }}"
+                     placeholder="例: 山田">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">紹介者ID</label>
+              <input type="text"
+                     name="q_introducer"
+                     class="form-control"
+                     value="{{ q_introducer|default:'' }}"
+                     placeholder="例: JP00000000">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">上位者ID</label>
+              <input type="text"
+                     name="q_placement"
+                     class="form-control"
+                     value="{{ q_placement|default:'' }}"
+                     placeholder="例: JP00000000">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">ステータス</label>
+              <select name="q_status" class="form-select">
+                <option value="">全て</option>
+                <option value="1" {% if q_status == "1" %}selected{% endif %}>1：アクティブ</option>
+                <option value="2" {% if q_status == "2" %}selected{% endif %}>2：凍結</option>
+                <option value="3" {% if q_status == "3" %}selected{% endif %}>3：退会</option>
+                <option value="4" {% if q_status == "4" %}selected{% endif %}>4：中途解約</option>
+                <option value="5" {% if q_status == "5" %}selected{% endif %}>5：非アクティブ</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">会員ランク</label>
+              <select name="q_rank" class="form-select">
+                <option value="">全て</option>
+                <option value="1" {% if q_rank == "1" %}selected{% endif %}>1:シルバー</option>
+                <option value="2" {% if q_rank == "2" %}selected{% endif %}>2:ゴールド</option>
+                <option value="3" {% if q_rank == "3" %}selected{% endif %}>3:プラチナ</option>
+                <option value="4" {% if q_rank == "4" %}selected{% endif %}>4:ダイヤ</option>
+                <option value="5" {% if q_rank == "5" %}selected{% endif %}>5:一般会員</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">表示件数</label>
+              <select name="per_page" class="form-select">
+                <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+              </select>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+              絞り込み
+            </button>
+
+            <a class="btn btn-outline-secondary"
+               href="{% url 'connect:users' %}">
+              リセット
+            </a>
+
+          </form>
+
+          {% if q_jpid or q_name or q_introducer or q_placement or q_status or q_rank %}
+            <div class="text-muted small mt-3">
+              絞り込み中：
+
+              {% if q_jpid %}
+                <span class="badge bg-info text-dark">会員ID={{ q_jpid }}</span>
+              {% endif %}
+
+              {% if q_name %}
+                <span class="badge bg-secondary">会員名={{ q_name }}</span>
+              {% endif %}
+
+              {% if q_introducer %}
+                <span class="badge bg-success">紹介者={{ q_introducer }}</span>
+              {% endif %}
+
+              {% if q_placement %}
+                <span class="badge bg-primary">上位者={{ q_placement }}</span>
+              {% endif %}
+
+              {% if q_status %}
+                <span class="badge bg-warning text-dark">ステータス={{ q_status }}</span>
+              {% endif %}
+
+              {% if q_rank %}
+                <span class="badge bg-dark">ランク={{ q_rank }}</span>
+              {% endif %}
+            </div>
+          {% else %}
+            <div class="text-muted small mt-3">
+              全件表示中
+            </div>
+          {% endif %}
+
+        </div>
+      </div>
+
+      <div class="card shadow-sm">
+        <div class="card-body">
+
+          {% if rows %}
+
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="fw-bold">一覧</div>
+
+              <div class="text-end">
+                <strong>総件数：{{ total_count }} 件</strong>
+                <span class="text-muted small ms-2">
+                  （{{ page }} / {{ total_pages }}）
+                </span>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table table-bordered table-sm align-middle mb-0"
+                     style="white-space: nowrap;">
+
+                <thead class="table-light">
+                  <tr>
+                    <th>ID</th>
+                    <th>グループID</th>
+                    <th>会員ID</th>
+                    <th>BV反映用氏名</th>
+                    <th>上位者ID</th>
+                    <th>紹介者ID</th>
+                    <th>ランク</th>
+                    <th>ステータス</th>
+                    <th>本登録FLG</th>
+                    <th>法人FLG</th>
+                    <th>仮登録日時</th>
+                    <th>本登録日時</th>
+                    <th>最終購入日</th>
+                    <th>作成日時</th>
+                    <th>更新日時</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {% for r in rows %}
+                  <tr>
+                    <td class="text-end">{{ r.id }}</td>
+                    <td>{{ r.group_code }}</td>
+                    <td>{{ r.jmoa_code }}</td>
+                    <td>{{ r.send_bv_name }}</td>
+                    <td>{{ r.introducer_code }}</td>
+                    <td>{{ r.placement_code }}</td>
+
+                    <!-- ランク -->
+                    <td class="text-center">
+                      {% if r.rank == 1 %}
+                        シルバー
+                      {% elif r.rank == 2 %}
+                        ゴールド
+                      {% elif r.rank == 3 %}
+                        プラチナ
+                      {% elif r.rank == 4 %}
+                        ダイヤ
+                      {% elif r.rank == 9 %}
+                        一般会員
+                      {% else %}
+                        -
+                      {% endif %}
+                    </td>
+
+                    <!-- ステータス -->
+                    <td class="text-center">
+                      {% if r.status_code == 1 %}
+                        アクティブ
+                      {% elif r.status_code == 2 %}
+                        凍結
+                      {% elif r.status_code == 3 %}
+                        退会
+                      {% elif r.status_code == 4 %}
+                        中途解約
+                      {% elif r.status_code == 5 %}
+                        非アクティブ
+                      {% else %}
+                        -
+                      {% endif %}
+                    </td>
+
+                    <!-- 本登録FLG -->
+                    <td class="text-center">
+                      {% if r.activated == 1 %}
+                        本登録
+                      {% else %}
+                        仮登録中
+                      {% endif %}
+                    </td>
+
+                    <!-- 法人FLG -->
+                    <td class="text-center">
+                      {% if r.company == 1 %}
+                        法人
+                      {% else %}
+                        -
+                      {% endif %}
+                    </td>
+
+                    <td>{{ r.interim_at }}</td>
+                    <td>{{ r.activated_at }}</td>
+                    <td>{{ r.last_purchase_at }}</td>
+                    <td>{{ r.created_at }}</td>
+                    <td>{{ r.updated_at }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+
+              </table>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mt-3">
+
+              <div class="text-muted small">
+                {% if has_prev_hint %}
+                  ※「戻る」はブラウザの戻るでもOK
+                {% endif %}
+              </div>
+
+              <div class="d-flex">
+
+                {% if has_prev_hint %}
+                  <button class="btn btn-outline-secondary btn-sm me-2"
+                          type="button"
+                          onclick="history.back()">
+                    ← 戻る
+                  </button>
+                {% endif %}
+
+                {% if has_next %}
+                  <a class="btn btn-primary btn-sm"
+                     href="?{{ base_qs }}{% if base_qs %}&{% endif %}page={{ page|add:1 }}&after_id={{ next_after_id }}">
+                    次へ →
+                  </a>
+                {% else %}
+                  <button class="btn btn-secondary btn-sm" disabled>
+                    次へ →
+                  </button>
+                {% endif %}
+
+              </div>
+            </div>
+
+          {% else %}
+
+            <p class="mb-0 text-muted">
+              該当データがありません。
+            </p>
+
+          {% endif %}
+
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+{% endblock %}

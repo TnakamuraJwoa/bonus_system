@@ -10,7 +10,6 @@ urlpatterns = [
     path('kibetu/', views.KibetuView.as_view(), name = "kibetu"),
     path('kibetu_month/', views.KibetuMonthView.as_view(), name = "kibetu_month"),
     path('title_list/', views.TitleListView.as_view(), name = "title_list"),
-    path('title_user/', views.TitleUserView.as_view(), name = "title_user"),
     path('placement_tree/', views.PlacementTreeView.as_view(), name = "placement_tree"),
     path('settings/', views.SettingsView.as_view(), name = "settings"),
     path('repurchase_last_month/', views.RepurchaseLastMonthView.as_view(), name = "repurchase_last_month"),
@@ -23,6 +22,9 @@ urlpatterns = [
     path('title_registration/', views.TitleRegistrationView.as_view(), name = "title_registration"),
     path("bonus_payment_date/", views.BonusPaymentDateView.as_view(), name="bonus_payment_date"),
     path("active_users/", views.ActiveUsersView.as_view(), name="active_users"),
+
+    path('users/', views.UsersView.as_view(), name = "users"),
+    path('title_user/', views.TitleUserView.as_view(), name = "title_user"),
 
     path('drive_bonus/', views.DriveBonusView.as_view(), name = "drive_bonus"),
     path('basic_bonus/', views.BasicBonusView.as_view(), name = "basic_bonus"),

@@ -50,6 +50,96 @@ from connect.sql import register_sql
 logger = logging.getLogger(__name__)
 
 
+class KeysetPaginationMixin:
+
+    DEFAULT_PER_PAGE = 200
+    MAX_PER_PAGE = 500
+
+    def get_per_page(self):
+
+        try:
+            per_page = int(
+                self.request.GET.get(
+                    "per_page",
+                    self.DEFAULT_PER_PAGE
+                )
+            )
+
+        except ValueError:
+            per_page = self.DEFAULT_PER_PAGE
+
+        return max(
+            1,
+            min(per_page, self.MAX_PER_PAGE)
+        )
+
+    def get_current_page(self, after_values):
+
+        if any(after_values):
+
+            try:
+                return max(
+                    1,
+                    int(self.request.GET.get("page", 2))
+                )
+
+            except ValueError:
+                return 2
+
+        return 1
+
+    def build_base_qs(self, params):
+
+        clean_params = {}
+
+        for key, value in params.items():
+
+            if value not in ["", None]:
+                clean_params[key] = value
+
+        return urlencode(clean_params)
+
+    def set_keyset_context(
+        self,
+        ctx,
+        rows,
+        per_page,
+        total_count,
+        total_pages,
+        next_keys,
+        after_values,
+        base_params,
+    ):
+
+        ctx["rows"] = rows
+
+        ctx["total_count"] = total_count
+
+        ctx["per_page"] = per_page
+
+        ctx["total_pages"] = total_pages
+
+        ctx["page"] = self.get_current_page(after_values)
+
+        ctx["base_qs"] = self.build_base_qs(base_params)
+
+        ctx["has_next"] = (
+            len(rows) == per_page
+            and all(bool(v) for v in next_keys.values())
+        )
+
+        for key, value in next_keys.items():
+            ctx[key] = value
+
+        ctx["has_prev_hint"] = any(
+            bool(v)
+            for v in after_values
+        )
+
+        return ctx
+
+
+
 class IndexView(LoginView):
     template_name = "account/login.html"
     form_class = LoginForm
@@ -1942,9 +2032,8 @@ WHERE name = 'set_title'
 class RepurchaseExportView(RepurchaseListView):
 
     def get(self, request):
-        view = RepurchaseListView()
+        selected_month = (request.GET.get("target_month") or "").strip()
 
-        selected_month = (request.GET.get("prev_month") or "").strip()
         q_code = (request.GET.get("q_code") or "").strip()
         q_name = (request.GET.get("q_name") or "").strip()
         q_order_code = (request.GET.get("q_order_code") or "").strip()
@@ -1953,14 +2042,14 @@ class RepurchaseExportView(RepurchaseListView):
         q_bonus_date_to = (request.GET.get("q_bonus_date_to") or "").strip()
 
         year, month = None, None
+
         if selected_month:
             try:
                 year, month = map(int, selected_month.split("-"))
-            except:
+            except ValueError:
                 pass
 
-        # 🔥 ここがポイント（limitなし）
-        rows = view._fetch_rows(
+        rows = self._fetch_rows(
             year=year,
             month=month,
             q_code=q_code,
@@ -1969,21 +2058,27 @@ class RepurchaseExportView(RepurchaseListView):
             q_order_type=q_order_type,
             q_bonus_date_from=q_bonus_date_from,
             q_bonus_date_to=q_bonus_date_to,
-            limit=1000000,   # or LIMIT外す専用関数でもOK
-            offset=0
+            limit=1000000,
+            offset=0,
         )
 
-        # Excel出力処理（例）
         wb = openpyxl.Workbook()
         ws = wb.active
+        ws.title = "購入情報一覧"
 
         ws.append([
-            "注文番号","注文区分","会員番号","会員名",
-            "total_bv","bv","BV反映日時","注文日時","ボーナス支払日","作成日時"
+            "登録年", "登録月", "注文年", "注文月",
+            "注文番号", "注文区分", "会員番号", "会員名",
+            "total_bv", "bv", "BV反映日時", "注文日時",
+            "ボーナス支払日", "作成日時"
         ])
 
         for r in rows:
             ws.append([
+                r["register_year"],
+                r["register_month"],
+                r["order_year"],
+                r["order_month"],
                 r["order_code"],
                 r["order_type"],
                 r["jwoa_code"],
@@ -1997,9 +2092,9 @@ class RepurchaseExportView(RepurchaseListView):
             ])
 
         response = HttpResponse(
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-        response['Content-Disposition'] = 'attachment; filename=repurchase.xlsx'
+        response["Content-Disposition"] = 'attachment; filename="repurchase.xlsx"'
 
         wb.save(response)
         return response
@@ -4072,3 +4167,227 @@ class S_RepurchaseOverBonusView(generic.ListView):
         ctx["rows"] = rows
 
         return ctx
+
+
+class UsersView(KeysetPaginationMixin, generic.TemplateView):
+    template_name = "users.html"
+
+    def _build_where(
+        self,
+        q_jpid: str = "",
+        q_name: str = "",
+        q_introducer: str = "",
+        q_placement: str = "",
+        q_status: str = "",
+        q_rank: str = "",
+    ):
+        where = []
+        params = []
+
+        if q_jpid:
+            where.append("u.jmoa_code LIKE %s")
+            params.append(f"%{q_jpid}%")
+
+        if q_name:
+            where.append("(u.send_bv_name LIKE %s OR u.name LIKE %s)")
+            params.append(f"%{q_name}%")
+            params.append(f"%{q_name}%")
+
+        if q_introducer:
+            where.append("u.introducer_code LIKE %s")
+            params.append(f"%{q_introducer}%")
+
+        if q_placement:
+            where.append("u.placement_code LIKE %s")
+            params.append(f"%{q_placement}%")
+
+        if q_status:
+            where.append("u.status_code = %s")
+            params.append(q_status)
+
+        if q_rank:
+            where.append("u.rank = %s")
+            params.append(q_rank)
+
+        where_sql = "WHERE " + " AND ".join(where) if where else ""
+
+        return where_sql, params
+
+    def _fetch_total_count(
+        self,
+        q_jpid: str = "",
+        q_name: str = "",
+        q_introducer: str = "",
+        q_placement: str = "",
+        q_status: str = "",
+        q_rank: str = "",
+    ) -> int:
+
+        where_sql, params = self._build_where(
+            q_jpid=q_jpid,
+            q_name=q_name,
+            q_introducer=q_introducer,
+            q_placement=q_placement,
+            q_status=q_status,
+            q_rank=q_rank,
+        )
+
+        sql = f"""
+            SELECT COUNT(*)
+            FROM nexus_production.users u
+            {where_sql}
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            row = cursor.fetchone()
+
+        return int(row[0]) if row else 0
+
+    def _fetch_rows_keyset(
+        self,
+        q_jpid: str = "",
+        q_name: str = "",
+        q_introducer: str = "",
+        q_placement: str = "",
+        q_status: str = "",
+        q_rank: str = "",
+        limit: int = 200,
+        after_id: str = "",
+    ):
+
+        where_sql, params = self._build_where(
+            q_jpid=q_jpid,
+            q_name=q_name,
+            q_introducer=q_introducer,
+            q_placement=q_placement,
+            q_status=q_status,
+            q_rank=q_rank,
+        )
+
+        keyset_sql = ""
+
+        if after_id:
+            if where_sql:
+                keyset_sql = " AND u.id > %s "
+            else:
+                keyset_sql = " WHERE u.id > %s "
+
+            params.append(after_id)
+
+        sql = f"""
+            SELECT
+                u.id,
+                u.group_code,
+                u.jmoa_code,
+                u.send_bv_name,
+                u.introducer_code,
+                u.placement_code,
+                u.rank,
+                u.status_code,
+                u.activated,
+                u.interim_at,
+                u.activated_at,
+                u.company,
+                u.last_purchase_at,
+                u.created_at,
+                u.updated_at
+            FROM nexus_production.users u
+            {where_sql}
+            {keyset_sql}
+            ORDER BY u.status_code, u.jmoa_code
+            LIMIT %s
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params + [limit])
+            cols = [c[0] for c in cursor.description]
+            rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+        return rows
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        q_jpid = (self.request.GET.get("q_jpid") or "").strip()
+        q_name = (self.request.GET.get("q_name") or "").strip()
+        q_introducer = (self.request.GET.get("q_introducer") or "").strip()
+        q_placement = (self.request.GET.get("q_placement") or "").strip()
+        q_status = (self.request.GET.get("q_status") or "").strip()
+        q_rank = (self.request.GET.get("q_rank") or "").strip()
+
+        per_page = self.get_per_page()
+
+        after_id = (self.request.GET.get("after_id") or "").strip()
+
+        total_count = self._fetch_total_count(
+            q_jpid=q_jpid,
+            q_name=q_name,
+            q_introducer=q_introducer,
+            q_placement=q_placement,
+            q_status=q_status,
+            q_rank=q_rank,
+        )
+
+        total_pages = max(1, math.ceil(total_count / per_page))
+
+        rows = self._fetch_rows_keyset(
+            q_jpid=q_jpid,
+            q_name=q_name,
+            q_introducer=q_introducer,
+            q_placement=q_placement,
+            q_status=q_status,
+            q_rank=q_rank,
+            limit=per_page,
+            after_id=after_id,
+        )
+
+        next_after_id = ""
+
+        if rows:
+            next_after_id = str(rows[-1]["id"])
+
+        ctx["q_jpid"] = q_jpid
+        ctx["q_name"] = q_name
+        ctx["q_introducer"] = q_introducer
+        ctx["q_placement"] = q_placement
+        ctx["q_status"] = q_status
+        ctx["q_rank"] = q_rank
+
+        base_params = {}
+
+        if q_jpid:
+            base_params["q_jpid"] = q_jpid
+
+        if q_name:
+            base_params["q_name"] = q_name
+
+        if q_introducer:
+            base_params["q_introducer"] = q_introducer
+
+        if q_placement:
+            base_params["q_placement"] = q_placement
+
+        if q_status:
+            base_params["q_status"] = q_status
+
+        if q_rank:
+            base_params["q_rank"] = q_rank
+
+        if per_page != self.DEFAULT_PER_PAGE:
+            base_params["per_page"] = per_page
+
+        return self.set_keyset_context(
+            ctx=ctx,
+            rows=rows,
+            per_page=per_page,
+            total_count=total_count,
+            total_pages=total_pages,
+            next_keys={
+                "next_after_id": next_after_id,
+            },
+            after_values=[
+                after_id,
+            ],
+            base_params=base_params,
+        )
