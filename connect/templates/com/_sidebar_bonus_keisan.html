@@ -35,8 +35,8 @@
       <div class="fw-bold mb-2">■ 特別ボーナス</div>
 
       <div class="list-group">
-        <a class="list-group-item list-group-item-action {% if active_menu == 'three_star' %}active{% endif %}"
-           href="#">#3スターダイヤグローバル配当(Q)</a>
+        <a class="list-group-item list-group-item-action {% if active_menu == 'three_star_global_bonus' %}active{% endif %}"
+           href="{% url 'connect:three_star_global_bonus' %}">3スターダイヤグローバル配当(Q)</a>
 
         <a class="list-group-item list-group-item-action {% if active_menu == 'three_star' %}active{% endif %}"
            href="#">#クラウンダイヤグローバル配当(Y)</a>

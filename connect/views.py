@@ -4391,3 +4391,328 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             ],
             base_params=base_params,
         )
+
+
+
+class ThreeStarGlobalBonusView(generic.ListView):
+    template_name = "three_star_global_bonus.html"
+    context_object_name = "object_list"
+    model = MonthlyPeriod
+
+    def get_queryset(self):
+        return (
+            MonthlyPeriod.objects.using("rds")
+            .all()
+            .order_by("-year", "-month")
+        )
+
+    def get(self, request, *args, **kwargs):
+        self.object_list = self.get_queryset()
+        context = self.get_context_data()
+        return self.render_to_response(context)
+
+    def post(self, request, *args, **kwargs):
+        action = request.POST.get("action", "")
+        selected_kibetu = request.POST.get("kibetu", "").strip()
+
+        if action != "three_star_global_bonus":
+            messages.error(request, "不正な操作です。")
+            return redirect("connect:three_star_global_bonus")
+
+        if not selected_kibetu:
+            messages.error(request, "期別を選択してください。")
+            return redirect("connect:three_star_global_bonus")
+
+        period = (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu=selected_kibetu)
+            .first()
+        )
+
+        if not period:
+            messages.error(request, "選択された期別が存在しません。")
+            return redirect("connect:three_star_global_bonus")
+
+        try:
+            three_star_global_bonus_rows = self._get_three_star_global_bonus_rows(
+                selected_kibetu=selected_kibetu,
+                period=period,
+            )
+
+            if not three_star_global_bonus_rows:
+                messages.warning(request, "登録対象データがありません。")
+                return redirect(
+                    f"/three_star_global_bonus_rows/?kibetu={selected_kibetu}"
+                )
+
+            insert_sql, insert_params = (
+                register_sql.get_three_star_global_bonus_insert_data(
+                    selected_kibetu,
+                    three_star_global_bonus_rows,
+                )
+            )
+
+            if not insert_params:
+                messages.warning(request, "登録対象データがありません。")
+                return redirect(
+                    f"/three_star_global_bonus/?kibetu={selected_kibetu}"
+                )
+
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    # 再購入オーバーボーナス登録
+                    cursor.executemany(insert_sql, insert_params)
+
+                    # 登録履歴
+                    history_sql = """
+                        INSERT INTO bonus_db.bonus_register_history (
+                            bonus_name,
+                            kibetu,
+                            registered_at,
+                            registered_by,
+                            comment_text
+                        )
+                        VALUES (
+                            %s,
+                            %s,
+                            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'),
+                            %s,
+                            %s
+                        )
+                    """
+
+                    cursor.execute(
+                        history_sql,
+                        [
+                            "three_star_global_bonus",
+                            selected_kibetu,
+                            request.user.username,
+                            f"{len(insert_params)}件登録",
+                        ],
+                    )
+
+            messages.success(
+                request,
+                f"{len(insert_params)}件を3スターダイヤグローバル配当結果に登録しました。"
+            )
+
+        except Exception as e:
+            logger.exception("再購入オーバーボーナス結果登録エラー")
+            messages.error(request, f"登録中にエラーが発生しました: {e}")
+
+        return redirect(
+            f"/three_star_global_bonus/?kibetu={selected_kibetu}"
+        )
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        selected_kibetu = self.request.GET.get("kibetu")
+
+        ctx["selected_kibetu"] = selected_kibetu
+        ctx["rows"] = []
+        ctx["selected_period"] = None
+
+        if not selected_kibetu:
+            return ctx
+
+        period = (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu=selected_kibetu)
+            .first()
+        )
+
+        if not period:
+            return ctx
+
+        ctx["selected_period"] = period
+
+        ctx["rows"] = self._get_three_star_global_bonus_rows(
+            selected_kibetu=selected_kibetu,
+            period=period,
+        )
+
+        return ctx
+
+    def _get_three_star_global_bonus_rows(self, selected_kibetu, period):
+
+        # 今月
+        kibetu_year = period.year
+        kibetu_month = period.month
+
+        # 当月1日を作成
+        current_date = date(kibetu_year, kibetu_month, 1)
+
+        # 先月
+        prev_month_period = current_date - relativedelta(months=1)
+
+        prev_year = prev_month_period.year
+        prev_month = prev_month_period.month
+
+        params = [
+            prev_year,
+            prev_month,
+            kibetu_year,
+            kibetu_month,
+        ]
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(
+                THREE_STAR_DIAMOND_GLOBAL_BONUS_Q_SQL,
+                params
+            )
+
+            logger.info(f"Executed SQL: {cursor._executed}")
+
+            cols = [c[0] for c in cursor.description]
+
+            rows = [
+                dict(zip(cols, r))
+                for r in cursor.fetchall()
+            ]
+
+        return rows
+
+
+class S_ThreeStarGlobalBonusView(generic.ListView):
+    template_name = "s_three_star_global_bonus.html"
+    context_object_name = "object_list"
+    model = MonthlyPeriod
+
+    def get_queryset(self):
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute("""
+                SELECT DISTINCT kibetu
+                FROM bonus_db.B_three_star_global_bonus_result
+                ORDER BY kibetu DESC
+            """)
+
+            registered_kibetu_list = [
+                row[0]
+                for row in cursor.fetchall()
+            ]
+
+        if not registered_kibetu_list:
+            return MonthlyPeriod.objects.using("rds").none()
+
+        return (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu__in=registered_kibetu_list)
+            .order_by("-year", "-month")
+        )
+
+    def get(self, request, *args, **kwargs):
+        self.object_list = self.get_queryset()
+        context = self.get_context_data()
+
+        if request.GET.get("export") == "excel":
+
+            rows = context.get("rows", [])
+
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "ThreeStarGlobalBonus"
+
+            headers = [
+                "id",
+                "kibetu",
+                "jwoa_code",
+                "jwoa_name",
+                "title_id",
+                "score",
+                "total_over_bv",
+                "one_score_bonus",
+                "bonus_amount",
+                "created_at",
+                "updated_at",
+            ]
+
+            ws.append(headers)
+
+            for r in rows:
+                ws.append([
+                    r.get("id"),
+                    r.get("kibetu"),
+                    r.get("jwoa_code"),
+                    r.get("jwoa_name"),
+                    r.get("title_id"),
+                    r.get("score"),
+                    r.get("total_over_bv"),
+                    r.get("one_score_bonus"),
+                    r.get("bonus_amount"),
+                    r.get("created_at"),
+                    r.get("updated_at"),
+                ])
+
+            response = HttpResponse(
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+            response["Content-Disposition"] = (
+                'attachment; filename="three_star_global_bonus_result.xlsx"'
+            )
+
+            wb.save(response)
+            return response
+
+        return self.render_to_response(context)
+
+    def get_context_data(self, **kwargs):
+
+        ctx = super().get_context_data(**kwargs)
+
+        selected_kibetu = self.request.GET.get("kibetu")
+
+        if not selected_kibetu and self.object_list:
+            selected_kibetu = self.object_list[0].kibetu
+
+        ctx["selected_kibetu"] = selected_kibetu
+        ctx["rows"] = []
+        ctx["selected_period"] = None
+
+        if not selected_kibetu:
+            return ctx
+
+        period = (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu=selected_kibetu)
+            .first()
+        )
+
+        if not period:
+            return ctx
+
+        ctx["selected_period"] = period
+
+        sql = """
+            SELECT
+                id,
+                kibetu,
+                jwoa_code,
+                jwoa_name,
+                title_id,
+                score,
+                total_over_bv,
+                one_score_bonus,
+                bonus_amount,
+                created_at,
+                updated_at
+            FROM bonus_db.B_three_star_global_bonus_result
+            WHERE kibetu = %s
+            ORDER BY bonus_amount DESC, jwoa_code
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, [selected_kibetu])
+            logger.info(f"Executed SQL: {cursor._executed}")
+
+            cols = [c[0] for c in cursor.description]
+            rows = [
+                dict(zip(cols, r))
+                for r in cursor.fetchall()
+            ]
+
+        ctx["rows"] = rows
+
+        return ctx
