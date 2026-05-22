@@ -1,0 +1,374 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% load static %}
+
+{% block head %}
+  <link href="{% static 'css/common.css' %}" rel="stylesheet">
+{% endblock %}
+
+{% block contents %}
+<div class="container-fluid mt-3">
+  <div class="row g-1">
+
+    <div class="col-12 text-end">
+      {% if user.is_authenticated %}
+        <span class="small text-muted">👤 {{ user.username }}</span>
+      {% endif %}
+    </div>
+
+    {% include "com/_sidebar_orders.html" with active_menu="orders" %}
+
+    <main class="col-12 col-md-9 col-lg-10">
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+
+          <h5 class="mb-3">【注文情報 - 注文一覧】</h5>
+
+          <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+
+            <div style="width: 237px;">
+              <label class="form-label mb-0 small text-muted">注文番号</label>
+              <input type="text" name="q_order_code" class="form-control"
+                     value="{{ q_order_code|default:'' }}">
+            </div>
+
+            <div style="width: 169px;">
+              <label class="form-label mb-0 small text-muted">会員ID</label>
+              <input type="text" name="q_jwoa_code" class="form-control"
+                     value="{{ q_jwoa_code|default:'' }}">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">注文者_氏名</label>
+              <input type="text" name="q_name" class="form-control"
+                     value="{{ q_name|default:'' }}">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">
+                注文状況
+              </label>
+
+              <select name="q_order_status" class="form-select">
+
+                <option value="">全て</option>
+
+                <option value="201"
+                  {% if q_order_status == "201" %}selected{% endif %}>
+                  201：入金待ち
+                </option>
+
+                <option value="202"
+                  {% if q_order_status == "202" %}selected{% endif %}>
+                  202：入金確認済
+                </option>
+
+                <option value="203"
+                  {% if q_order_status == "203" %}selected{% endif %}>
+                  203：決済完了
+                </option>
+
+                <option value="204"
+                  {% if q_order_status == "204" %}selected{% endif %}>
+                  204：出荷依頼済
+                </option>
+
+                <option value="205"
+                  {% if q_order_status == "205" %}selected{% endif %}>
+                  205：出荷完了
+                </option>
+
+                <option value="206"
+                  {% if q_order_status == "206" %}selected{% endif %}>
+                  206：キャンセル
+                </option>
+
+                <option value="207"
+                  {% if q_order_status == "207" %}selected{% endif %}>
+                  207：返品処理中
+                </option>
+
+                <option value="208"
+                  {% if q_order_status == "208" %}selected{% endif %}>
+                  208：返品処理完了
+                </option>
+
+                <option value="209"
+                  {% if q_order_status == "209" %}selected{% endif %}>
+                  209：商品交換処理中
+                </option>
+
+                <option value="210"
+                  {% if q_order_status == "210" %}selected{% endif %}>
+                  210：再出荷依頼中
+                </option>
+
+                <option value="211"
+                  {% if q_order_status == "211" %}selected{% endif %}>
+                  211：再出荷完了
+                </option>
+
+              </select>
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">
+                注文区分
+              </label>
+
+              <select name="q_order_type" class="form-select">
+
+                <option value="">全て</option>
+
+                <option value="101"
+                  {% if q_order_type == "101" %}selected{% endif %}>
+                  101：再購入品
+                </option>
+
+                <option value="102"
+                  {% if q_order_type == "102" %}selected{% endif %}>
+                  102：初回購入品
+                </option>
+
+                <option value="103"
+                  {% if q_order_type == "103" %}selected{% endif %}>
+                  103：ランクアップ購入品
+                </option>
+
+                <option value="105"
+                  {% if q_order_type == "105" %}selected{% endif %}>
+                  105：特別対応購入品
+                </option>
+
+              </select>
+            </div>
+
+            <div style="width: 120px;">
+              <label class="form-label mb-0 small text-muted">注文年</label>
+              <input type="text" name="q_year" class="form-control"
+                     value="{{ q_year|default:'' }}">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">
+                注文月
+              </label>
+
+              <select name="q_month" class="form-select">
+
+                <option value="">全て</option>
+
+                <option value="1" {% if q_month == "1" %}selected{% endif %}>1月</option>
+                <option value="2" {% if q_month == "2" %}selected{% endif %}>2月</option>
+                <option value="3" {% if q_month == "3" %}selected{% endif %}>3月</option>
+                <option value="4" {% if q_month == "4" %}selected{% endif %}>4月</option>
+                <option value="5" {% if q_month == "5" %}selected{% endif %}>5月</option>
+                <option value="6" {% if q_month == "6" %}selected{% endif %}>6月</option>
+                <option value="7" {% if q_month == "7" %}selected{% endif %}>7月</option>
+                <option value="8" {% if q_month == "8" %}selected{% endif %}>8月</option>
+                <option value="9" {% if q_month == "9" %}selected{% endif %}>9月</option>
+                <option value="10" {% if q_month == "10" %}selected{% endif %}>10月</option>
+                <option value="11" {% if q_month == "11" %}selected{% endif %}>11月</option>
+                <option value="12" {% if q_month == "12" %}selected{% endif %}>12月</option>
+
+              </select>
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">表示件数</label>
+              <select name="per_page" class="form-select">
+                <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+              </select>
+            </div>
+
+            <div class="w-100 d-flex justify-content-end gap-2">
+
+              <button type="submit" class="btn btn-primary">
+                絞り込み
+              </button>
+
+              <a class="btn btn-outline-secondary"
+                 href="{% url 'connect:orders' %}">
+                リセット
+              </a>
+
+            </div>
+
+
+          </form>
+
+        </div>
+      </div>
+
+      <div class="card shadow-sm">
+        <div class="card-body">
+
+          {% if rows %}
+
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="fw-bold">一覧</div>
+              <div class="text-end">
+                <strong>総件数：{{ total_count }} 件</strong>
+                <span class="text-muted small ms-2">
+                  （{{ page }} / {{ total_pages }}）
+                </span>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table table-bordered table-sm align-middle mb-0"
+                     style="white-space: nowrap;">
+
+                <thead class="table-light">
+                  <tr>
+                    <th>ID</th>
+                    <th>注文番号</th>
+                    <th>注文状況</th>
+                    <th>注文区分</th>
+                    <th>注文年</th>
+                    <th>注文月</th>
+                    <th>会員ID</th>
+                    <th>注文者_氏名</th>
+                    <th>購入合計金額</th>
+                    <th>合計BV</th>
+                    <th>入金日</th>
+                    <th>作成日時</th>
+                    <th>詳細</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {% for r in rows %}
+                  <tr>
+                    <td class="text-end">{{ r.id }}</td>
+                    <td>{{ r.order_code }}</td>
+                    <td class="text-center">
+
+                      {% if r.order_status == 201 %}
+                        入金待ち
+
+                      {% elif r.order_status == 202 %}
+                        入金確認済
+
+                      {% elif r.order_status == 203 %}
+                        決済完了
+
+                      {% elif r.order_status == 204 %}
+                        出荷依頼済
+
+                      {% elif r.order_status == 205 %}
+                        出荷完了
+
+                      {% elif r.order_status == 206 %}
+                        キャンセル
+
+                      {% elif r.order_status == 207 %}
+                        返品処理中
+
+                      {% elif r.order_status == 208 %}
+                        返品処理完了
+
+                      {% elif r.order_status == 209 %}
+                        商品交換処理中
+
+                      {% elif r.order_status == 210 %}
+                        再出荷依頼中
+
+                      {% elif r.order_status == 211 %}
+                        再出荷完了
+
+                      {% else %}
+                        {{ r.order_status }}
+
+                      {% endif %}
+
+                    </td>
+
+                    <td class="text-center">
+
+                      {% if r.order_type == 101 %}
+                        再購入品
+
+                      {% elif r.order_type == 102 %}
+                        初回購入品
+
+                      {% elif r.order_type == 103 %}
+                        ランクアップ購入品
+
+                      {% elif r.order_type == 105 %}
+                        特別対応購入品
+
+                      {% else %}
+                        {{ r.order_type }}
+
+                      {% endif %}
+
+                    </td>
+
+                    <td>{{ r.order_year }}</td>
+                    <td>{{ r.order_month }}</td>
+                    <td>{{ r.jwoa_code }}</td>
+                    <td>{{ r.order_name }}</td>
+                    <td class="text-end">
+                      {{ r.total_price|intcomma }}
+                    </td>
+                    <td class="text-end">{{ r.total_bv }}</td>
+                    <td>{{ r.order_at }}</td>
+                    <td>{{ r.created_at }}</td>
+                    <td class="text-center">
+                      <a href="{% url 'connect:order_detail' r.id %}"
+                         class="btn btn-sm btn-outline-primary">
+                        詳細
+                      </a>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+
+              </table>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mt-3">
+              <div class="text-muted small">
+                {% if has_prev_hint %}
+                  ※「戻る」はブラウザの戻るでもOK
+                {% endif %}
+              </div>
+
+              <div class="d-flex">
+                {% if has_prev_hint %}
+                  <button class="btn btn-outline-secondary btn-sm me-2"
+                          type="button"
+                          onclick="history.back()">
+                    ← 戻る
+                  </button>
+                {% endif %}
+
+                {% if has_next %}
+                  <a class="btn btn-primary btn-sm"
+                     href="?{{ base_qs }}{% if base_qs %}&{% endif %}page={{ page|add:1 }}&after_id={{ next_after_id }}">
+                    次へ →
+                  </a>
+                {% else %}
+                  <button class="btn btn-secondary btn-sm" disabled>
+                    次へ →
+                  </button>
+                {% endif %}
+              </div>
+            </div>
+
+          {% else %}
+            <p class="mb-0 text-muted">該当データがありません。</p>
+          {% endif %}
+
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+{% endblock %}

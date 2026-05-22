@@ -1,0 +1,256 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block head %}
+<link href="{% static 'css/common.css' %}" rel="stylesheet">
+{% endblock %}
+
+{% block contents %}
+<div class="container-fluid mt-3">
+  <div class="row g-1">
+
+    <div class="col-12 text-end">
+      {% if user.is_authenticated %}
+        <span class="small text-muted">👤 {{ user.username }}</span>
+      {% endif %}
+    </div>
+
+    {% include "com/_sidebar_orders.html" with active_menu="api_users_bv" %}
+
+    <main class="col-12 col-md-9 col-lg-10">
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+
+          <h5 class="mb-3">【注文管理 - 会員BV特別反映情報】</h5>
+
+          <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+
+            <div>
+              <label class="form-label mb-0 small text-muted">注文番号</label>
+              <input type="text" name="q_doc_no" class="form-control"
+                     value="{{ q_doc_no|default:'' }}">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">会員番号</label>
+              <input type="text" name="q_member_no" class="form-control"
+                     value="{{ q_member_no|default:'' }}">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">氏名</label>
+              <input type="text" name="q_name" class="form-control"
+                     value="{{ q_name|default:'' }}">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">注文区分</label>
+              <select name="q_order_type" class="form-select">
+                <option value="">全て</option>
+                <option value="30" {% if q_order_type == "30" %}selected{% endif %}>30：再購入品</option>
+              </select>
+            </div>
+
+            <div style="width: 100px;">
+              <label class="form-label mb-0 small text-muted">注文年</label>
+              <input type="text" name="q_order_year" class="form-control"
+                     value="{{ q_order_year|default:'' }}">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">注文月</label>
+              <select name="q_order_month" class="form-select">
+                <option value="">全て</option>
+                <option value="1" {% if q_order_month == "1" %}selected{% endif %}>1月</option>
+                <option value="2" {% if q_order_month == "2" %}selected{% endif %}>2月</option>
+                <option value="3" {% if q_order_month == "3" %}selected{% endif %}>3月</option>
+                <option value="4" {% if q_order_month == "4" %}selected{% endif %}>4月</option>
+                <option value="5" {% if q_order_month == "5" %}selected{% endif %}>5月</option>
+                <option value="6" {% if q_order_month == "6" %}selected{% endif %}>6月</option>
+                <option value="7" {% if q_order_month == "7" %}selected{% endif %}>7月</option>
+                <option value="8" {% if q_order_month == "8" %}selected{% endif %}>8月</option>
+                <option value="9" {% if q_order_month == "9" %}selected{% endif %}>9月</option>
+                <option value="10" {% if q_order_month == "10" %}selected{% endif %}>10月</option>
+                <option value="11" {% if q_order_month == "11" %}selected{% endif %}>11月</option>
+                <option value="12" {% if q_order_month == "12" %}selected{% endif %}>12月</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">送信状態</label>
+              <select name="q_is_posted" class="form-select">
+                <option value="">全て</option>
+                <option value="0" {% if q_is_posted == "0" %}selected{% endif %}>0：未送信</option>
+                <option value="1" {% if q_is_posted == "1" %}selected{% endif %}>1：送信済</option>
+                <option value="2" {% if q_is_posted == "2" %}selected{% endif %}>2：分割済</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">支払日FROM</label>
+              <input type="date" name="q_payment_from" class="form-control"
+                     value="{{ q_payment_from|default:'' }}">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">支払日TO</label>
+              <input type="date" name="q_payment_to" class="form-control"
+                     value="{{ q_payment_to|default:'' }}">
+            </div>
+
+            <div style="width: 110px;">
+              <label class="form-label mb-0 small text-muted">表示件数</label>
+              <select name="per_page" class="form-select">
+                <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+              </select>
+            </div>
+
+            <div class="w-100 d-flex justify-content-end gap-2">
+              <button type="submit" class="btn btn-primary">検索</button>
+
+              <a class="btn btn-outline-secondary"
+                 href="{% url 'connect:api_users_bv' %}">
+                リセット
+              </a>
+            </div>
+
+          </form>
+
+        </div>
+      </div>
+
+      <div class="card shadow-sm">
+        <div class="card-body">
+
+          {% if rows %}
+
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="fw-bold">一覧</div>
+              <div class="text-end">
+                <strong>総件数：{{ total_count }} 件</strong>
+                <span class="text-muted small ms-2">
+                  （{{ page }} / {{ total_pages }}）
+                </span>
+              </div>
+            </div>
+
+            <div class="table-responsive" style="overflow-x: auto;">
+              <table class="table table-bordered table-sm align-middle mb-0"
+                     style="white-space: nowrap;">
+
+                <thead class="table-light">
+                  <tr>
+                    <th>ID</th>
+                    <th>注文番号</th>
+                    <th>会員番号</th>
+                    <th>氏名</th>
+                    <th>注文区分</th>
+                    <th>注文年</th>
+                    <th>注文月</th>
+                    <th>金額</th>
+                    <th>合計BV</th>
+                    <th>支払日</th>
+                    <th>送信状態</th>
+                    <th>選択区分</th>
+                    <th>説明</th>
+                    <th>作成者</th>
+                    <th>送信者</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {% for r in rows %}
+                  <tr>
+                    <td class="text-end">{{ r.id }}</td>
+                    <td>{{ r.doc_no }}</td>
+                    <td>{{ r.member_no }}</td>
+                    <td>{{ r.firstname }}</td>
+
+                    <td class="text-center">
+                      {% if r.order_type == 30 %}
+                        再購入品
+                      {% else %}
+                        {{ r.order_type }}
+                      {% endif %}
+                    </td>
+
+                    <td>{{ r.order_year }}</td>
+                    <td>{{ r.order_month }}</td>
+
+                    <td class="text-end">{{ r.price|intcomma }}</td>
+                    <td class="text-end">{{ r.total_bv|intcomma }}</td>
+
+                    <td>{{ r.payment_date }}</td>
+
+                    <td class="text-center">
+                      {% if r.is_posted == 0 %}
+                        未送信
+                      {% elif r.is_posted == 1 %}
+                        送信済
+                      {% elif r.is_posted == 2 %}
+                        分割済
+                      {% else %}
+                        {{ r.is_posted }}
+                      {% endif %}
+                    </td>
+
+                    <td class="text-end">{{ r.choice_type }}</td>
+                    <td>{{ r.desc }}</td>
+                    <td>{{ r.created_by }}</td>
+                    <td>{{ r.post_by }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+
+              </table>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mt-3">
+              <div class="text-muted small">
+                {% if has_prev_hint %}
+                  ※「戻る」はブラウザの戻るでもOK
+                {% endif %}
+              </div>
+
+              <div class="d-flex">
+                {% if has_prev_hint %}
+                  <button class="btn btn-outline-secondary btn-sm me-2"
+                          type="button"
+                          onclick="history.back()">
+                    ← 戻る
+                  </button>
+                {% endif %}
+
+                {% if has_next %}
+                  <a class="btn btn-primary btn-sm"
+                     href="?{{ base_qs }}{% if base_qs %}&{% endif %}page={{ page|add:1 }}&after_id={{ next_after_id }}">
+                    次へ →
+                  </a>
+                {% else %}
+                  <button class="btn btn-secondary btn-sm" disabled>
+                    次へ →
+                  </button>
+                {% endif %}
+              </div>
+            </div>
+
+          {% else %}
+
+            <p class="mb-0 text-muted">
+              該当データがありません。
+            </p>
+
+          {% endif %}
+
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+{% endblock %}

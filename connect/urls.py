@@ -26,6 +26,11 @@ urlpatterns = [
     path('users/', views.UsersView.as_view(), name = "users"),
     path('title_user/', views.TitleUserView.as_view(), name = "title_user"),
 
+    path('orders/', views.OrdersView.as_view(), name = "orders"),
+    path("orders/<int:pk>/", views.OrderDetailView.as_view(), name="order_detail"),
+    path('orders_distribution_bv/', views.OrdersDistributionBvView.as_view(), name = "orders_distribution_bv"),
+    path("api_users_bv/", views.ApiUsersBvView.as_view(), name="api_users_bv"),
+
     path('drive_bonus/', views.DriveBonusView.as_view(), name = "drive_bonus"),
     path('basic_bonus/', views.BasicBonusView.as_view(), name = "basic_bonus"),
     path('matching_bonus/', views.MatchingBonusView.as_view(), name = "matching_bonus"),

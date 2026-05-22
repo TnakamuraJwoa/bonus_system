@@ -4716,3 +4716,496 @@ class S_ThreeStarGlobalBonusView(generic.ListView):
         ctx["rows"] = rows
 
         return ctx
+
+
+
+class OrdersView(KeysetPaginationMixin, generic.TemplateView):
+    template_name = "orders.html"
+
+    def _build_where(
+        self,
+        q_order_code="",
+        q_jwoa_code="",
+        q_name="",
+        q_order_status="",
+        q_order_type="",
+        q_year="",
+        q_month="",
+    ):
+        where = []
+        params = []
+
+        if q_order_code:
+            where.append("o.order_code LIKE %s")
+            params.append(f"%{q_order_code}%")
+
+        if q_jwoa_code:
+            where.append("o.jwoa_code LIKE %s")
+            params.append(f"%{q_jwoa_code}%")
+
+        if q_name:
+            where.append("o.order_name LIKE %s")
+            params.append(f"%{q_name}%")
+
+        if q_order_status:
+            where.append("o.order_status = %s")
+            params.append(q_order_status)
+
+        if q_order_type:
+            where.append("o.order_type = %s")
+            params.append(q_order_type)
+
+        if q_year:
+            where.append("o.order_year = %s")
+            params.append(q_year)
+
+        if q_month:
+            where.append("o.order_month = %s")
+            params.append(q_month)
+
+        where_sql = "WHERE " + " AND ".join(where) if where else ""
+        return where_sql, params
+
+    def _fetch_total_count(self, **filters):
+        where_sql, params = self._build_where(**filters)
+
+        sql = f"""
+            SELECT COUNT(*)
+            FROM nexus_production.orders o
+            {where_sql}
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            row = cursor.fetchone()
+
+        return int(row[0]) if row else 0
+
+    def _fetch_rows_keyset(self, limit=200, after_id="", **filters):
+        where_sql, params = self._build_where(**filters)
+
+        keyset_sql = ""
+
+        if after_id:
+            if where_sql:
+                keyset_sql = " AND o.id > %s "
+            else:
+                keyset_sql = " WHERE o.id > %s "
+            params.append(after_id)
+
+        sql = f"""
+            SELECT
+                o.id,
+                o.order_code,
+                o.order_status,
+                o.order_option,
+                o.order_type,
+                o.order_year,
+                o.order_month,
+                o.jwoa_code,
+                o.order_name,
+                o.total_price,
+                o.total_delivery_cost,
+                o.total_bv,
+                o.jwoa_point,
+                o.order_at,
+                o.delivery_date_at,
+                o.created_at,
+                o.updated_at
+            FROM nexus_production.orders o
+            {where_sql}
+            {keyset_sql}
+            ORDER BY o.id
+            LIMIT %s
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params + [limit])
+            cols = [c[0] for c in cursor.description]
+            rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+        return rows
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        filters = {
+            "q_order_code": (self.request.GET.get("q_order_code") or "").strip(),
+            "q_jwoa_code": (self.request.GET.get("q_jwoa_code") or "").strip(),
+            "q_name": (self.request.GET.get("q_name") or "").strip(),
+            "q_order_status": (self.request.GET.get("q_order_status") or "").strip(),
+            "q_order_type": (self.request.GET.get("q_order_type") or "").strip(),
+            "q_year": (self.request.GET.get("q_year") or "").strip(),
+            "q_month": (self.request.GET.get("q_month") or "").strip(),
+        }
+
+        per_page = self.get_per_page()
+        after_id = (self.request.GET.get("after_id") or "").strip()
+
+        total_count = self._fetch_total_count(**filters)
+        total_pages = max(1, math.ceil(total_count / per_page))
+
+        rows = self._fetch_rows_keyset(
+            limit=per_page,
+            after_id=after_id,
+            **filters,
+        )
+
+        next_after_id = str(rows[-1]["id"]) if rows else ""
+
+        ctx.update(filters)
+
+        base_params = {
+            k: v for k, v in filters.items() if v
+        }
+
+        if per_page != self.DEFAULT_PER_PAGE:
+            base_params["per_page"] = per_page
+
+        return self.set_keyset_context(
+            ctx=ctx,
+            rows=rows,
+            per_page=per_page,
+            total_count=total_count,
+            total_pages=total_pages,
+            next_keys={
+                "next_after_id": next_after_id,
+            },
+            after_values=[
+                after_id,
+            ],
+            base_params=base_params,
+        )
+
+
+class OrderDetailView(generic.TemplateView):
+    template_name = "order_detail.html"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        order_id = self.kwargs.get("pk")
+
+        sql = """
+            SELECT
+                *
+            FROM nexus_production.orders
+            WHERE id = %s
+            LIMIT 1
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, [order_id])
+            cols = [c[0] for c in cursor.description]
+            row = cursor.fetchone()
+
+        ctx["order"] = dict(zip(cols, row)) if row else None
+        return ctx
+
+
+
+class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
+    template_name = "orders_distribution_bv.html"
+
+    def _build_where(
+        self,
+        q_order_code="",
+        q_user_id="",
+        q_jwoa_code="",
+        q_created_from="",
+        q_created_to="",
+    ):
+        where = []
+        params = []
+
+        if q_order_code:
+            where.append("a.order_code LIKE %s")
+            params.append(f"%{q_order_code}%")
+
+        if q_user_id:
+            where.append("a.user_id = %s")
+            params.append(q_user_id)
+
+        if q_jwoa_code:
+            where.append("a.jwoa_code LIKE %s")
+            params.append(f"%{q_jwoa_code}%")
+
+        if q_created_from:
+            where.append("a.created_at >= %s")
+            params.append(q_created_from)
+
+        if q_created_to:
+            where.append("a.created_at < DATE_ADD(%s, INTERVAL 1 DAY)")
+            params.append(q_created_to)
+
+        where_sql = "WHERE " + " AND ".join(where) if where else ""
+
+        return where_sql, params
+
+    def _fetch_total_count(self, **filters):
+        where_sql, params = self._build_where(**filters)
+
+        sql = f"""
+            SELECT COUNT(*)
+            FROM bonus_db.orders_distribution_bv AS a
+            {where_sql}
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            row = cursor.fetchone()
+
+        return int(row[0]) if row else 0
+
+    def _fetch_rows_keyset(self, limit=200, after_id="", **filters):
+        where_sql, params = self._build_where(**filters)
+
+        keyset_sql = ""
+
+        if after_id:
+            if where_sql:
+                keyset_sql = " AND a.id < %s "
+            else:
+                keyset_sql = " WHERE a.id < %s "
+
+            params.append(after_id)
+
+        sql = f"""
+            SELECT
+                a.id,
+                a.order_code,
+                a.user_id,
+                a.jwoa_code,
+                a.distribution_bv,
+                a.usage_fee,
+                a.created_at,
+                a.updated_at
+            FROM bonus_db.orders_distribution_bv AS a
+            {where_sql}
+            {keyset_sql}
+            ORDER BY a.id DESC
+            LIMIT %s
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params + [limit])
+            cols = [c[0] for c in cursor.description]
+            rows = [
+                dict(zip(cols, r))
+                for r in cursor.fetchall()
+            ]
+
+        return rows
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        filters = {
+            "q_order_code": (self.request.GET.get("q_order_code") or "").strip(),
+            "q_user_id": (self.request.GET.get("q_user_id") or "").strip(),
+            "q_jwoa_code": (self.request.GET.get("q_jwoa_code") or "").strip(),
+            "q_created_from": (self.request.GET.get("q_created_from") or "").strip(),
+            "q_created_to": (self.request.GET.get("q_created_to") or "").strip(),
+        }
+
+        per_page = self.get_per_page()
+        after_id = (self.request.GET.get("after_id") or "").strip()
+
+        total_count = self._fetch_total_count(**filters)
+        total_pages = max(1, math.ceil(total_count / per_page))
+
+        rows = self._fetch_rows_keyset(
+            limit=per_page,
+            after_id=after_id,
+            **filters,
+        )
+
+        next_after_id = str(rows[-1]["id"]) if rows else ""
+
+        ctx.update(filters)
+
+        base_params = {
+            k: v for k, v in filters.items()
+            if v
+        }
+
+        if per_page != self.DEFAULT_PER_PAGE:
+            base_params["per_page"] = per_page
+
+        return self.set_keyset_context(
+            ctx=ctx,
+            rows=rows,
+            per_page=per_page,
+            total_count=total_count,
+            total_pages=total_pages,
+            next_keys={
+                "next_after_id": next_after_id,
+            },
+            after_values=[
+                after_id,
+            ],
+            base_params=base_params,
+        )
+
+class ApiUsersBvView(KeysetPaginationMixin, generic.TemplateView):
+    template_name = "api_users_bv.html"
+
+    def _build_where(
+        self,
+        q_doc_no="",
+        q_member_no="",
+        q_name="",
+        q_order_type="",
+        q_order_year="",
+        q_order_month="",
+        q_is_posted="",
+        q_payment_from="",
+        q_payment_to="",
+    ):
+        where = []
+        params = []
+
+        if q_doc_no:
+            where.append("a.doc_no LIKE %s")
+            params.append(f"%{q_doc_no}%")
+
+        if q_member_no:
+            where.append("a.member_no LIKE %s")
+            params.append(f"%{q_member_no}%")
+
+        if q_name:
+            where.append("a.firstname LIKE %s")
+            params.append(f"%{q_name}%")
+
+        if q_order_type:
+            where.append("a.order_type = %s")
+            params.append(q_order_type)
+
+        if q_order_year:
+            where.append("a.order_year = %s")
+            params.append(q_order_year)
+
+        if q_order_month:
+            where.append("a.order_month = %s")
+            params.append(q_order_month)
+
+        if q_is_posted:
+            where.append("a.is_posted = %s")
+            params.append(q_is_posted)
+
+        if q_payment_from:
+            where.append("a.payment_date >= %s")
+            params.append(q_payment_from)
+
+        if q_payment_to:
+            where.append("a.payment_date < DATE_ADD(%s, INTERVAL 1 DAY)")
+            params.append(q_payment_to)
+
+        where_sql = "WHERE " + " AND ".join(where) if where else ""
+        return where_sql, params
+
+    def _fetch_total_count(self, **filters):
+        where_sql, params = self._build_where(**filters)
+
+        sql = f"""
+            SELECT COUNT(*)
+            FROM bonus_db.api_users_bv AS a
+            {where_sql}
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            row = cursor.fetchone()
+
+        return int(row[0]) if row else 0
+
+    def _fetch_rows_keyset(self, limit=200, after_id="", **filters):
+        where_sql, params = self._build_where(**filters)
+
+        keyset_sql = ""
+
+        if after_id:
+            if where_sql:
+                keyset_sql = " AND a.id < %s "
+            else:
+                keyset_sql = " WHERE a.id < %s "
+
+            params.append(after_id)
+
+        sql = f"""
+            SELECT
+                a.id,
+                a.price,
+                a.total_bv,
+                a.order_type,
+                a.doc_no,
+                a.firstname,
+                a.member_no,
+                a.order_year,
+                a.order_month,
+                a.payment_date,
+                a.is_posted,
+                a.`desc`,
+                a.choice_type,
+                a.created_by,
+                a.post_by
+            FROM bonus_db.api_users_bv AS a
+            {where_sql}
+            {keyset_sql}
+            ORDER BY a.id DESC
+            LIMIT %s
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params + [limit])
+            cols = [c[0] for c in cursor.description]
+            rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+        return rows
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        filters = {
+            "q_doc_no": (self.request.GET.get("q_doc_no") or "").strip(),
+            "q_member_no": (self.request.GET.get("q_member_no") or "").strip(),
+            "q_name": (self.request.GET.get("q_name") or "").strip(),
+            "q_order_type": (self.request.GET.get("q_order_type") or "").strip(),
+            "q_order_year": (self.request.GET.get("q_order_year") or "").strip(),
+            "q_order_month": (self.request.GET.get("q_order_month") or "").strip(),
+            "q_is_posted": (self.request.GET.get("q_is_posted") or "").strip(),
+            "q_payment_from": (self.request.GET.get("q_payment_from") or "").strip(),
+            "q_payment_to": (self.request.GET.get("q_payment_to") or "").strip(),
+        }
+
+        per_page = self.get_per_page()
+        after_id = (self.request.GET.get("after_id") or "").strip()
+
+        total_count = self._fetch_total_count(**filters)
+        total_pages = max(1, math.ceil(total_count / per_page))
+
+        rows = self._fetch_rows_keyset(
+            limit=per_page,
+            after_id=after_id,
+            **filters,
+        )
+
+        next_after_id = str(rows[-1]["id"]) if rows else ""
+
+        ctx.update(filters)
+
+        base_params = {k: v for k, v in filters.items() if v}
+
+        if per_page != self.DEFAULT_PER_PAGE:
+            base_params["per_page"] = per_page
+
+        return self.set_keyset_context(
+            ctx=ctx,
+            rows=rows,
+            per_page=per_page,
+            total_count=total_count,
+            total_pages=total_pages,
+            next_keys={"next_after_id": next_after_id},
+            after_values=[after_id],
+            base_params=base_params,
+        )
