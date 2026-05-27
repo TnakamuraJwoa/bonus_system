@@ -25,5 +25,6 @@ urlpatterns = [
     path('', include('connect.urls')),
     path('accounts/', include('allauth.urls')),
 ]
+
 #開発serverでメディアを配信できるようにする設定
 urlpatterns += static(settings_common.MEDIA_URL, document_root=settings_dev.MEDIA_ROOT)
