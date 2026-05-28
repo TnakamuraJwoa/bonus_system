@@ -3,7 +3,10 @@ services:
     build: .
     container_name: bonus_system_web
 
-    command: python manage.py runserver 0.0.0.0:8000
+    env_file:
+      - .env
+
+    command: gunicorn connect_app.wsgi:application --bind 0.0.0.0:8000
 
     volumes:
       - .:/app
@@ -18,10 +21,13 @@ services:
     image: postgres:15
     container_name: bonus_system_postgres
 
+    env_file:
+      - .env
+
     environment:
-      POSTGRES_DB: db_connect
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
 
     ports:
       - "5432:5432"
