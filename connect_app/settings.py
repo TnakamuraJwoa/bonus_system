@@ -9,6 +9,8 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
