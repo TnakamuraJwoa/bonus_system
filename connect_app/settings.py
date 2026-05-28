@@ -15,21 +15,21 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': 'db_connect',
-        'USER': 'postgres',
-        'PASSWORD': 'admin',
-        'HOST': 'db',
-        'PORT': '5432',
+        'NAME': os.getenv("POSTGRES_DB"),
+        'USER': os.getenv("POSTGRES_DB_USER"),
+        'PASSWORD': os.getenv("POSTGRES_DB_PASSWORD"),
+        'HOST': os.getenv("POSTGRES_DB_HOST"),
+        'PORT': os.getenv("POSTGRES_DB_PORT"),
         'ATOMIC_REQUESTS': True,
     },
 
     "rds": {
         "ENGINE": "django.db.backends.mysql",
-        "NAME": "bonus_db",
-        "USER": "admin",
-        "PASSWORD": "#1qaz3edc5tgb#",
-        "HOST": "jwoashop-prod-mysql.cvposccznprz.ap-northeast-1.rds.amazonaws.com",
-        "PORT": "3306",
+        "NAME": os.getenv("RDS_DB_NAME"),
+        "USER": os.getenv("RDS_DB_USER"),
+        "PASSWORD": os.getenv("RDS_DB_PASSWORD"),
+        "HOST": os.getenv("RDS_DB_HOST"),
+        "PORT": os.getenv("RDS_DB_PORT"),
         "OPTIONS": {
             "charset": "utf8mb4"
         },
