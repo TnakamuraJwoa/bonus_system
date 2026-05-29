@@ -440,13 +440,13 @@ class PlanDetailView(generic.DetailView):
 class KibetuView(generic.ListView):
     template_name = "kibetu.html"
     context_object_name = "rows"
-    model = PeriodMaster  # kibetu, st_date, end_date を持つモデル
+    model = PeriodMaster
 
     def get_queryset(self):
         qs = PeriodMaster.objects.using("rds").all()
 
-        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()   # 完全一致用
-        q_kibetu = (self.request.GET.get("q_kibetu") or "").strip()        # 部分一致用
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
+        q_kibetu = (self.request.GET.get("q_kibetu") or "").strip()
 
         if selected_kibetu:
             qs = qs.filter(kibetu=selected_kibetu)
@@ -456,13 +456,60 @@ class KibetuView(generic.ListView):
 
         return qs.order_by("-st_date", "-kibetu")
 
+    def post(self, request, *args, **kwargs):
+        action = request.POST.get("action")
+
+        kibetu = (request.POST.get("kibetu") or "").strip()
+        st_date = request.POST.get("st_date") or None
+        end_date = request.POST.get("end_date") or None
+        payment_date = request.POST.get("payment_date") or None
+
+        if not kibetu:
+            messages.error(request, "期別を入力してください。")
+            return redirect("connect:kibetu")
+
+        try:
+            with transaction.atomic(using="rds"):
+
+                if action == "create":
+                    PeriodMaster.objects.using("rds").create(
+                        kibetu=kibetu,
+                        st_date=st_date,
+                        end_date=end_date,
+                        payment_date=payment_date,
+                    )
+                    messages.success(request, f"{kibetu} を追加しました。")
+
+                elif action == "update":
+                    obj = PeriodMaster.objects.using("rds").get(kibetu=kibetu)
+                    obj.st_date = st_date
+                    obj.end_date = end_date
+                    obj.payment_date = payment_date
+                    obj.save(using="rds")
+                    messages.success(request, f"{kibetu} を変更しました。")
+
+                elif action == "delete":
+                    PeriodMaster.objects.using("rds").filter(kibetu=kibetu).delete()
+                    messages.success(request, f"{kibetu} を削除しました。")
+
+                else:
+                    messages.error(request, "不正な操作です。")
+
+        except PeriodMaster.DoesNotExist:
+            messages.error(request, f"{kibetu} は存在しません。")
+        except IntegrityError:
+            messages.error(request, f"{kibetu} はすでに存在します。")
+        except Exception as e:
+            messages.error(request, f"エラーが発生しました: {e}")
+
+        return redirect("connect:kibetu")
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
         ctx["selected_kibetu"] = (self.request.GET.get("kibetu") or "").strip()
         ctx["q_kibetu"] = (self.request.GET.get("q_kibetu") or "").strip()
 
-        # プルダウンの選択肢（重複なし）
         ctx["kibetu_choices"] = list(
             PeriodMaster.objects.using("rds")
             .order_by("-st_date")
@@ -471,8 +518,6 @@ class KibetuView(generic.ListView):
         )
 
         return ctx
-
-
 
 
 
@@ -491,49 +536,79 @@ class TitleListView(generic.ListView):
         ctx["total_count"] = ctx["rows"].count()
         return ctx
 
+
 class KibetuMonthView(generic.ListView):
     template_name = "kibetu_month.html"
     context_object_name = "rows"
     model = MonthlyPeriod
 
     def get_queryset(self):
-
         qs = MonthlyPeriod.objects.using("rds").all()
 
-        selected_kibetu = (
-            self.request.GET.get("kibetu") or ""
-        ).strip()
-
-        q_kibetu = (
-            self.request.GET.get("q_kibetu") or ""
-        ).strip()
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
+        q_kibetu = (self.request.GET.get("q_kibetu") or "").strip()
 
         if selected_kibetu:
-            qs = qs.filter(
-                kibetu=selected_kibetu
-            )
+            qs = qs.filter(kibetu=selected_kibetu)
 
         if q_kibetu:
-            qs = qs.filter(
-                kibetu__icontains=q_kibetu
-            )
+            qs = qs.filter(kibetu__icontains=q_kibetu)
 
-        return qs.order_by(
-            "-year",
-            "-month"
-        )
+        return qs.order_by("-year", "-month", "-kibetu")
+
+    def post(self, request, *args, **kwargs):
+        action = request.POST.get("action")
+
+        kibetu = (request.POST.get("kibetu") or "").strip()
+        year = request.POST.get("year") or None
+        month = request.POST.get("month") or None
+        payment_date = request.POST.get("payment_date") or None
+
+        if not kibetu:
+            messages.error(request, "期別を入力してください。")
+            return redirect("connect:kibetu_month")
+
+        try:
+            with transaction.atomic(using="rds"):
+
+                if action == "create":
+                    MonthlyPeriod.objects.using("rds").create(
+                        kibetu=kibetu,
+                        year=year,
+                        month=month,
+                        payment_date=payment_date,
+                    )
+                    messages.success(request, f"{kibetu} を追加しました。")
+
+                elif action == "update":
+                    obj = MonthlyPeriod.objects.using("rds").get(kibetu=kibetu)
+                    obj.year = year
+                    obj.month = month
+                    obj.payment_date = payment_date
+                    obj.save(using="rds")
+                    messages.success(request, f"{kibetu} を変更しました。")
+
+                elif action == "delete":
+                    MonthlyPeriod.objects.using("rds").filter(kibetu=kibetu).delete()
+                    messages.success(request, f"{kibetu} を削除しました。")
+
+                else:
+                    messages.error(request, "不正な操作です。")
+
+        except MonthlyPeriod.DoesNotExist:
+            messages.error(request, f"{kibetu} は存在しません。")
+        except IntegrityError:
+            messages.error(request, f"{kibetu} はすでに存在します。")
+        except Exception as e:
+            messages.error(request, f"エラーが発生しました: {e}")
+
+        return redirect("connect:kibetu_month")
 
     def get_context_data(self, **kwargs):
-
         ctx = super().get_context_data(**kwargs)
 
-        ctx["selected_kibetu"] = (
-            self.request.GET.get("kibetu") or ""
-        ).strip()
-
-        ctx["q_kibetu"] = (
-            self.request.GET.get("q_kibetu") or ""
-        ).strip()
+        ctx["selected_kibetu"] = (self.request.GET.get("kibetu") or "").strip()
+        ctx["q_kibetu"] = (self.request.GET.get("q_kibetu") or "").strip()
 
         ctx["kibetu_choices"] = list(
             MonthlyPeriod.objects.using("rds")
