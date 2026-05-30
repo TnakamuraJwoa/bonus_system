@@ -1,3 +1,9 @@
+.dropdown-item:hover,
+.dropdown-item:focus {
+    background-color: darkgray !important;
+    color: black !important;
+}
+
 .card-group > .card {
     border: 1px solid rgba(0, 0, 0, .125) !important;
 }

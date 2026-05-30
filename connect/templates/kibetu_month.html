@@ -2,23 +2,18 @@
 {% load static %}
 
 {% block head %}
-    <link href="{% static 'css/common.css' %}" rel="stylesheet">
+<link href="{% static 'css/common.css' %}" rel="stylesheet">
 {% endblock %}
 
 {% block contents %}
 
 <div class="container-fluid mt-3">
-
   <div class="row g-1">
 
     <div class="col-12 text-end">
-
       {% if user.is_authenticated %}
-        <span class="small text-muted">
-          👤 {{ user.username }}
-        </span>
+        <span class="small text-muted">👤 {{ user.username }}</span>
       {% endif %}
-
     </div>
 
     {% include "com/_sidebar.html" with active_menu="kibetu_month" %}
@@ -26,162 +21,187 @@
     <main class="col-12 col-md-9 col-lg-10">
 
       <div class="card shadow-sm mb-3">
-
         <div class="card-body">
 
-          <h5 class="mb-3">
-            【設定 - 月期別一覧】
-          </h5>
+          <h5 class="mb-3">【設定 - 月期別一覧】</h5>
 
-          <form method="get"
-                class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+          <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
 
             <div>
-
-              <label class="form-label mb-0 small text-muted">
-                kibetu（選択）
-              </label>
-
+              <label class="form-label mb-0 small text-muted">kibetu（選択）</label>
               <select name="kibetu" class="form-select">
-
-                <option value="">
-                  （全件）
-                </option>
-
+                <option value="">（全件）</option>
                 {% for k in kibetu_choices %}
-
-                  <option value="{{ k }}"
-                          {% if k == selected_kibetu %}selected{% endif %}>
-
+                  <option value="{{ k }}" {% if k == selected_kibetu %}selected{% endif %}>
                     {{ k }}
-
                   </option>
-
                 {% endfor %}
-
               </select>
-
             </div>
 
             <div>
-
-              <label class="form-label mb-0 small text-muted">
-                kibetu（検索）
-              </label>
-
+              <label class="form-label mb-0 small text-muted">kibetu（検索）</label>
               <input type="text"
                      name="q_kibetu"
                      class="form-control"
                      value="{{ q_kibetu|default:'' }}"
                      placeholder="例: 2026C01">
-
             </div>
 
-            <button type="submit"
-                    class="btn btn-primary">
+            <button type="submit" class="btn btn-primary">絞り込み</button>
 
-              絞り込み
-
-            </button>
-
-            <a class="btn btn-outline-secondary"
-               href="{% url 'connect:kibetu_month' %}">
-
+            <a class="btn btn-outline-secondary" href="{% url 'connect:kibetu_month' %}">
               リセット
-
             </a>
 
           </form>
 
-          {% if selected_kibetu or q_kibetu %}
+        </div>
+      </div>
 
-            <div class="text-muted small mt-3">
+      <!-- 新規追加 -->
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
 
-              絞り込み中：
+          <h6 class="mb-3">新規追加</h6>
 
-              {% if selected_kibetu %}
-                <span class="badge bg-info text-dark">
-                  選択={{ selected_kibetu }}
-                </span>
-              {% endif %}
+          <form method="post" class="row g-2 align-items-end">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create">
 
-              {% if q_kibetu %}
-                <span class="badge bg-secondary">
-                  検索={{ q_kibetu }}
-                </span>
-              {% endif %}
-
+            <div class="col-md-3">
+              <label class="form-label small text-muted">期別</label>
+              <input type="text"
+                     name="kibetu"
+                     class="form-control"
+                     placeholder="例: 2026C01"
+                     required>
             </div>
 
-          {% else %}
-
-            <div class="text-muted small mt-3">
-              全件表示中
+            <div class="col-md-2">
+              <label class="form-label small text-muted">年</label>
+              <input type="number"
+                     name="year"
+                     class="form-control"
+                     placeholder="2026"
+                     required>
             </div>
 
-          {% endif %}
+            <div class="col-md-2">
+              <label class="form-label small text-muted">月</label>
+              <input type="number"
+                     name="month"
+                     class="form-control"
+                     min="1"
+                     max="12"
+                     placeholder="1"
+                     required>
+            </div>
+
+            <div class="col-md-2">
+              <label class="form-label small text-muted">支払日</label>
+              <input type="text"
+                     name="payment_date"
+                     class="form-control"
+                     placeholder="YYYY-MM-DD">
+            </div>
+
+            <div class="col-md-2">
+              <button type="submit" class="btn btn-success w-100">
+                追加
+              </button>
+            </div>
+          </form>
 
         </div>
-
       </div>
 
       <div class="card shadow-sm">
-
         <div class="card-body">
 
           {% if rows %}
 
             <div class="d-flex justify-content-between align-items-center mb-2">
-
-              <div class="fw-bold">
-                一覧
-              </div>
-
+              <div class="fw-bold">一覧</div>
               <div class="text-end">
-                <strong>
-                  件数：{{ rows|length }} 件
-                </strong>
+                <strong>件数：{{ rows|length }} 件</strong>
               </div>
-
             </div>
 
             <div class="table-responsive">
-
               <table class="table table-bordered table-sm align-middle mb-0">
 
                 <thead class="table-light">
-
                   <tr>
                     <th>期別</th>
                     <th>年</th>
                     <th>月</th>
                     <th>支払日</th>
+                    <th style="width: 170px;">操作</th>
                   </tr>
-
                 </thead>
 
                 <tbody>
-
                   {% for r in rows %}
-
                     <tr>
+                      <form method="post">
+                        {% csrf_token %}
 
-                      <td>{{ r.kibetu }}</td>
+                        <input type="hidden" name="kibetu" value="{{ r.kibetu }}">
 
-                      <td>{{ r.year }}</td>
+                        <td>{{ r.kibetu }}</td>
 
-                      <td>{{ r.month }}</td>
+                        <td>
+                          <input type="number"
+                                 name="year"
+                                 class="form-control form-control-sm"
+                                 value="{{ r.year }}"
+                                 required>
+                        </td>
 
-                      <td>{{ r.payment_date }}</td>
+                        <td>
+                          <input type="number"
+                                 name="month"
+                                 class="form-control form-control-sm"
+                                 min="1"
+                                 max="12"
+                                 value="{{ r.month }}"
+                                 required>
+                        </td>
 
+                        <td>
+                          <input type="text"
+                                 name="payment_date"
+                                 class="form-control form-control-sm"
+                                 value="{{ r.payment_date|date:'Y-m-d' }}"
+                                 placeholder="YYYY-MM-DD"
+                                 onfocus="this.type='date'"
+                                 onblur="if(!this.value)this.type='text'">
+                        </td>
+
+                        <td>
+                          <button type="submit"
+                                  name="action"
+                                  value="update"
+                                  class="btn btn-warning btn-sm">
+                            変更
+                          </button>
+
+                          <button type="submit"
+                                  name="action"
+                                  value="delete"
+                                  class="btn btn-danger btn-sm"
+                                  onclick="return confirm('{{ r.kibetu }} を削除しますか？');">
+                            削除
+                          </button>
+                        </td>
+
+                      </form>
                     </tr>
-
                   {% endfor %}
-
                 </tbody>
 
               </table>
-
             </div>
 
           {% else %}
@@ -193,13 +213,10 @@
           {% endif %}
 
         </div>
-
       </div>
 
     </main>
-
   </div>
-
 </div>
 
 {% endblock %}

@@ -1,0 +1,17 @@
+{# templates/com/_sidebar.html #}
+<nav class="col-12 col-md-3 col-lg-2">
+  <div class="card shadow-sm position-sticky" style="top: 1rem;">
+    <div class="card-body">
+      <div class="fw-bold mb-2">【合計実績】</div>
+
+      <div class="list-group">
+        <a class="list-group-item list-group-item-action {% if active_menu == 'week_bonus' %}active{% endif %}"
+           href="{% url 'connect:s_week_bonus' %}">week</a>
+
+        <a class="list-group-item list-group-item-action {% if active_menu == 'month_bonus' %}active{% endif %}"
+           href="{% url 'connect:week_bonus' %}">month</a>
+
+      </div>
+    </div>
+  </div>
+</nav>

@@ -31,6 +31,9 @@ from .models import Plan, PlanDate, GenreList, Region, FavoritePlan
 from .models import TitleMaster, PeriodMaster, UserTitles, Orders, User, PurchaseInfoList, MonthlyPeriod
 from .models import Settings
 
+from connect.sql.week_bonus_sql import WEEK_BONUS_SQL
+from connect.sql.month_bonus_sql import MONTH_BONUS_SQL
+
 from connect.sql.drive_bonus_sql import DRIVE_BONUS_SQL
 from connect.sql.basic_bonus_sql import BASIC_BONUS_SQL
 from connect.sql.matching_bonus_sql import MATCHING_BONUS_SQL
@@ -440,13 +443,13 @@ class PlanDetailView(generic.DetailView):
 class KibetuView(generic.ListView):
     template_name = "kibetu.html"
     context_object_name = "rows"
-    model = PeriodMaster  # kibetu, st_date, end_date を持つモデル
+    model = PeriodMaster
 
     def get_queryset(self):
         qs = PeriodMaster.objects.using("rds").all()
 
-        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()   # 完全一致用
-        q_kibetu = (self.request.GET.get("q_kibetu") or "").strip()        # 部分一致用
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
+        q_kibetu = (self.request.GET.get("q_kibetu") or "").strip()
 
         if selected_kibetu:
             qs = qs.filter(kibetu=selected_kibetu)
@@ -456,13 +459,60 @@ class KibetuView(generic.ListView):
 
         return qs.order_by("-st_date", "-kibetu")
 
+    def post(self, request, *args, **kwargs):
+        action = request.POST.get("action")
+
+        kibetu = (request.POST.get("kibetu") or "").strip()
+        st_date = request.POST.get("st_date") or None
+        end_date = request.POST.get("end_date") or None
+        payment_date = request.POST.get("payment_date") or None
+
+        if not kibetu:
+            messages.error(request, "期別を入力してください。")
+            return redirect("connect:kibetu")
+
+        try:
+            with transaction.atomic(using="rds"):
+
+                if action == "create":
+                    PeriodMaster.objects.using("rds").create(
+                        kibetu=kibetu,
+                        st_date=st_date,
+                        end_date=end_date,
+                        payment_date=payment_date,
+                    )
+                    messages.success(request, f"{kibetu} を追加しました。")
+
+                elif action == "update":
+                    obj = PeriodMaster.objects.using("rds").get(kibetu=kibetu)
+                    obj.st_date = st_date
+                    obj.end_date = end_date
+                    obj.payment_date = payment_date
+                    obj.save(using="rds")
+                    messages.success(request, f"{kibetu} を変更しました。")
+
+                elif action == "delete":
+                    PeriodMaster.objects.using("rds").filter(kibetu=kibetu).delete()
+                    messages.success(request, f"{kibetu} を削除しました。")
+
+                else:
+                    messages.error(request, "不正な操作です。")
+
+        except PeriodMaster.DoesNotExist:
+            messages.error(request, f"{kibetu} は存在しません。")
+        except IntegrityError:
+            messages.error(request, f"{kibetu} はすでに存在します。")
+        except Exception as e:
+            messages.error(request, f"エラーが発生しました: {e}")
+
+        return redirect("connect:kibetu")
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
         ctx["selected_kibetu"] = (self.request.GET.get("kibetu") or "").strip()
         ctx["q_kibetu"] = (self.request.GET.get("q_kibetu") or "").strip()
 
-        # プルダウンの選択肢（重複なし）
         ctx["kibetu_choices"] = list(
             PeriodMaster.objects.using("rds")
             .order_by("-st_date")
@@ -471,8 +521,6 @@ class KibetuView(generic.ListView):
         )
 
         return ctx
-
-
 
 
 
@@ -491,49 +539,79 @@ class TitleListView(generic.ListView):
         ctx["total_count"] = ctx["rows"].count()
         return ctx
 
+
 class KibetuMonthView(generic.ListView):
     template_name = "kibetu_month.html"
     context_object_name = "rows"
     model = MonthlyPeriod
 
     def get_queryset(self):
-
         qs = MonthlyPeriod.objects.using("rds").all()
 
-        selected_kibetu = (
-            self.request.GET.get("kibetu") or ""
-        ).strip()
-
-        q_kibetu = (
-            self.request.GET.get("q_kibetu") or ""
-        ).strip()
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
+        q_kibetu = (self.request.GET.get("q_kibetu") or "").strip()
 
         if selected_kibetu:
-            qs = qs.filter(
-                kibetu=selected_kibetu
-            )
+            qs = qs.filter(kibetu=selected_kibetu)
 
         if q_kibetu:
-            qs = qs.filter(
-                kibetu__icontains=q_kibetu
-            )
+            qs = qs.filter(kibetu__icontains=q_kibetu)
 
-        return qs.order_by(
-            "-year",
-            "-month"
-        )
+        return qs.order_by("-year", "-month", "-kibetu")
+
+    def post(self, request, *args, **kwargs):
+        action = request.POST.get("action")
+
+        kibetu = (request.POST.get("kibetu") or "").strip()
+        year = request.POST.get("year") or None
+        month = request.POST.get("month") or None
+        payment_date = request.POST.get("payment_date") or None
+
+        if not kibetu:
+            messages.error(request, "期別を入力してください。")
+            return redirect("connect:kibetu_month")
+
+        try:
+            with transaction.atomic(using="rds"):
+
+                if action == "create":
+                    MonthlyPeriod.objects.using("rds").create(
+                        kibetu=kibetu,
+                        year=year,
+                        month=month,
+                        payment_date=payment_date,
+                    )
+                    messages.success(request, f"{kibetu} を追加しました。")
+
+                elif action == "update":
+                    obj = MonthlyPeriod.objects.using("rds").get(kibetu=kibetu)
+                    obj.year = year
+                    obj.month = month
+                    obj.payment_date = payment_date
+                    obj.save(using="rds")
+                    messages.success(request, f"{kibetu} を変更しました。")
+
+                elif action == "delete":
+                    MonthlyPeriod.objects.using("rds").filter(kibetu=kibetu).delete()
+                    messages.success(request, f"{kibetu} を削除しました。")
+
+                else:
+                    messages.error(request, "不正な操作です。")
+
+        except MonthlyPeriod.DoesNotExist:
+            messages.error(request, f"{kibetu} は存在しません。")
+        except IntegrityError:
+            messages.error(request, f"{kibetu} はすでに存在します。")
+        except Exception as e:
+            messages.error(request, f"エラーが発生しました: {e}")
+
+        return redirect("connect:kibetu_month")
 
     def get_context_data(self, **kwargs):
-
         ctx = super().get_context_data(**kwargs)
 
-        ctx["selected_kibetu"] = (
-            self.request.GET.get("kibetu") or ""
-        ).strip()
-
-        ctx["q_kibetu"] = (
-            self.request.GET.get("q_kibetu") or ""
-        ).strip()
+        ctx["selected_kibetu"] = (self.request.GET.get("kibetu") or "").strip()
+        ctx["q_kibetu"] = (self.request.GET.get("q_kibetu") or "").strip()
 
         ctx["kibetu_choices"] = list(
             MonthlyPeriod.objects.using("rds")
@@ -3689,6 +3767,8 @@ class TitleDiffBonusView(generic.ListView):
         params = [
             kibetu_month_str,
             kibetu_year_str,
+            kibetu_year_str,
+            kibetu_month_str,
         ]
 
         with connections["rds"].cursor() as cursor:
@@ -5209,3 +5289,290 @@ class ApiUsersBvView(KeysetPaginationMixin, generic.TemplateView):
             after_values=[after_id],
             base_params=base_params,
         )
+
+
+class WeekBonusView(generic.ListView):
+    template_name = "week_bonus.html"
+    context_object_name = "object_list"
+    model = PeriodMaster
+
+    def get_queryset(self):
+        return PeriodMaster.objects.using("rds").all()
+
+    def get(self, request, *args, **kwargs):
+        self.object_list = self.get_queryset()
+        context = self.get_context_data()
+        return self.render_to_response(context)
+
+    def post(self, request, *args, **kwargs):
+        action = request.POST.get("action", "")
+        selected_kibetu = request.POST.get("kibetu", "").strip()
+
+        if action != "register_week_bonus":
+            messages.error(request, "不正な操作です。")
+            return redirect("connect:week_bonus")
+
+        if not selected_kibetu:
+            messages.error(request, "期別を選択してください。")
+            return redirect("connect:week_bonus")
+
+        period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
+        if not period:
+            messages.error(request, "選択された期別が存在しません。")
+            return redirect("connect:week_bonus")
+
+        try:
+            rows = self._get_week_bonus_rows(selected_kibetu, period)
+
+            if not rows:
+                messages.warning(request, "登録対象データがありません。")
+                return redirect(f"/week_bonus/?kibetu={selected_kibetu}")
+
+            insert_sql = """
+                INSERT INTO bonus_db.B_week_bonus_result (
+                    kibetu,
+                    jwoa_code,
+                    jwoa_name,
+                    drive_bonus,
+                    basic_bonus,
+                    matching_bonus,
+                    week_bonus,
+                    created_at,
+                    updated_at
+                ) VALUES (
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'),
+                    CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo')
+                )
+                ON DUPLICATE KEY UPDATE
+                    jwoa_name = VALUES(jwoa_name),
+                    drive_bonus = VALUES(drive_bonus),
+                    basic_bonus = VALUES(basic_bonus),
+                    matching_bonus = VALUES(matching_bonus),
+                    week_bonus = VALUES(week_bonus),
+                    updated_at = CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo')
+            """
+
+            insert_params = []
+            for r in rows:
+                insert_params.append([
+                    r.get("期別"),
+                    r.get("会員番号") or "",
+                    r.get("会員名") or "",
+                    r.get("ドライブボーナス") or 0,
+                    r.get("ベーシックボーナス") or 0,
+                    r.get("マッチングボーナス") or 0,
+                    r.get("週間ボーナス") or 0,
+                ])
+
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    cursor.executemany(insert_sql, insert_params)
+
+                    history_sql = """
+                        INSERT INTO bonus_db.bonus_register_history (
+                            bonus_name,
+                            kibetu,
+                            registered_at,
+                            registered_by,
+                            comment_text
+                        )
+                        VALUES (
+                            %s,
+                            %s,
+                            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'),
+                            %s,
+                            %s
+                        )
+                    """
+
+                    cursor.execute(
+                        history_sql,
+                        [
+                            "week_bonus",
+                            selected_kibetu,
+                            request.user.username,
+                            f"{len(rows)}件登録"
+                        ]
+                    )
+
+            messages.success(request, f"{len(rows)}件を週ボーナス結果に登録しました。")
+
+        except Exception as e:
+            logger.exception("週ボーナス結果登録エラー")
+            messages.error(request, f"登録中にエラーが発生しました: {e}")
+
+        return redirect(f"/week_bonus/?kibetu={selected_kibetu}")
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        selected_kibetu = self.request.GET.get("kibetu")
+        ctx["selected_kibetu"] = selected_kibetu
+        ctx["rows"] = []
+        ctx["selected_period"] = None
+
+        if not selected_kibetu:
+            return ctx
+
+        period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
+        if not period:
+            return ctx
+
+        ctx["selected_period"] = period
+        ctx["rows"] = self._get_week_bonus_rows(selected_kibetu, period)
+
+        return ctx
+
+    def _get_week_bonus_rows(self, selected_kibetu, period):
+        params = [
+            selected_kibetu,
+            selected_kibetu,
+            selected_kibetu,
+            selected_kibetu,
+        ]
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(WEEK_BONUS_SQL, params)
+            logger.info(f"Executed SQL: {cursor._executed}")
+            cols = [c[0] for c in cursor.description]
+            rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+        return rows
+
+
+class S_WeekBonusView(generic.ListView):
+    template_name = "s_week_bonus.html"
+    context_object_name = "object_list"
+    model = PeriodMaster
+
+    def get_queryset(self):
+        # B_week_bonus_result に登録済みの期別だけ取得
+        with connections["rds"].cursor() as cursor:
+            cursor.execute("""
+                SELECT DISTINCT kibetu
+                FROM bonus_db.B_week_bonus_result
+                ORDER BY kibetu
+            """)
+            registered_kibetu_list = [row[0] for row in cursor.fetchall()]
+
+        if not registered_kibetu_list:
+            return PeriodMaster.objects.using("rds").none()
+
+        return (
+            PeriodMaster.objects.using("rds")
+            .filter(kibetu__in=registered_kibetu_list)
+            .order_by("kibetu")
+        )
+
+    def get(self, request, *args, **kwargs):
+        self.object_list = self.get_queryset()
+        context = self.get_context_data()
+
+        if request.GET.get("export") == "excel":
+            rows = context.get("rows", [])
+
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "WeekBonusResult"
+
+            headers = [
+                "期別",
+                "会員コード",
+                "会員名",
+                "ドライブボーナス",
+                "ベーシックボーナス",
+                "マッチングボーナス",
+                "週間ボーナス",
+            ]
+            ws.append(headers)
+
+            for r in rows:
+                ws.append([
+                    r.get("kibetu"),
+                    r.get("jwoa_code"),
+                    r.get("jwoa_name"),
+                    r.get("drive_bonus"),
+                    r.get("basic_bonus"),
+                    r.get("matching_bonus"),
+                    r.get("week_bonus"),
+                ])
+
+            ws.column_dimensions["A"].width = 15
+            ws.column_dimensions["B"].width = 15
+            ws.column_dimensions["C"].width = 25
+            ws.column_dimensions["D"].width = 18
+            ws.column_dimensions["E"].width = 20
+            ws.column_dimensions["F"].width = 20
+            ws.column_dimensions["G"].width = 18
+
+            for row_idx in range(2, ws.max_row + 1):
+                ws[f"D{row_idx}"].number_format = '#,##0.00'
+                ws[f"E{row_idx}"].number_format = '#,##0.00'
+                ws[f"F{row_idx}"].number_format = '#,##0.00'
+                ws[f"G{row_idx}"].number_format = '#,##0.00'
+
+            response = HttpResponse(
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            response["Content-Disposition"] = 'attachment; filename="week_bonus_result.xlsx"'
+
+            wb.save(response)
+            return response
+
+        return self.render_to_response(context)
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        selected_kibetu = self.request.GET.get("kibetu")
+
+        # 期別未選択なら、登録済み期別の先頭を自動選択
+        if not selected_kibetu and self.object_list:
+            selected_kibetu = self.object_list[0].kibetu
+
+        ctx["selected_kibetu"] = selected_kibetu
+        ctx["rows"] = []
+        ctx["selected_period"] = None
+
+        if not selected_kibetu:
+            return ctx
+
+        period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
+        if not period:
+            return ctx
+
+        ctx["selected_period"] = period
+
+        sql = """
+            SELECT
+                id,
+                kibetu,
+                jwoa_code,
+                jwoa_name,
+                drive_bonus,
+                basic_bonus,
+                matching_bonus,
+                week_bonus,
+                created_at,
+                updated_at
+            FROM bonus_db.B_week_bonus_result
+            WHERE kibetu = %s
+            ORDER BY week_bonus DESC, jwoa_code
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, [selected_kibetu])
+            logger.info(f"Executed SQL: {cursor._executed}")
+            cols = [c[0] for c in cursor.description]
+            rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+        ctx["rows"] = rows
+
+        return ctx
