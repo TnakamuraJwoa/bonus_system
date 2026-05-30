@@ -42,12 +42,52 @@
                     <a class="nav-link" href="{% url 'connect:orders' %}">注文情報 </a>
                 </li>
 
-                <li class="nav-item">
-                    <a class="nav-link" href="{% url 'connect:s_drive_bonus' %}">ボーナス検索 </a>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle"
+                       href="#"
+                       id="s_bonusDropdown"
+                       role="button"
+                       data-toggle="dropdown"
+                       aria-haspopup="true"
+                       aria-expanded="false">
+                        ボーナス検索
+                    </a>
+
+                    <div class="dropdown-menu">
+                        <a class="dropdown-item"
+                           href="{% url 'connect:s_drive_bonus' %}">
+                            個人実績
+                        </a>
+
+                        <a class="dropdown-item"
+                           href="{% url 'connect:s_week_bonus' %}">
+                            合計実績
+                        </a>
+                    </div>
                 </li>
 
-                <li class="nav-item">
-                    <a class="nav-link" href="{% url 'connect:drive_bonus' %}">ボーナス計算 </a>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle"
+                       href="#"
+                       id="bonusDropdown"
+                       role="button"
+                       data-toggle="dropdown"
+                       aria-haspopup="true"
+                       aria-expanded="false">
+                        ボーナス計算
+                    </a>
+
+                    <div class="dropdown-menu">
+                        <a class="dropdown-item"
+                           href="{% url 'connect:drive_bonus' %}">
+                            個人実績
+                        </a>
+
+                        <a class="dropdown-item"
+                           href="{% url 'connect:week_bonus' %}">
+                            合計実績
+                        </a>
+                    </div>
                 </li>
 
                 <li class="nav-item">

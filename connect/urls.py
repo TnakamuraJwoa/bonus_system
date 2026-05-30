@@ -39,6 +39,8 @@ urlpatterns = [
     path('repurchase_over_bonus/', views.RepurchaseOverBonusView.as_view(), name = "repurchase_over_bonus"),
     path('three_star_global_bonus/', views.ThreeStarGlobalBonusView.as_view(), name = "three_star_global_bonus"),
 
+    path('week_bonus/', views.WeekBonusView.as_view(), name = "week_bonus"),
+
     path('s_drive_bonus/', views.S_DriveBonusView.as_view(), name = "s_drive_bonus"),
     path('s_basic_bonus/', views.S_BasicBonusView.as_view(), name = "s_basic_bonus"),
     path('s_matching_bonus/', views.S_MatchingBonusView.as_view(), name = "s_matching_bonus"),
@@ -46,5 +48,7 @@ urlpatterns = [
     path('s_title_diff_bonus/', views.S_TitleDiffBonusView.as_view(), name = "s_title_diff_bonus"),
     path('s_repurchase_over_bonus/', views.S_RepurchaseOverBonusView.as_view(), name = "s_repurchase_over_bonus"),
     path('s_three_star_global_bonus/', views.S_ThreeStarGlobalBonusView.as_view(), name = "s_three_star_global_bonus"),
+
+    path('s_week_bonus/', views.S_WeekBonusView.as_view(), name = "s_week_bonus"),
 
 ]

@@ -32,15 +32,15 @@ SELECT
     p.*,
 
     CASE
-        WHEN p.order_type = 101
+        WHEN p.order_type IN(101, 105)
         THEN LEAST(IFNULL(p.bv, 0), 50)
 
         ELSE IFNULL(p.bv, 0)
     END AS custom_bv
 
 FROM bonus_db.purchase_info_list AS p
-WHERE p.register_year = 2026
-  AND p.register_month = 1
+WHERE p.register_year = %s
+  AND p.register_month = %s
 ),
 
 -- (taitle 当月購入情報)合計
