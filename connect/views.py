@@ -5490,6 +5490,7 @@ class S_WeekBonusView(generic.ListView):
                 "ベーシックボーナス",
                 "マッチングボーナス",
                 "週間ボーナス",
+                "決済時間",
             ]
             ws.append(headers)
 
@@ -5502,6 +5503,7 @@ class S_WeekBonusView(generic.ListView):
                     r.get("basic_bonus"),
                     r.get("matching_bonus"),
                     r.get("week_bonus"),
+                    r.get("updated_at"),
                 ])
 
             ws.column_dimensions["A"].width = 15
@@ -5511,6 +5513,7 @@ class S_WeekBonusView(generic.ListView):
             ws.column_dimensions["E"].width = 20
             ws.column_dimensions["F"].width = 20
             ws.column_dimensions["G"].width = 18
+            ws.column_dimensions["H"].width = 20
 
             for row_idx in range(2, ws.max_row + 1):
                 ws[f"D{row_idx}"].number_format = '#,##0.00'
