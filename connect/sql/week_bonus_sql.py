@@ -3,7 +3,7 @@ WITH
 drive_bonus AS (
     SELECT
         introducer_code AS pay_code,
-        SUM(sum_bv) AS sum_bv
+        SUM(sum_bonus_amount) AS sum_bv
     FROM bonus_db.B_drive_bonus_result
     WHERE kibetu = %s
     GROUP BY introducer_code

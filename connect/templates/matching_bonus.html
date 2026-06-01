@@ -85,11 +85,11 @@
               <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                   <tr>
-                    <th>紹介者コード</th>
-                    <th>紹介者名</th>
-                    <th>直紹介数(アクティブ)</th>
-                    <th>ベーシックBV</th>
-                    <th>マッチングBV</th>
+                    <th class="text-center">紹介者コード</th>
+                    <th class="text-center">紹介者名</th>
+                    <th class="text-center">直紹介数(アクティブ)</th>
+                    <th class="text-center">ベーシックBV</th>
+                    <th class="text-center">マッチングBV</th>
                   </tr>
                 </thead>
 
@@ -98,9 +98,9 @@
                     <tr>
                       <td>{{ r.introducer_code }}</td>
                       <td>{{ r.jwoa_name }}</td>
-                      <td>{{ r.active_count }}</td>
-                      <td>{{ r.sum_bonus_amount }}</td>
-                      <td>{{ r.matching_bonus_amount }}</td>
+                      <td class="text-end">{{ r.active_count }}</td>
+                      <td class="text-end">{{ r.sum_bonus_amount }}</td>
+                      <td class="fw-bold text-primary text-end">{{ r.matching_bonus_amount }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

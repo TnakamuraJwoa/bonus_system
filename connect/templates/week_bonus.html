@@ -85,13 +85,13 @@
               <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                   <tr>
-                    <th>期別</th>
-                    <th>会員番号</th>
-                    <th>会員名</th>
-                    <th class="text-end">ドライブボーナス</th>
-                    <th class="text-end">ベーシックボーナス</th>
-                    <th class="text-end">マッチングボーナス</th>
-                    <th class="text-end">週間ボーナス</th>
+                    <th class="text-center">期別</th>
+                    <th class="text-center">会員番号</th>
+                    <th class="text-center">会員名</th>
+                    <th class="text-center" class="text-end">ドライブボーナス</th>
+                    <th class="text-center" class="text-end">ベーシックボーナス</th>
+                    <th class="text-center" class="text-end">マッチングボーナス</th>
+                    <th class="text-center" class="text-end">週間ボーナス</th>
                   </tr>
                 </thead>
 
@@ -104,7 +104,7 @@
                       <td class="text-end">{{ r.ドライブボーナス }}</td>
                       <td class="text-end">{{ r.ベーシックボーナス }}</td>
                       <td class="text-end">{{ r.マッチングボーナス }}</td>
-                      <td class="text-end fw-bold">{{ r.週間ボーナス }}</td>
+                      <td class="fw-bold text-primary text-end">{{ r.週間ボーナス }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>
