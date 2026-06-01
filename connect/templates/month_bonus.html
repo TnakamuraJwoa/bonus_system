@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block head %}
-    <link href="{% static 'css/common.css' %}" rel="stylesheet">
+<link href="{% static 'css/common.css' %}" rel="stylesheet">
 {% endblock %}
 
 {% block contents %}
@@ -15,13 +15,13 @@
       {% endif %}
     </div>
 
-    {% include "com/_sidebar_bonus_week.html" with active_menu="week_bonus" %}
+    {% include "com/_sidebar_bonus_week.html" with active_menu="month_bonus" %}
 
     <main class="col-12 col-md-9 col-lg-10 d-flex flex-column" style="height: calc(100% - 24px); overflow: hidden;">
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <h5 class="mb-3">【ボーナス計算 - 週ボーナス】</h5>
+          <h5 class="mb-3">【ボーナス計算 - 月ボーナス】</h5>
 
           <div class="d-flex gap-2 align-items-end mb-0 flex-wrap">
 
@@ -31,8 +31,8 @@
                 <select name="kibetu" class="form-select">
                   {% for obj in object_list %}
                     <option value="{{ obj.kibetu }}"
-                            {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
-                      【{{ obj.kibetu }}】 ({{ obj.st_date }} - {{ obj.end_date }})
+                      {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
+                      【{{ obj.kibetu }}】
                     </option>
                   {% endfor %}
                 </select>
@@ -40,16 +40,16 @@
 
               <button type="submit" class="btn btn-primary">表示</button>
 
-              <a class="btn btn-outline-secondary" href="{% url 'connect:week_bonus' %}">
+              <a class="btn btn-outline-secondary" href="{% url 'connect:month_bonus' %}">
                 リセット
               </a>
             </form>
 
             {% if selected_period and rows %}
               <form method="post" class="mb-0"
-                    onsubmit="return confirm('表示中の週ボーナス結果を登録しますか？すでに登録済みの場合は上書き更新されます。');">
+                    onsubmit="return confirm('表示中の月ボーナス結果を登録しますか？すでに登録済みの場合は上書き更新されます。');">
                 {% csrf_token %}
-                <input type="hidden" name="action" value="register_week_bonus">
+                <input type="hidden" name="action" value="register_month_bonus">
                 <input type="hidden" name="kibetu" value="{{ selected_kibetu }}">
 
                 <button type="submit" class="btn btn-warning">
@@ -64,7 +64,7 @@
             <div class="text-muted small mt-3">
               選択中：
               <span class="badge bg-info text-dark">{{ selected_period.kibetu }}</span>
-              <span class="badge bg-secondary">{{ selected_period.st_date }} ～ {{ selected_period.end_date }}</span>
+              <span class="badge bg-secondary">支払日:{{ selected_period.payment_date }}</span>
             </div>
           {% else %}
             <div class="text-muted small mt-3">期別を選択してください</div>
@@ -85,26 +85,30 @@
               <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                   <tr>
-                    <th>期別</th>
-                    <th>会員番号</th>
-                    <th>会員名</th>
-                    <th class="text-end">ドライブボーナス</th>
-                    <th class="text-end">ベーシックボーナス</th>
-                    <th class="text-end">マッチングボーナス</th>
-                    <th class="text-end">週間ボーナス</th>
+                    <th class="text-center">期別</th>
+                    <th class="text-center">会員番号</th>
+                    <th class="text-center">会員名</th>
+                    <th class="text-center">タイトルボーナス</th>
+                    <th class="text-center">リピート購入オーバーボーナス</th>
+                    <th class="text-center">差額ボーナス</th>
+                    <th class="text-center">３つ星ダイヤグローバル配当</th>
+                    <th class="text-center">大使ダイヤグローバル配当</th>
+                    <th class="text-center">月間ボーナス</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {% for r in rows %}
                     <tr>
-                      <td>{{ r.期別 }}</td>
-                      <td>{{ r.会員番号 }}</td>
-                      <td>{{ r.会員名 }}</td>
-                      <td class="text-end">{{ r.ドライブボーナス }}</td>
-                      <td class="text-end">{{ r.ベーシックボーナス }}</td>
-                      <td class="text-end">{{ r.マッチングボーナス }}</td>
-                      <td class="text-end fw-bold">{{ r.週間ボーナス }}</td>
+                      <td>{{ r.kibetu }}</td>
+                      <td>{{ r.jwoa_code }}</td>
+                      <td>{{ r.jwoa_name }}</td>
+                      <td class="text-end">{{ r.title_bonus }}</td>
+                      <td class="text-end">{{ r.repurchase_over_bonus }}</td>
+                      <td class="text-end">{{ r.title_diff_bonus }}</td>
+                      <td class="text-end">{{ r.three_star_diamond_global_bonus }}</td>
+                      <td class="text-end">{{ r.crown_three_star_diamond_global_bonus }}</td>
+                      <td class="fw-bold text-primary text-end">{{ r.month_bonus }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

@@ -85,16 +85,16 @@
               <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                   <tr>
-                    <th>上位者コード</th>
-                    <th>上位者名</th>
-                    <th>上位者ランク</th>
-                    <th>ラインコード</th>
-                    <th>購入者コード</th>
-                    <th>購入者名</th>
-                    <th>sum_bv</th>
-                    <th>rate</th>
-                    <th>bonus_amount</th>
-                    <th>blue_daiya_flg</th>
+                    <th class="text-center">上位者コード</th>
+                    <th class="text-center">上位者名</th>
+                    <th class="text-center">上位者ランク</th>
+                    <th class="text-center">ラインコード</th>
+                    <th class="text-center">購入者コード</th>
+                    <th class="text-center">購入者名</th>
+                    <th class="text-center">sum_bv</th>
+                    <th class="text-center">rate</th>
+                    <th class="text-center">bonus_amount</th>
+                    <th class="text-center">blue_daiya_flg</th>
                   </tr>
                 </thead>
 
@@ -103,14 +103,14 @@
                     <tr>
                       <td>{{ r.上位者コード }}</td>
                       <td>{{ r.上位者名 }}</td>
-                      <td>{{ r.上位者ランク }}</td>
+                      <td class="text-end">{{ r.上位者ランク }}</td>
                       <td>{{ r.line_code }}</td>
                       <td>{{ r.購入者コード }}</td>
                       <td>{{ r.購入者名 }}</td>
                       <td class="text-end">{{ r.sum_bv }}</td>
                       <td class="text-end">{{ r.bonus_rate }}</td>
                       <td class="text-end">{{ r.bonus_amount }}</td>
-                      <td class="text-end">{{ r.blue_daiya_flg }}</td>
+                      <td class="fw-bold text-primary text-end">{{ r.blue_daiya_flg }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

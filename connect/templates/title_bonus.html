@@ -85,17 +85,17 @@
               <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                   <tr>
-                    <th>root_jmoa_code</th>
-                    <th>root_name</th>
-                    <th>up_jwoa_code</th>
-                    <th>down_jwoa_code</th>
-                    <th>down_name</th>
-                    <th>tree_level</th>
-                    <th>match_level</th>
-                    <th>sum_bv</th>
-                    <th>title_id</th>
-                    <th>rate</th>
-                    <th>bonus_amount</th>
+                    <th class="text-center">root_jmoa_code</th>
+                    <th class="text-center">root_name</th>
+                    <th class="text-center">up_jwoa_code</th>
+                    <th class="text-center">down_jwoa_code</th>
+                    <th class="text-center">down_name</th>
+                    <th class="text-center">tree_level</th>
+                    <th class="text-center">match_level</th>
+                    <th class="text-center">sum_bv</th>
+                    <th class="text-center">title_id</th>
+                    <th class="text-center">rate</th>
+                    <th class="text-center">bonus_amount</th>
                   </tr>
                 </thead>
 
@@ -107,12 +107,12 @@
                       <td>{{ r.up_jwoa_code }}</td>
                       <td>{{ r.down_jwoa_code }}</td>
                       <td>{{ r.down_name }}</td>
-                      <td>{{ r.tree_level }}</td>
+                      <td class="text-end">{{ r.tree_level }}</td>
                       <td class="text-end">{{ r.match_level }}</td>
                       <td class="text-end">{{ r.sum_bv }}</td>
                       <td class="text-end">{{ r.title_id }}</td>
                       <td class="text-end">{{ r.rate }}</td>
-                      <td class="text-end">{{ r.bonus_amount }}</td>
+                      <td class="fw-bold text-primary text-end">{{ r.bonus_amount }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

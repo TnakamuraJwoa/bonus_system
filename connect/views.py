@@ -5576,3 +5576,297 @@ class S_WeekBonusView(generic.ListView):
         ctx["rows"] = rows
 
         return ctx
+
+
+
+class MonthBonusView(generic.ListView):
+    template_name = "month_bonus.html"
+    context_object_name = "object_list"
+    model = MonthlyPeriod
+
+    def get_queryset(self):
+        return MonthlyPeriod.objects.using("rds").all()
+
+    def post(self, request, *args, **kwargs):
+        action = request.POST.get("action", "")
+        selected_kibetu = request.POST.get("kibetu", "").strip()
+
+        if action != "register_month_bonus":
+            messages.error(request, "不正な操作です。")
+            return redirect("connect:month_bonus")
+
+        if not selected_kibetu:
+            messages.error(request, "期別を選択してください。")
+            return redirect("connect:month_bonus")
+
+        period = MonthlyPeriod.objects.using("rds").filter(kibetu=selected_kibetu).first()
+
+        if not period:
+            messages.error(request, "選択された期別が存在しません。")
+            return redirect("connect:month_bonus")
+
+        try:
+            rows = self._get_month_bonus_rows(selected_kibetu)
+
+            if not rows:
+                messages.warning(request, "登録対象データがありません。")
+                return redirect(f"/month_bonus/?kibetu={selected_kibetu}")
+
+            insert_sql = """
+                INSERT INTO bonus_db.B_month_bonus_result (
+                    kibetu,
+                    jwoa_code,
+                    jwoa_name,
+                    title_bonus,
+                    repurchase_over_bonus,
+                    title_diff_bonus,
+                    three_star_diamond_global_bonus,
+                    crown_three_star_diamond_global_bonus,
+                    month_bonus,
+                    created_at,
+                    updated_at
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'),
+                    CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo')
+                )
+                ON DUPLICATE KEY UPDATE
+                    jwoa_name = VALUES(jwoa_name),
+                    title_bonus = VALUES(title_bonus),
+                    repurchase_over_bonus = VALUES(repurchase_over_bonus),
+                    title_diff_bonus = VALUES(title_diff_bonus),
+                    three_star_diamond_global_bonus = VALUES(three_star_diamond_global_bonus),
+                    crown_three_star_diamond_global_bonus = VALUES(crown_three_star_diamond_global_bonus),
+                    month_bonus = VALUES(month_bonus),
+                    updated_at = CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo')
+            """
+
+            insert_params = []
+
+            for r in rows:
+                insert_params.append([
+                    r.get("kibetu"),
+                    r.get("jwoa_code") or "",
+                    r.get("jwoa_name") or "",
+                    r.get("title_bonus") or 0,
+                    r.get("repurchase_over_bonus") or 0,
+                    r.get("title_diff_bonus") or 0,
+                    r.get("three_star_diamond_global_bonus") or 0,
+                    r.get("crown_three_star_diamond_global_bonus") or 0,
+                    r.get("month_bonus") or 0,
+                ])
+
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    cursor.executemany(insert_sql, insert_params)
+
+                    history_sql = """
+                        INSERT INTO bonus_db.bonus_register_history (
+                            bonus_name,
+                            kibetu,
+                            registered_at,
+                            registered_by,
+                            comment_text
+                        )
+                        VALUES (
+                            %s,
+                            %s,
+                            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'),
+                            %s,
+                            %s
+                        )
+                    """
+
+                    cursor.execute(
+                        history_sql,
+                        [
+                            "month_bonus",
+                            selected_kibetu,
+                            request.user.username,
+                            f"{len(rows)}件登録"
+                        ]
+                    )
+
+            messages.success(request, f"{len(rows)}件を月ボーナス結果に登録しました。")
+
+        except Exception as e:
+            logger.exception("月ボーナス結果登録エラー")
+            messages.error(request, f"登録中にエラーが発生しました: {e}")
+
+        return redirect(f"/month_bonus/?kibetu={selected_kibetu}")
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        selected_kibetu = self.request.GET.get("kibetu")
+        ctx["selected_kibetu"] = selected_kibetu
+        ctx["rows"] = []
+        ctx["selected_period"] = None
+
+        if not selected_kibetu:
+            return ctx
+
+        period = MonthlyPeriod.objects.using("rds").filter(kibetu=selected_kibetu).first()
+
+        if not period:
+            return ctx
+
+        ctx["selected_period"] = period
+        ctx["rows"] = self._get_month_bonus_rows(selected_kibetu)
+
+        return ctx
+
+    def _get_month_bonus_rows(self, selected_kibetu):
+        params = [
+            selected_kibetu,
+            selected_kibetu,
+            selected_kibetu,
+            selected_kibetu,
+        ]
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(MONTH_BONUS_SQL, params)
+            cols = [c[0] for c in cursor.description]
+            rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+        return rows
+
+
+
+class S_MonthBonusView(generic.ListView):
+    template_name = "s_month_bonus.html"
+    context_object_name = "object_list"
+    model = MonthlyPeriod
+
+    def get_queryset(self):
+        with connections["rds"].cursor() as cursor:
+            cursor.execute("""
+                SELECT DISTINCT kibetu
+                FROM bonus_db.B_month_bonus_result
+                ORDER BY kibetu
+            """)
+            registered_kibetu_list = [row[0] for row in cursor.fetchall()]
+
+        if not registered_kibetu_list:
+            return MonthlyPeriod.objects.using("rds").none()
+
+        return (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu__in=registered_kibetu_list)
+            .order_by("kibetu")
+        )
+
+    def get(self, request, *args, **kwargs):
+        self.object_list = self.get_queryset()
+        context = self.get_context_data()
+
+        if request.GET.get("export") == "excel":
+            rows = context.get("rows", [])
+
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "MonthBonusResult"
+
+            headers = [
+                "期別",
+                "会員コード",
+                "会員名",
+                "タイトルボーナス",
+                "リピート購入オーバーボーナス",
+                "差額ボーナス",
+                "３つ星ダイヤグローバル配当",
+                "大使ダイヤグローバル配当",
+                "月間ボーナス",
+            ]
+            ws.append(headers)
+
+            for r in rows:
+                ws.append([
+                    r.get("kibetu"),
+                    r.get("jwoa_code"),
+                    r.get("jwoa_name"),
+                    r.get("title_bonus"),
+                    r.get("repurchase_over_bonus"),
+                    r.get("title_diff_bonus"),
+                    r.get("three_star_diamond_global_bonus"),
+                    r.get("crown_three_star_diamond_global_bonus"),
+                    r.get("month_bonus"),
+                ])
+
+            ws.column_dimensions["A"].width = 15
+            ws.column_dimensions["B"].width = 15
+            ws.column_dimensions["C"].width = 25
+            ws.column_dimensions["D"].width = 18
+            ws.column_dimensions["E"].width = 28
+            ws.column_dimensions["F"].width = 18
+            ws.column_dimensions["G"].width = 30
+            ws.column_dimensions["H"].width = 30
+            ws.column_dimensions["I"].width = 18
+
+            for row_idx in range(2, ws.max_row + 1):
+                for col in ["D", "E", "F", "G", "H", "I"]:
+                    ws[f"{col}{row_idx}"].number_format = '#,##0'
+
+            response = HttpResponse(
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            response["Content-Disposition"] = 'attachment; filename="month_bonus_result.xlsx"'
+
+            wb.save(response)
+            return response
+
+        return self.render_to_response(context)
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        selected_kibetu = self.request.GET.get("kibetu")
+
+        if not selected_kibetu and self.object_list:
+            selected_kibetu = self.object_list[0].kibetu
+
+        ctx["selected_kibetu"] = selected_kibetu
+        ctx["rows"] = []
+        ctx["selected_period"] = None
+
+        if not selected_kibetu:
+            return ctx
+
+        period = (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu=selected_kibetu)
+            .first()
+        )
+
+        if not period:
+            return ctx
+
+        ctx["selected_period"] = period
+
+        sql = """
+            SELECT
+                id,
+                kibetu,
+                jwoa_code,
+                jwoa_name,
+                title_bonus,
+                repurchase_over_bonus,
+                title_diff_bonus,
+                three_star_diamond_global_bonus,
+                crown_three_star_diamond_global_bonus,
+                month_bonus,
+                created_at,
+                updated_at
+            FROM bonus_db.B_month_bonus_result
+            WHERE kibetu = %s
+            ORDER BY month_bonus DESC, jwoa_code
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, [selected_kibetu])
+            cols = [c[0] for c in cursor.description]
+            rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+        ctx["rows"] = rows
+
+        return ctx

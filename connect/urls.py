@@ -40,6 +40,7 @@ urlpatterns = [
     path('three_star_global_bonus/', views.ThreeStarGlobalBonusView.as_view(), name = "three_star_global_bonus"),
 
     path('week_bonus/', views.WeekBonusView.as_view(), name = "week_bonus"),
+    path('month_bonus/', views.MonthBonusView.as_view(), name = "month_bonus"),
 
     path('s_drive_bonus/', views.S_DriveBonusView.as_view(), name = "s_drive_bonus"),
     path('s_basic_bonus/', views.S_BasicBonusView.as_view(), name = "s_basic_bonus"),
@@ -50,5 +51,6 @@ urlpatterns = [
     path('s_three_star_global_bonus/', views.S_ThreeStarGlobalBonusView.as_view(), name = "s_three_star_global_bonus"),
 
     path('s_week_bonus/', views.S_WeekBonusView.as_view(), name = "s_week_bonus"),
+    path('s_month_bonus/', views.S_MonthBonusView.as_view(), name = "s_month_bonus"),
 
 ]
