@@ -1,6 +1,4 @@
 REPURCHASE_LAST_MONTH = """
--- 注文情報テーブルにボーナス支払日の日付を追加
-
 WITH bonus_orders AS (
     SELECT
         o.*,
@@ -57,6 +55,28 @@ WHERE order_year = %s
   AND order_month = %s
 )
 
-SELECT *
+SELECT
+    aa.order_code,
+    aa.jwoa_code,
+    aa.send_bv_name,
+
+    CASE
+        WHEN c.order_code IS NOT NULL THEN 200
+        ELSE aa.order_type
+    END AS order_type,
+
+    aa.total_bv,
+    aa.bv,
+    aa.deposit_at,
+    aa.order_at,
+    aa.payment_date,
+    aa.order_year,
+    aa.order_month,
+    aa.register_year,
+    aa.register_month
+
 FROM aa
+
+LEFT JOIN bonus_db.cooling_off c
+    ON aa.order_code = c.order_code;
 """
