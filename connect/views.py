@@ -5946,3 +5946,137 @@ class BonusHistryView(generic.TemplateView):
             ]
 
         return rows
+
+
+class CoolingOffView(generic.TemplateView):
+    template_name = "cooling_off.html"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        edit_id = self.request.GET.get("edit_id")
+
+        ctx["rows"] = self._get_rows()
+        ctx["edit_row"] = None
+
+        if edit_id:
+            ctx["edit_row"] = self._get_edit_row(edit_id)
+
+        return ctx
+
+    def post(self, request, *args, **kwargs):
+
+        action = request.POST.get("action")
+
+        if action == "create":
+            self._create(request)
+
+        elif action == "update":
+            self._update(request)
+
+        elif action == "delete":
+            self._delete(request)
+
+        return redirect("connect:cooling_off")
+
+    def _get_rows(self):
+
+        sql = """
+            SELECT
+                c.id,
+                c.order_code,
+                c.registered_by,
+                c.created_at,
+                o.jwoa_code,
+                o.order_name
+            FROM bonus_db.cooling_off c
+            LEFT JOIN bonus_db.orders o
+                ON c.order_code = o.order_code
+            ORDER BY c.created_at DESC
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql)
+
+            cols = [c[0] for c in cursor.description]
+
+            return [
+                dict(zip(cols, row))
+                for row in cursor.fetchall()
+            ]
+
+    def _get_edit_row(self, edit_id):
+
+        sql = """
+            SELECT *
+            FROM bonus_db.cooling_off
+            WHERE id = %s
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, [edit_id])
+
+            row = cursor.fetchone()
+
+            if not row:
+                return None
+
+            cols = [c[0] for c in cursor.description]
+
+            return dict(zip(cols, row))
+
+    def _create(self, request):
+
+        sql = """
+            INSERT INTO bonus_db.cooling_off (
+                order_code,
+                registered_by
+            )
+            VALUES (
+                %s,
+                %s
+            )
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(
+                sql,
+                [
+                    request.POST.get("order_code"),
+                    request.user.username,
+                ]
+            )
+
+    def _update(self, request):
+
+        sql = """
+            UPDATE bonus_db.cooling_off
+            SET
+                order_code = %s,
+                registered_by = %s
+            WHERE id = %s
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(
+                sql,
+                [
+                    request.POST.get("order_code"),
+                    request.user.username,
+                    request.POST.get("id"),
+                ]
+            )
+
+    def _delete(self, request):
+
+        sql = """
+            DELETE
+            FROM bonus_db.cooling_off
+            WHERE id = %s
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(
+                sql,
+                [request.POST.get("id")]
+            )

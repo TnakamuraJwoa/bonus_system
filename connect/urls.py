@@ -22,6 +22,7 @@ urlpatterns = [
     path('title_registration/', views.TitleRegistrationView.as_view(), name = "title_registration"),
     path("bonus_payment_date/", views.BonusPaymentDateView.as_view(), name="bonus_payment_date"),
     path("active_users/", views.ActiveUsersView.as_view(), name="active_users"),
+    path("cooling_off/", views.CoolingOffView.as_view(), name="cooling_off"),
 
     path('users/', views.UsersView.as_view(), name = "users"),
     path('title_user/', views.TitleUserView.as_view(), name = "title_user"),
