@@ -41,6 +41,7 @@ urlpatterns = [
 
     path('week_bonus/', views.WeekBonusView.as_view(), name = "week_bonus"),
     path('month_bonus/', views.MonthBonusView.as_view(), name = "month_bonus"),
+    path('bonus_histry/', views.BonusHistryView.as_view(), name = "bonus_histry"),
 
     path('s_drive_bonus/', views.S_DriveBonusView.as_view(), name = "s_drive_bonus"),
     path('s_basic_bonus/', views.S_BasicBonusView.as_view(), name = "s_basic_bonus"),

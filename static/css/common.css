@@ -21,6 +21,10 @@ body {
   overflow-y: auto;
 }
 
+.table-responsive2 {
+  max-height: 100%!important;
+}
+
 .messages-container {
  z-index: 99 !important;
 }

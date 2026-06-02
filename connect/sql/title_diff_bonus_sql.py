@@ -211,12 +211,6 @@ FROM line_type_total_bv2
 ),
 
 -- ------------------------- taitle  ----------------------------------
--- 変数
-var as (
- select
-  5 as set_title,          -- ２スターダイヤ以上の実績を達成した会員が対象
-  4 as minimum_title_id    -- 一番低いタイトル
-),
 
 
 title_result_with_rate as (
@@ -253,7 +247,7 @@ from title_result
 this_month_two_star_dia as (
 select *
 from title_result_with_rate
-where title_id >= (select set_title from var)
+where title_id >= 4
 ),
 
 -- 上位者で下を見る
@@ -261,6 +255,8 @@ introducer_down_tree AS (
 
     -- 1階層目：上位者
     SELECT
+        a.title_id as root_title_id,
+        a.bonus_rate as root_bonus_rate,
         a.jwoa_code as root_jwoa_code,
         a.jwoa_name as root_name,
         a.title_id as up_title_id,
@@ -280,15 +276,17 @@ introducer_down_tree AS (
     left join title_result_with_rate as c
     on b.jmoa_code = c.jwoa_code
 
-    where a.title_id > b.jmoa_code
+    where a.title_id > c.title_id
 
     union all
 
     SELECT
+        t.root_title_id,
+        t.root_bonus_rate,
         t.root_jwoa_code,
         t.root_name,
         t.down_title_id as up_title_id,
-        t.up_bonus_rate up_bonus_rate,
+        t.down_bonus_rate up_bonus_rate,
         t.down_jwoa_code AS up_jwoa_code,
         t.down_name AS up_jwoa_name,
         c.title_id as down_title_id,
@@ -303,34 +301,11 @@ introducer_down_tree AS (
       ON u.placement_code = t.down_jwoa_code
 
     left join title_result_with_rate as c
-    on t.down_jwoa_code = c.jwoa_code
+    on u.jmoa_code = c.jwoa_code
 
     WHERE t.tree_level < 10000
-      AND t.down_title_id > u.jmoa_code
+      AND t.root_title_id > c.title_id
 
-),
-
--- 2スター以上のダウンを表示
-two_star_or_hith as (
-select
- root_jwoa_code,
- root_name,
- up_title_id,
- up_bonus_rate,
- up_jwoa_code,
- up_jwoa_name,
- down_title_id,
- down_bonus_rate,
- down_jwoa_code,
- down_name,
- up_bonus_rate - down_bonus_rate as pay_bonus_rate,
- tree_level
-
-
-from introducer_down_tree
-where
- down_title_id >= (select minimum_title_id from var)
- and up_bonus_rate > down_bonus_rate
 ),
 
 
@@ -340,10 +315,11 @@ select
  a.*,
  b.sum_bv,
 TRUNCATE(
-    (b.sum_bv * (pay_bonus_rate / 100)),
+    (b.sum_bv * ((root_bonus_rate - down_bonus_rate) / 100)),
     2
 ) AS title_diff_bonus
-from two_star_or_hith as a
+from introducer_down_tree as a
+
 left join D_drive_sum_bv as b
 on a.down_jwoa_code = b.jwoa_code
 )
@@ -351,5 +327,5 @@ on a.down_jwoa_code = b.jwoa_code
 
 select *
 from title_diff_bonus_result
-where sum_bv > 0
+where title_diff_bonus > 0
 """
