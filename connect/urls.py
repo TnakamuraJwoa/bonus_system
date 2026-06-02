@@ -22,6 +22,7 @@ urlpatterns = [
     path('title_registration/', views.TitleRegistrationView.as_view(), name = "title_registration"),
     path("bonus_payment_date/", views.BonusPaymentDateView.as_view(), name="bonus_payment_date"),
     path("active_users/", views.ActiveUsersView.as_view(), name="active_users"),
+    path("cooling_off/", views.CoolingOffView.as_view(), name="cooling_off"),
 
     path('users/', views.UsersView.as_view(), name = "users"),
     path('title_user/', views.TitleUserView.as_view(), name = "title_user"),
@@ -41,6 +42,7 @@ urlpatterns = [
 
     path('week_bonus/', views.WeekBonusView.as_view(), name = "week_bonus"),
     path('month_bonus/', views.MonthBonusView.as_view(), name = "month_bonus"),
+    path('bonus_histry/', views.BonusHistryView.as_view(), name = "bonus_histry"),
 
     path('s_drive_bonus/', views.S_DriveBonusView.as_view(), name = "s_drive_bonus"),
     path('s_basic_bonus/', views.S_BasicBonusView.as_view(), name = "s_basic_bonus"),

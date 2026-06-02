@@ -13,5 +13,15 @@
 
       </div>
     </div>
+
+    <div class="card-body">
+      <div class="fw-bold mb-2">【登録履歴】</div>
+
+      <div class="list-group">
+        <a class="list-group-item list-group-item-action {% if active_menu == 'bonus_histry' %}active{% endif %}"
+           href="{% url 'connect:bonus_histry' %}">個人実績の登録履歴</a>
+
+      </div>
+    </div>
   </div>
 </nav>
