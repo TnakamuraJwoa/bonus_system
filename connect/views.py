@@ -3000,10 +3000,16 @@ class S_DriveBonusView(generic.ListView):
                 ws[f"E{row_idx}"].number_format = '#,##0'
                 ws[f"F{row_idx}"].number_format = '#,##0.00'
 
+            kibetu = context.get("selected_kibetu", "")
+            print(kibetu)
+            logger.info(f"selected_kibetu={kibetu}")
+
             response = HttpResponse(
                 content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-            response["Content-Disposition"] = 'attachment; filename="drive_bonus_result.xlsx"'
+            response["Content-Disposition"] = (
+                f'attachment; filename="drive_bonus_result_{kibetu}.xlsx"'
+            )
 
             wb.save(response)
             return response
