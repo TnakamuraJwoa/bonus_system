@@ -24,6 +24,7 @@
           <h5 class="mb-3">【ボーナス検索 - ドライブボーナス】</h5>
 
           <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+
             <div>
               <label class="form-label mb-0 small text-muted">期別</label>
               <select name="kibetu" class="form-select">
@@ -36,8 +37,30 @@
               </select>
             </div>
 
+            <div>
+              <label class="form-label mb-0 small text-muted">紹介者ID</label>
+              <input type="text"
+                     name="introducer_code"
+                     class="form-control"
+                     value="{{ search_introducer_code }}"
+                     placeholder="例：JP00000000">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">会員ID</label>
+              <input type="text"
+                     name="jwoa_code"
+                     class="form-control"
+                     value="{{ search_jwoa_code }}"
+                     placeholder="例：JP00000000">
+            </div>
+
             <button type="submit" class="btn btn-primary">表示</button>
-            <a class="btn btn-outline-secondary" href="{% url 'connect:drive_bonus' %}">リセット</a>
+
+            <a class="btn btn-outline-secondary" href="{% url 'connect:s_drive_bonus' %}">
+              リセット
+            </a>
+
             <button type="submit" name="export" value="excel" class="btn btn-success">
               Excel出力
             </button>
@@ -47,7 +70,21 @@
             <div class="text-muted small mt-3">
               選択中：
               <span class="badge bg-info text-dark">{{ selected_period.kibetu }}</span>
-              <span class="badge bg-secondary">{{ selected_period.st_date }} ～ {{ selected_period.end_date }}</span>
+              <span class="badge bg-secondary">
+                {{ selected_period.st_date }} ～ {{ selected_period.end_date }}
+              </span>
+
+              {% if search_introducer_code %}
+                <span class="badge bg-success">
+                  紹介者ID：{{ search_introducer_code }}
+                </span>
+              {% endif %}
+
+              {% if search_jwoa_code %}
+                <span class="badge bg-primary">
+                  会員ID：{{ search_jwoa_code }}
+                </span>
+              {% endif %}
             </div>
           {% else %}
             <div class="text-muted small mt-3">期別を選択してください</div>
@@ -72,8 +109,8 @@
                     <th>紹介者ID</th>
                     <th>会員ID</th>
                     <th>会員名</th>
-                    <th>BV合計</th>
-                    <th>報酬</th>
+                    <th class="text-end">BV合計</th>
+                    <th class="text-end">報酬</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -83,8 +120,8 @@
                       <td>{{ r.introducer_code }}</td>
                       <td>{{ r.jwoa_code }}</td>
                       <td>{{ r.jwoa_name }}</td>
-                      <td>{{ r.sum_bv }}</td>
-                      <td>{{ r.sum_bonus_amount }}</td>
+                      <td class="text-end">{{ r.sum_bv }}</td>
+                      <td class="text-end">{{ r.sum_bonus_amount }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>
@@ -93,9 +130,9 @@
 
           {% else %}
             {% if selected_kibetu %}
-              <p class="mb-0">この期間のデータはありません。</p>
+              <p class="mb-0">この条件のデータはありません。</p>
             {% else %}
-              <p class="mb-0 text-muted">期別を選択して「選択」を押してください。</p>
+              <p class="mb-0 text-muted">期別を選択して「表示」を押してください。</p>
             {% endif %}
           {% endif %}
 
