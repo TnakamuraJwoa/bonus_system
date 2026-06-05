@@ -169,6 +169,8 @@
                           ランクアップ購入品
                         {% elif r.order_type == 105 %}
                           特別対応購入品
+                        {% elif r.order_type == 200 %}
+                          <span class="text-danger fw-bold">クーリングオフ</span>
                         {% else %}
                           {{ r.order_type }}
                         {% endif %}
