@@ -1,6 +1,7 @@
 DRIVE_BONUS_SQL = """
 WITH RECURSIVE
 
+-- user + active + title 情報
 users_target_rank_add_activeUser as (
 SELECT
     a.*,
@@ -23,6 +24,7 @@ LEFT JOIN bonus_db.title_master as tm
 ON ut.title_id = tm.title_id
 ),
 
+-- ①再購入データ
 repurchase_list AS (
     SELECT
         order_code,
@@ -37,6 +39,7 @@ repurchase_list AS (
       AND bonus_payment_date < %s
 ),
 
+-- ②初回購入、ランクアップデータ
 rank_up_list AS (
     SELECT
         order_code,
@@ -51,13 +54,14 @@ rank_up_list AS (
       AND bonus_payment_date < %s
 ),
 
+-- ①再購入データ + ②初回購入、ランクアップデータ のユーザーリスト
 purchasers_list AS (
     SELECT jwoa_code FROM repurchase_list
     UNION
     SELECT jwoa_code FROM rank_up_list
 ),
 
-sum_purchasers_list AS (
+prev_purchasers_list AS (
 SELECT
     p.jwoa_code,
     SUM(IFNULL(p.bv, 0)) AS bv
@@ -249,7 +253,7 @@ chain_find AS (
     FROM user_in_purchasers_list u
     LEFT JOIN users_target_rank_add_activeUser up
       ON up.jmoa_code = u.introducer_code
-    LEFT JOIN sum_purchasers_list p
+    LEFT JOIN prev_purchasers_list p
       ON p.jwoa_code = up.jmoa_code
 
     UNION ALL
@@ -267,7 +271,7 @@ chain_find AS (
     FROM chain_find c
     JOIN users_target_rank_add_activeUser up
       ON up.jmoa_code = c.next_code
-    LEFT JOIN sum_purchasers_list p
+    LEFT JOIN prev_purchasers_list p
       ON p.jwoa_code = up.jmoa_code
     WHERE c.next_code IS NOT NULL
       AND c.found = 0

@@ -7,26 +7,23 @@
 
 {% block contents %}
 <div class="container-fluid mt-3" style="height: calc(100vh - 170px); overflow: hidden;">
-  <div class="row g-1 h-100">
+    <div class="row g-1 h-100">
 
-    <div class="col-12 text-end">
-      {% if user.is_authenticated %}
-        <span class="small text-muted">👤 {{ user.username }}</span>
-      {% endif %}
-    </div>
+        <div class="col-12 text-end">
+            {% if user.is_authenticated %}
+                <span class="small text-muted">👤 {{ user.username }}</span>
+            {% endif %}
+        </div>
 
-        {% include "com/_sidebar.html" with active_menu="cooling_off" %}
+        {% include "com/_sidebar_orders.html" with active_menu="cooling_off" %}
 
-    <main class="col-12 col-md-9 col-lg-10 d-flex flex-column"
-          style="height: calc(100% - 24px); overflow: hidden;">
-
+        <main class="col-12 col-md-9 col-lg-10 d-flex flex-column"
+              style="height: calc(100% - 24px); overflow: hidden;">
 
             <div class="card shadow-sm mb-3">
                 <div class="card-body">
 
-                    <h5 class="mb-3">
-                        【クーリングオフ管理】
-                    </h5>
+                    <h5 class="mb-3">【注文管理 - クーリングオフ】</h5>
 
                     <form method="post">
                         {% csrf_token %}
@@ -39,25 +36,19 @@
                         {% endif %}
 
                         <div class="row">
-
                             <div class="col-md-4">
-                                <label class="form-label">
-                                    注文番号
-                                </label>
+                                <label class="form-label">注文番号</label>
 
-                                <input
-                                    type="text"
-                                    name="order_code"
-                                    class="form-control"
-                                    value="{{ edit_row.order_code|default:'' }}"
-                                    required>
+                                <input type="text"
+                                       name="order_code"
+                                       class="form-control"
+                                       value="{{ edit_row.order_code|default:'' }}"
+                                       required>
                             </div>
 
-                            <div class="col-md-2 d-flex align-items-end">
-
+                            <div class="col-md-3 d-flex align-items-end">
                                 {% if edit_row %}
-                                    <button type="submit"
-                                            class="btn btn-warning">
+                                    <button type="submit" class="btn btn-warning">
                                         更新
                                     </button>
 
@@ -66,35 +57,121 @@
                                         戻る
                                     </a>
                                 {% else %}
-                                    <button type="submit"
-                                            class="btn btn-primary">
+                                    <button type="submit" class="btn btn-primary">
                                         登録
                                     </button>
                                 {% endif %}
-
                             </div>
-
                         </div>
-
                     </form>
 
                 </div>
             </div>
 
-            <div class="card shadow-sm">
-
+            {% if detail_order %}
+            <div class="card shadow-sm mb-3 border-info">
                 <div class="card-body">
 
-                    <h5>
-                        クーリングオフ一覧
-                    </h5>
+                    <h5 class="mb-3">注文詳細</h5>
 
-                    <div class="table-responsive">
+                    <table class="table table-bordered table-sm">
+                        <tr>
+                            <th width="180">注文番号</th>
+                            <td>{{ detail_order.order_code }}</td>
+                        </tr>
+
+                        <tr>
+                            <th>会員番号</th>
+                            <td>{{ detail_order.jwoa_code }}</td>
+                        </tr>
+
+                        <tr>
+                            <th>注文者名</th>
+                            <td>{{ detail_order.order_name }}</td>
+                        </tr>
+
+                        <tr>
+                            <th>注文種別</th>
+                            <td>
+                                {% if detail_order.order_type == 101 %}
+                                    再購入品
+                                {% elif detail_order.order_type == 102 %}
+                                    初回購入品
+                                {% elif detail_order.order_type == 103 %}
+                                    ランクアップ購入品
+                                {% elif detail_order.order_type == 105 %}
+                                    特別対応購入品
+                                {% else %}
+                                    {{ detail_order.order_type }}
+                                {% endif %}
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <th>注文ステータス</th>
+                            <td>
+                                {% if detail_order.order_status == 201 %}
+                                    入金待ち
+                                {% elif detail_order.order_status == 202 %}
+                                    入金確認済
+                                {% elif detail_order.order_status == 203 %}
+                                    決済完了
+                                {% elif detail_order.order_status == 204 %}
+                                    出荷依頼済
+                                {% elif detail_order.order_status == 205 %}
+                                    出荷完了
+                                {% elif detail_order.order_status == 206 %}
+                                    キャンセル
+                                {% elif detail_order.order_status == 207 %}
+                                    返品処理中
+                                {% elif detail_order.order_status == 208 %}
+                                    返品処理完了
+                                {% elif detail_order.order_status == 209 %}
+                                    商品交換処理中
+                                {% elif detail_order.order_status == 210 %}
+                                    再出荷依頼中
+                                {% elif detail_order.order_status == 211 %}
+                                    再出荷完了
+                                {% else %}
+                                    {{ detail_order.order_status }}
+                                {% endif %}
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <th>合計BV</th>
+                            <td>{{ detail_order.total_bv }}</td>
+                        </tr>
+
+                        <tr>
+                            <th>入金日</th>
+                            <td>{{ detail_order.deposit_at|date:"Y/m/d H:i:s" }}</td>
+                        </tr>
+
+                        <tr>
+                            <th>注文日</th>
+                            <td>{{ detail_order.order_at|date:"Y/m/d H:i:s" }}</td>
+                        </tr>
+                    </table>
+
+                    <a href="{% url 'connect:cooling_off' %}"
+                       class="btn btn-secondary btn-sm">
+                        閉じる
+                    </a>
+
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="card shadow-sm flex-grow-1">
+                <div class="card-body d-flex flex-column">
+
+                    <h5>クーリングオフ一覧</h5>
+
+                    <div class="table-responsive flex-grow-1">
 
                         <table class="table table-bordered table-sm">
-
                             <thead>
-
                                 <tr>
                                     <th width="80">ID</th>
                                     <th width="200">注文番号</th>
@@ -102,77 +179,63 @@
                                     <th>注文者名</th>
                                     <th width="150">登録者</th>
                                     <th width="180">登録日時</th>
-                                    <th width="150">操作</th>
+                                    <th width="260">操作</th>
                                 </tr>
-
                             </thead>
 
                             <tbody>
-
                                 {% for row in rows %}
-
                                 <tr>
-
                                     <td>{{ row.id }}</td>
-
                                     <td>{{ row.order_code }}</td>
-
                                     <td>{{ row.jwoa_code }}</td>
-
                                     <td>{{ row.order_name }}</td>
-
                                     <td>{{ row.registered_by }}</td>
+                                    <td>{{ row.created_at|date:"Y/m/d H:i:s" }}</td>
 
                                     <td>
-                                        {{ row.created_at|date:"Y/m/d H:i:s" }}
-                                    </td>
-
-                                    <td>
+                                        <a href="?detail_order_code={{ row.order_code }}"
+                                           class="btn btn-sm btn-info">
+                                            詳細
+                                        </a>
 
                                         <a href="?edit_id={{ row.id }}"
                                            class="btn btn-sm btn-warning">
                                             編集
                                         </a>
 
-                                        <form method="post"
-                                              style="display:inline;">
+                                        <form method="post" style="display:inline;">
                                             {% csrf_token %}
 
-                                            <input type="hidden"
-                                                   name="action"
-                                                   value="delete">
-
-                                            <input type="hidden"
-                                                   name="id"
-                                                   value="{{ row.id }}">
+                                            <input type="hidden" name="action" value="delete">
+                                            <input type="hidden" name="id" value="{{ row.id }}">
 
                                             <button type="submit"
                                                     class="btn btn-sm btn-danger"
                                                     onclick="return confirm('削除しますか？')">
                                                 削除
                                             </button>
-
                                         </form>
-
                                     </td>
-
                                 </tr>
 
+                                {% empty %}
+                                <tr>
+                                    <td colspan="7" class="text-center">
+                                        データがありません
+                                    </td>
+                                </tr>
                                 {% endfor %}
-
                             </tbody>
-
                         </table>
 
                     </div>
 
                 </div>
-
             </div>
 
         </main>
 
     </div>
-
 </div>
 {% endblock %}

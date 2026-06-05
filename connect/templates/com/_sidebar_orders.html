@@ -21,6 +21,9 @@
       <div class="fw-bold mb-2">■ BONUS SYSTEM</div>
 
       <div class="list-group">
+        <a class="list-group-item list-group-item-action {% if active_menu == 'cooling_off' %}active{% endif %}"
+           href="{% url 'connect:cooling_off' %}">クーリングオフ</a>
+
         <a class="list-group-item list-group-item-action {% if active_menu == 'bonus_payment_date' %}active{% endif %}"
            href="#">#ボーナス支払日</a>
 
