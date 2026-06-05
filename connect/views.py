@@ -2940,14 +2940,12 @@ class MatchingBonusView(generic.ListView):
 
 
 
-
 class S_DriveBonusView(generic.ListView):
     template_name = "s_drive_bonus.html"
     context_object_name = "object_list"
     model = PeriodMaster
 
     def get_queryset(self):
-        # B_drive_bonus_result に登録済みの期別だけ取得
         with connections["rds"].cursor() as cursor:
             cursor.execute("""
                 SELECT DISTINCT kibetu
@@ -3001,14 +2999,22 @@ class S_DriveBonusView(generic.ListView):
                 ws[f"F{row_idx}"].number_format = '#,##0.00'
 
             kibetu = context.get("selected_kibetu", "")
-            print(kibetu)
-            logger.info(f"selected_kibetu={kibetu}")
+            search_introducer_code = context.get("search_introducer_code", "")
+            search_jwoa_code = context.get("search_jwoa_code", "")
+
+            filename = f"drive_bonus_result_{kibetu}"
+
+            if search_introducer_code:
+                filename += f"_intro_{search_introducer_code}"
+
+            if search_jwoa_code:
+                filename += f"_member_{search_jwoa_code}"
 
             response = HttpResponse(
                 content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
             response["Content-Disposition"] = (
-                f'attachment; filename="drive_bonus_result_{kibetu}.xlsx"'
+                f'attachment; filename="{filename}.xlsx"'
             )
 
             wb.save(response)
@@ -3020,12 +3026,15 @@ class S_DriveBonusView(generic.ListView):
         ctx = super().get_context_data(**kwargs)
 
         selected_kibetu = self.request.GET.get("kibetu")
+        search_introducer_code = self.request.GET.get("introducer_code", "").strip()
+        search_jwoa_code = self.request.GET.get("jwoa_code", "").strip()
 
-        # 期別未選択なら、登録済み期別の先頭を自動選択
         if not selected_kibetu and self.object_list:
             selected_kibetu = self.object_list[0].kibetu
 
         ctx["selected_kibetu"] = selected_kibetu
+        ctx["search_introducer_code"] = search_introducer_code
+        ctx["search_jwoa_code"] = search_jwoa_code
         ctx["rows"] = []
         ctx["selected_period"] = None
 
@@ -3051,11 +3060,28 @@ class S_DriveBonusView(generic.ListView):
                 created_at
             FROM bonus_db.B_drive_bonus_result
             WHERE kibetu = %s
+        """
+
+        params = [selected_kibetu]
+
+        if search_introducer_code:
+            sql += """
+                AND introducer_code LIKE %s
+            """
+            params.append(f"%{search_introducer_code}%")
+
+        if search_jwoa_code:
+            sql += """
+                AND jwoa_code LIKE %s
+            """
+            params.append(f"%{search_jwoa_code}%")
+
+        sql += """
             ORDER BY introducer_code, jwoa_code
         """
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, [selected_kibetu])
+            cursor.execute(sql, params)
             logger.info(f"Executed SQL: {cursor._executed}")
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
