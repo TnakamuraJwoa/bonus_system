@@ -5961,17 +5961,21 @@ class CoolingOffView(generic.TemplateView):
         ctx = super().get_context_data(**kwargs)
 
         edit_id = self.request.GET.get("edit_id")
+        detail_order_code = self.request.GET.get("detail_order_code")
 
         ctx["rows"] = self._get_rows()
         ctx["edit_row"] = None
+        ctx["detail_order"] = None
 
         if edit_id:
             ctx["edit_row"] = self._get_edit_row(edit_id)
 
+        if detail_order_code:
+            ctx["detail_order"] = self._get_order_detail(detail_order_code)
+
         return ctx
 
     def post(self, request, *args, **kwargs):
-
         action = request.POST.get("action")
 
         if action == "create":
@@ -5986,7 +5990,6 @@ class CoolingOffView(generic.TemplateView):
         return redirect("connect:cooling_off")
 
     def _get_rows(self):
-
         sql = """
             SELECT
                 c.id,
@@ -6003,7 +6006,6 @@ class CoolingOffView(generic.TemplateView):
 
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql)
-
             cols = [c[0] for c in cursor.description]
 
             return [
@@ -6012,27 +6014,52 @@ class CoolingOffView(generic.TemplateView):
             ]
 
     def _get_edit_row(self, edit_id):
-
         sql = """
-            SELECT *
+            SELECT
+                id,
+                order_code,
+                registered_by,
+                created_at
             FROM bonus_db.cooling_off
             WHERE id = %s
         """
 
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql, [edit_id])
-
             row = cursor.fetchone()
 
             if not row:
                 return None
 
             cols = [c[0] for c in cursor.description]
+            return dict(zip(cols, row))
 
+    def _get_order_detail(self, order_code):
+        sql = """
+            SELECT
+                order_code,
+                jwoa_code,
+                order_name,
+                order_type,
+                order_status,
+                total_bv,
+                deposit_at,
+                order_at
+            FROM bonus_db.orders
+            WHERE order_code = %s
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, [order_code])
+            row = cursor.fetchone()
+
+            if not row:
+                return None
+
+            cols = [c[0] for c in cursor.description]
             return dict(zip(cols, row))
 
     def _create(self, request):
-
         sql = """
             INSERT INTO bonus_db.cooling_off (
                 order_code,
@@ -6054,7 +6081,6 @@ class CoolingOffView(generic.TemplateView):
             )
 
     def _update(self, request):
-
         sql = """
             UPDATE bonus_db.cooling_off
             SET
@@ -6074,7 +6100,6 @@ class CoolingOffView(generic.TemplateView):
             )
 
     def _delete(self, request):
-
         sql = """
             DELETE
             FROM bonus_db.cooling_off
