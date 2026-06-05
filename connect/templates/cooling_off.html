@@ -35,10 +35,9 @@
                             <input type="hidden" name="action" value="create">
                         {% endif %}
 
-                        <div class="row">
-                            <div class="col-md-4">
+                        <div class="row g-2">
+                            <div class="col-md-3">
                                 <label class="form-label">注文番号</label>
-
                                 <input type="text"
                                        name="order_code"
                                        class="form-control"
@@ -46,7 +45,26 @@
                                        required>
                             </div>
 
-                            <div class="col-md-3 d-flex align-items-end">
+                            <div class="col-md-2">
+                                <label class="form-label">状態</label>
+                                <select name="active_flag" class="form-select">
+                                    <option value="1" {% if not edit_row or edit_row.active_flag == 1 %}selected{% endif %}>
+                                        有効
+                                    </option>
+                                    <option value="0" {% if edit_row.active_flag == 0 %}selected{% endif %}>
+                                        無効
+                                    </option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-5">
+                                <label class="form-label">備考</label>
+                                <textarea name="remarks"
+                                          rows="1"
+                                          class="form-control">{{ edit_row.remarks|default:'' }}</textarea>
+                            </div>
+
+                            <div class="col-md-2 d-flex align-items-end">
                                 {% if edit_row %}
                                     <button type="submit" class="btn btn-warning">
                                         更新
@@ -173,10 +191,12 @@
                         <table class="table table-bordered table-sm">
                             <thead>
                                 <tr>
-                                    <th width="80">ID</th>
-                                    <th width="200">注文番号</th>
+                                    <th width="70">ID</th>
+                                    <th width="180">注文番号</th>
+                                    <th width="100">状態</th>
                                     <th width="150">会員番号</th>
                                     <th>注文者名</th>
+                                    <th width="250">備考</th>
                                     <th width="150">登録者</th>
                                     <th width="180">登録日時</th>
                                     <th width="260">操作</th>
@@ -188,8 +208,18 @@
                                 <tr>
                                     <td>{{ row.id }}</td>
                                     <td>{{ row.order_code }}</td>
+
+                                    <td>
+                                        {% if row.active_flag == 1 %}
+                                            <span class="badge bg-success">有効</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">無効</span>
+                                        {% endif %}
+                                    </td>
+
                                     <td>{{ row.jwoa_code }}</td>
                                     <td>{{ row.order_name }}</td>
+                                    <td>{{ row.remarks|default:'' }}</td>
                                     <td>{{ row.registered_by }}</td>
                                     <td>{{ row.created_at|date:"Y/m/d H:i:s" }}</td>
 
@@ -221,7 +251,7 @@
 
                                 {% empty %}
                                 <tr>
-                                    <td colspan="7" class="text-center">
+                                    <td colspan="9" class="text-center">
                                         データがありません
                                     </td>
                                 </tr>

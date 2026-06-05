@@ -31,12 +31,21 @@ repurchase_list AS (
         jwoa_code,
         bonus_payment_date,
         order_type,
-        bv,
-        LEAST(IFNULL(bv, 0), 50) AS custom_bv
+        bv
     FROM bonus_db.purchase_info_list as p
     WHERE order_type IN (101, 105)
       AND bonus_payment_date >= %s
       AND bonus_payment_date < %s
+),
+
+-- 再購入は、最大50BV
+-- jwoa_code, bvが重複しない為
+dis_repurchase_list AS (
+    SELECT
+        jwoa_code,
+        LEAST(IFNULL(sum(bv), 0), 50) AS custom_bv
+    FROM repurchase_list
+    GROUP BY jwoa_code
 ),
 
 -- ②初回購入、ランクアップデータ
@@ -56,11 +65,13 @@ rank_up_list AS (
 
 -- ①再購入データ + ②初回購入、ランクアップデータ のユーザーリスト
 purchasers_list AS (
-    SELECT jwoa_code FROM repurchase_list
+    SELECT jwoa_code FROM dis_repurchase_list
     UNION
     SELECT jwoa_code FROM rank_up_list
 ),
 
+
+-- 前月再購入
 prev_purchasers_list AS (
 SELECT
     p.jwoa_code,
@@ -72,6 +83,7 @@ GROUP BY p.jwoa_code
 HAVING SUM(IFNULL(p.bv, 0)) >= 50
 ),
 
+-- 前月時点のランク
 rankup_history AS (
   SELECT *
   FROM (
@@ -87,12 +99,17 @@ rankup_history AS (
   WHERE rn = 1
 ),
 
+
+-- ユーザtableの絞込
+-- in 再購入データ + ②初回購入、ランクアップデータ のユーザーリスト
 user_in_purchasers_list AS (
   SELECT u.*
   FROM bonus_db.users_target_rank AS u
   JOIN purchasers_list AS p
     ON p.jwoa_code = u.jmoa_code
 ),
+
+
 
 chain AS (
     SELECT
@@ -341,7 +358,7 @@ repurchase_add_non9_2_addTitle AS (
             ELSE
                 TRUNCATE(COALESCE(repurchase.custom_bv, 0) * 0.10, 2)
         END AS bonus_amount
-    FROM repurchase_list AS repurchase
+    FROM dis_repurchase_list AS repurchase
     LEFT JOIN user_in_purchasers_list_non9_2_addTitle AS non9
       ON repurchase.jwoa_code = non9.jmoa_code
     WHERE repurchase.custom_bv > 0

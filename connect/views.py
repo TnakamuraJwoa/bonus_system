@@ -5994,6 +5994,8 @@ class CoolingOffView(generic.TemplateView):
             SELECT
                 c.id,
                 c.order_code,
+                c.active_flag,
+                c.remarks,
                 c.registered_by,
                 c.created_at,
                 o.jwoa_code,
@@ -6007,17 +6009,15 @@ class CoolingOffView(generic.TemplateView):
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql)
             cols = [c[0] for c in cursor.description]
-
-            return [
-                dict(zip(cols, row))
-                for row in cursor.fetchall()
-            ]
+            return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
     def _get_edit_row(self, edit_id):
         sql = """
             SELECT
                 id,
                 order_code,
+                active_flag,
+                remarks,
                 registered_by,
                 created_at
             FROM bonus_db.cooling_off
@@ -6063,9 +6063,13 @@ class CoolingOffView(generic.TemplateView):
         sql = """
             INSERT INTO bonus_db.cooling_off (
                 order_code,
+                active_flag,
+                remarks,
                 registered_by
             )
             VALUES (
+                %s,
+                %s,
                 %s,
                 %s
             )
@@ -6076,6 +6080,8 @@ class CoolingOffView(generic.TemplateView):
                 sql,
                 [
                     request.POST.get("order_code"),
+                    request.POST.get("active_flag", 1),
+                    request.POST.get("remarks"),
                     request.user.username,
                 ]
             )
@@ -6085,6 +6091,8 @@ class CoolingOffView(generic.TemplateView):
             UPDATE bonus_db.cooling_off
             SET
                 order_code = %s,
+                active_flag = %s,
+                remarks = %s,
                 registered_by = %s
             WHERE id = %s
         """
@@ -6094,6 +6102,8 @@ class CoolingOffView(generic.TemplateView):
                 sql,
                 [
                     request.POST.get("order_code"),
+                    request.POST.get("active_flag", 1),
+                    request.POST.get("remarks"),
                     request.user.username,
                     request.POST.get("id"),
                 ]
@@ -6107,7 +6117,4 @@ class CoolingOffView(generic.TemplateView):
         """
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(
-                sql,
-                [request.POST.get("id")]
-            )
+            cursor.execute(sql, [request.POST.get("id")])

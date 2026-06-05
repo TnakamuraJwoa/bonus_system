@@ -61,7 +61,7 @@ SELECT
     aa.send_bv_name,
 
     CASE
-        WHEN c.order_code IS NOT NULL THEN 200
+        WHEN c.active_flag = 1 THEN 200
         ELSE aa.order_type
     END AS order_type,
 
@@ -78,5 +78,5 @@ SELECT
 FROM aa
 
 LEFT JOIN bonus_db.cooling_off c
-    ON aa.order_code = c.order_code;
+    ON aa.order_code = c.order_code
 """
