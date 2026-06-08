@@ -28,6 +28,7 @@
             <div>
               <label class="form-label mb-0 small text-muted">期別</label>
               <select name="kibetu" class="form-select">
+                <option value="">指定なし</option>
                 {% for obj in object_list %}
                   <option value="{{ obj.kibetu }}"
                           {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
@@ -66,29 +67,32 @@
             </button>
           </form>
 
-          {% if selected_period %}
-            <div class="text-muted small mt-3">
-              選択中：
-              <span class="badge bg-info text-dark">{{ selected_period.kibetu }}</span>
+          <div class="text-muted small mt-3">
+            {% if selected_kibetu %}
+              <span class="badge bg-info text-dark">{{ selected_kibetu }}</span>
+            {% else %}
+              <span class="badge bg-secondary">期別：指定なし</span>
+            {% endif %}
+
+            {% if selected_period %}
               <span class="badge bg-secondary">
                 {{ selected_period.st_date }} ～ {{ selected_period.end_date }}
               </span>
+            {% endif %}
 
-              {% if search_introducer_code %}
-                <span class="badge bg-success">
-                  紹介者ID：{{ search_introducer_code }}
-                </span>
-              {% endif %}
+            {% if search_introducer_code %}
+              <span class="badge bg-success">
+                紹介者ID：{{ search_introducer_code }}
+              </span>
+            {% endif %}
 
-              {% if search_jwoa_code %}
-                <span class="badge bg-primary">
-                  会員ID：{{ search_jwoa_code }}
-                </span>
-              {% endif %}
-            </div>
-          {% else %}
-            <div class="text-muted small mt-3">期別を選択してください</div>
-          {% endif %}
+            {% if search_jwoa_code %}
+              <span class="badge bg-primary">
+                会員ID：{{ search_jwoa_code }}
+              </span>
+            {% endif %}
+          </div>
+
         </div>
       </div>
 
@@ -105,17 +109,19 @@
               <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                   <tr>
-                    <th>タイトル</th>
-                    <th>紹介者ID</th>
-                    <th>会員ID</th>
-                    <th>会員名</th>
-                    <th class="text-end">BV合計</th>
-                    <th class="text-end">報酬</th>
+                    <th class="text-center">期別</th>
+                    <th class="text-center">紹介者タイトル</th>
+                    <th class="text-center">紹介者ID</th>
+                    <th class="text-center">会員ID</th>
+                    <th class="text-center">会員名</th>
+                    <th class="text-center">BV合計</th>
+                    <th class="text-center">報酬</th>
                   </tr>
                 </thead>
                 <tbody>
                   {% for r in rows %}
                     <tr>
+                      <td>{{ r.kibetu }}</td>
                       <td>{{ r.title_name }}</td>
                       <td>{{ r.introducer_code }}</td>
                       <td>{{ r.jwoa_code }}</td>
@@ -129,10 +135,12 @@
             </div>
 
           {% else %}
-            {% if selected_kibetu %}
+            {% if selected_kibetu or search_introducer_code or search_jwoa_code %}
               <p class="mb-0">この条件のデータはありません。</p>
             {% else %}
-              <p class="mb-0 text-muted">期別を選択して「表示」を押してください。</p>
+              <p class="mb-0 text-muted">
+                期別、紹介者ID、会員IDのいずれかを入力して「表示」を押してください。
+              </p>
             {% endif %}
           {% endif %}
 

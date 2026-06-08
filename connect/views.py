@@ -2974,11 +2974,12 @@ class S_DriveBonusView(generic.ListView):
             ws = wb.active
             ws.title = "DriveBonusResult"
 
-            headers = ["タイトル", "紹介者ID", "会員ID", "会員名", "BV合計", "報酬"]
+            headers = ["期別", "タイトル", "紹介者ID", "会員ID", "会員名", "BV合計", "報酬"]
             ws.append(headers)
 
             for r in rows:
                 ws.append([
+                    r.get("kibetu"),
                     r.get("title_name"),
                     r.get("introducer_code"),
                     r.get("jwoa_code"),
@@ -2987,22 +2988,26 @@ class S_DriveBonusView(generic.ListView):
                     r.get("sum_bonus_amount"),
                 ])
 
-            ws.column_dimensions["A"].width = 18
-            ws.column_dimensions["B"].width = 15
+            ws.column_dimensions["A"].width = 15
+            ws.column_dimensions["B"].width = 18
             ws.column_dimensions["C"].width = 15
-            ws.column_dimensions["D"].width = 25
-            ws.column_dimensions["E"].width = 12
-            ws.column_dimensions["F"].width = 15
+            ws.column_dimensions["D"].width = 15
+            ws.column_dimensions["E"].width = 25
+            ws.column_dimensions["F"].width = 12
+            ws.column_dimensions["G"].width = 15
 
             for row_idx in range(2, ws.max_row + 1):
-                ws[f"E{row_idx}"].number_format = '#,##0'
-                ws[f"F{row_idx}"].number_format = '#,##0.00'
+                ws[f"F{row_idx}"].number_format = '#,##0'
+                ws[f"G{row_idx}"].number_format = '#,##0.00'
 
             kibetu = context.get("selected_kibetu", "")
             search_introducer_code = context.get("search_introducer_code", "")
             search_jwoa_code = context.get("search_jwoa_code", "")
 
-            filename = f"drive_bonus_result_{kibetu}"
+            filename = "drive_bonus_result"
+
+            if kibetu:
+                filename += f"_{kibetu}"
 
             if search_introducer_code:
                 filename += f"_intro_{search_introducer_code}"
@@ -3025,12 +3030,9 @@ class S_DriveBonusView(generic.ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
-        selected_kibetu = self.request.GET.get("kibetu")
+        selected_kibetu = self.request.GET.get("kibetu", "").strip()
         search_introducer_code = self.request.GET.get("introducer_code", "").strip()
         search_jwoa_code = self.request.GET.get("jwoa_code", "").strip()
-
-        if not selected_kibetu and self.object_list:
-            selected_kibetu = self.object_list[0].kibetu
 
         ctx["selected_kibetu"] = selected_kibetu
         ctx["search_introducer_code"] = search_introducer_code
@@ -3038,14 +3040,12 @@ class S_DriveBonusView(generic.ListView):
         ctx["rows"] = []
         ctx["selected_period"] = None
 
-        if not selected_kibetu:
+        if not selected_kibetu and not search_introducer_code and not search_jwoa_code:
             return ctx
 
-        period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
-        if not period:
-            return ctx
-
-        ctx["selected_period"] = period
+        if selected_kibetu:
+            period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
+            ctx["selected_period"] = period
 
         sql = """
             SELECT
@@ -3059,10 +3059,16 @@ class S_DriveBonusView(generic.ListView):
                 sum_bonus_amount,
                 created_at
             FROM bonus_db.B_drive_bonus_result
-            WHERE kibetu = %s
+            WHERE 1 = 1
         """
 
-        params = [selected_kibetu]
+        params = []
+
+        if selected_kibetu:
+            sql += """
+                AND kibetu = %s
+            """
+            params.append(selected_kibetu)
 
         if search_introducer_code:
             sql += """
@@ -3077,7 +3083,7 @@ class S_DriveBonusView(generic.ListView):
             params.append(f"%{search_jwoa_code}%")
 
         sql += """
-            ORDER BY introducer_code, jwoa_code
+            ORDER BY kibetu, introducer_code, jwoa_code
         """
 
         with connections["rds"].cursor() as cursor:
@@ -3089,8 +3095,6 @@ class S_DriveBonusView(generic.ListView):
         ctx["rows"] = rows
 
         return ctx
-
-
 
 
 class S_BasicBonusView(generic.ListView):
