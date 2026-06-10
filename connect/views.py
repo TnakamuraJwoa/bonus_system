@@ -3847,8 +3847,8 @@ class TitleDiffBonusView(generic.ListView):
         kibetu_month_str = f"{kibetu_month:02d}"
 
         params = [
-            kibetu_month_str,
-            kibetu_year_str,
+            kibetu_month,
+            kibetu_year,
             kibetu_year_str,
             kibetu_month_str,
         ]
@@ -3905,18 +3905,15 @@ class S_TitleDiffBonusView(generic.ListView):
 
             headers = [
                 "kibetu",
+                "root_title_id",
+                "root_bonus_rate",
                 "root_jwoa_code",
                 "root_name",
-                "up_title_id",
-                "up_bonus_rate",
-                "up_jwoa_code",
-                "up_jwoa_name",
                 "down_title_id",
                 "down_bonus_rate",
                 "down_jwoa_code",
                 "down_name",
                 "pay_bonus_rate",
-                "tree_level",
                 "sum_bv",
                 "title_diff_bonus",
                 "created_at",
@@ -3928,18 +3925,15 @@ class S_TitleDiffBonusView(generic.ListView):
             for r in rows:
                 ws.append([
                     r.get("kibetu"),
+                    r.get("root_title_id"),
+                    r.get("root_bonus_rate"),
                     r.get("root_jwoa_code"),
                     r.get("root_name"),
-                    r.get("up_title_id"),
-                    r.get("up_bonus_rate"),
-                    r.get("up_jwoa_code"),
-                    r.get("up_jwoa_name"),
                     r.get("down_title_id"),
                     r.get("down_bonus_rate"),
                     r.get("down_jwoa_code"),
                     r.get("down_name"),
                     r.get("pay_bonus_rate"),
-                    r.get("tree_level"),
                     r.get("sum_bv"),
                     r.get("title_diff_bonus"),
                     r.get("created_at"),
@@ -3950,8 +3944,10 @@ class S_TitleDiffBonusView(generic.ListView):
                 content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
+            kibetu = context.get("selected_kibetu", "")
+
             response["Content-Disposition"] = (
-                'attachment; filename="title_diff_bonus_result.xlsx"'
+                f'attachment; filename="title_diff_bonus_result_{kibetu}.xlsx"'
             )
 
             wb.save(response)
@@ -3959,16 +3955,21 @@ class S_TitleDiffBonusView(generic.ListView):
 
         return self.render_to_response(context)
 
+
     def get_context_data(self, **kwargs):
 
         ctx = super().get_context_data(**kwargs)
 
         selected_kibetu = self.request.GET.get("kibetu")
+        root_jwoa_code = self.request.GET.get("root_jwoa_code", "").strip()
+        down_jwoa_code = self.request.GET.get("down_jwoa_code", "").strip()
 
         if not selected_kibetu and self.object_list:
             selected_kibetu = self.object_list[0].kibetu
 
         ctx["selected_kibetu"] = selected_kibetu
+        ctx["root_jwoa_code"] = root_jwoa_code
+        ctx["down_jwoa_code"] = down_jwoa_code
         ctx["rows"] = []
         ctx["selected_period"] = None
 
@@ -3988,31 +3989,40 @@ class S_TitleDiffBonusView(generic.ListView):
 
         sql = """
             SELECT
-                id,
                 kibetu,
+                root_title_id,
+                root_bonus_rate,
                 root_jwoa_code,
                 root_name,
-                up_title_id,
-                up_bonus_rate,
-                up_jwoa_code,
-                up_jwoa_name,
                 down_title_id,
                 down_bonus_rate,
                 down_jwoa_code,
                 down_name,
                 pay_bonus_rate,
-                tree_level,
                 sum_bv,
                 title_diff_bonus,
                 created_at,
                 updated_at
             FROM bonus_db.B_title_diff_bonus_result
             WHERE kibetu = %s
-            ORDER BY root_jwoa_code, tree_level, down_jwoa_code
+        """
+
+        params = [selected_kibetu]
+
+        if root_jwoa_code:
+            sql += " AND root_jwoa_code LIKE %s"
+            params.append(f"%{root_jwoa_code}%")
+
+        if down_jwoa_code:
+            sql += " AND down_jwoa_code LIKE %s"
+            params.append(f"%{down_jwoa_code}%")
+
+        sql += """
+            ORDER BY root_jwoa_code, down_jwoa_code
         """
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, [selected_kibetu])
+            cursor.execute(sql, params)
             logger.info(f"Executed SQL: {cursor._executed}")
 
             cols = [c[0] for c in cursor.description]
@@ -4021,8 +4031,6 @@ class S_TitleDiffBonusView(generic.ListView):
         ctx["rows"] = rows
 
         return ctx
-
-
 
 class RepurchaseOverBonusView(generic.ListView):
     template_name = "repurchase_over_bonus.html"

@@ -50,6 +50,30 @@
               </select>
             </div>
 
+            <div>
+              <label class="form-label mb-0 small text-muted">
+                root_jwoa_code
+              </label>
+
+              <input type="text"
+                     name="root_jwoa_code"
+                     value="{{ root_jwoa_code }}"
+                     class="form-control"
+                     placeholder="root会員ID">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">
+                down_jwoa_code
+              </label>
+
+              <input type="text"
+                     name="down_jwoa_code"
+                     value="{{ down_jwoa_code }}"
+                     class="form-control"
+                     placeholder="down会員ID">
+            </div>
+
             <button type="submit" class="btn btn-primary">
               表示
             </button>
@@ -119,79 +143,47 @@
 
                 <thead class="table-light"
                        style="position: sticky; top: 0; z-index: 1;">
-
                   <tr>
                     <th>期別</th>
+                    <th>root_title_id</th>
+                    <th>root_bonus_rate</th>
                     <th>root_jwoa_code</th>
                     <th>root_name</th>
-                    <th>up_title_id</th>
-                    <th>up_bonus_rate</th>
-                    <th>up_jwoa_code</th>
-                    <th>up_jwoa_name</th>
                     <th>down_title_id</th>
                     <th>down_bonus_rate</th>
                     <th>down_jwoa_code</th>
                     <th>down_name</th>
                     <th>pay_bonus_rate</th>
-                    <th>tree_level</th>
                     <th>sum_bv</th>
                     <th>title_diff_bonus</th>
                     <th>created_at</th>
                     <th>updated_at</th>
                   </tr>
-
                 </thead>
 
                 <tbody>
+
                   {% for r in rows %}
+
                     <tr>
                       <td>{{ r.kibetu }}</td>
+                      <td class="text-end">{{ r.root_title_id }}</td>
+                      <td class="text-end">{{ r.root_bonus_rate }}</td>
                       <td>{{ r.root_jwoa_code }}</td>
                       <td>{{ r.root_name }}</td>
-                      <td class="text-end">
-                        {{ r.up_title_id }}
-                      </td>
-
-                      <td class="text-end">
-                        {{ r.up_bonus_rate }}
-                      </td>
-
-                      <td>{{ r.up_jwoa_code }}</td>
-
-                      <td>{{ r.up_jwoa_name }}</td>
-
-                      <td class="text-end">
-                        {{ r.down_title_id }}
-                      </td>
-
-                      <td class="text-end">
-                        {{ r.down_bonus_rate }}
-                      </td>
-
+                      <td class="text-end">{{ r.down_title_id }}</td>
+                      <td class="text-end">{{ r.down_bonus_rate }}</td>
                       <td>{{ r.down_jwoa_code }}</td>
-
                       <td>{{ r.down_name }}</td>
-
-                      <td class="text-end">
-                        {{ r.pay_bonus_rate }}
-                      </td>
-
-                      <td class="text-end">
-                        {{ r.tree_level }}
-                      </td>
-
-                      <td class="text-end">
-                        {{ r.sum_bv }}
-                      </td>
+                      <td class="text-end">{{ r.pay_bonus_rate }}</td>
+                      <td class="text-end">{{ r.sum_bv }}</td>
 
                       <td class="text-end fw-bold text-primary">
                         {{ r.title_diff_bonus }}
                       </td>
 
                       <td>{{ r.created_at }}</td>
-
                       <td>{{ r.updated_at }}</td>
-
                     </tr>
 
                   {% endfor %}
