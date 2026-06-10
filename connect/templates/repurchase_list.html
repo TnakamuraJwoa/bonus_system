@@ -1,11 +1,11 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block contents %}
-
 {% block head %}
 <link href="{% static 'css/common.css' %}" rel="stylesheet">
 {% endblock %}
+
+{% block contents %}
 
 <div class="container-fluid mt-3">
   <div class="row g-1">
@@ -47,43 +47,127 @@
 
             <div>
               <label class="form-label mb-0 small text-muted">注文番号</label>
-              <input type="text" name="q_order_code" class="form-control"
-                     value="{{ q_order_code|default:'' }}" placeholder="例: MF05621663365">
+              <input type="text"
+                     name="q_order_code"
+                     class="form-control"
+                     value="{{ q_order_code|default:'' }}"
+                     placeholder="例: MF05621663365">
             </div>
 
             <div>
               <label class="form-label mb-0 small text-muted">会員番号</label>
-              <input type="text" name="q_code" class="form-control"
-                     value="{{ q_code|default:'' }}" placeholder="例: JP0416">
+              <input type="text"
+                     name="q_code"
+                     class="form-control"
+                     value="{{ q_code|default:'' }}"
+                     placeholder="例: JP0416">
             </div>
 
             <div>
               <label class="form-label mb-0 small text-muted">会員名</label>
-              <input type="text" name="q_name" class="form-control"
-                     value="{{ q_name|default:'' }}" placeholder="例: 野口">
+              <input type="text"
+                     name="q_name"
+                     class="form-control"
+                     value="{{ q_name|default:'' }}"
+                     placeholder="例: 野口">
             </div>
 
             <div>
               <label class="form-label mb-0 small text-muted">ボーナス支払日（FROM）</label>
-              <input type="date" name="q_bonus_date_from" class="form-control"
+              <input type="date"
+                     name="q_bonus_date_from"
+                     class="form-control"
                      value="{{ q_bonus_date_from|default:'' }}">
             </div>
 
             <div>
               <label class="form-label mb-0 small text-muted">ボーナス支払日（TO）</label>
-              <input type="date" name="q_bonus_date_to" class="form-control"
+              <input type="date"
+                     name="q_bonus_date_to"
+                     class="form-control"
                      value="{{ q_bonus_date_to|default:'' }}">
             </div>
 
             <div>
               <label class="form-label mb-0 small text-muted">注文区分</label>
-              <select name="q_order_type" class="form-select">
-                <option value="">すべて</option>
-                <option value="101" {% if q_order_type == "101" %}selected{% endif %}>101（再購入品）</option>
-                <option value="102" {% if q_order_type == "102" %}selected{% endif %}>102（初回購入品）</option>
-                <option value="103" {% if q_order_type == "103" %}selected{% endif %}>103（ランクアップ購入品）</option>
-                <option value="105" {% if q_order_type == "105" %}selected{% endif %}>105（特別対応購入品）</option>
-              </select>
+
+              <div class="dropdown">
+                <button class="btn btn-outline-secondary dropdown-toggle"
+                        type="button"
+                        data-bs-toggle="dropdown"
+                        data-bs-auto-close="outside"
+                        style="min-width: 220px; text-align: left;">
+                  {% if q_order_types %}
+                    注文区分（{{ q_order_types|length }}件）
+                  {% else %}
+                    注文区分を選択
+                  {% endif %}
+                </button>
+
+                <div class="dropdown-menu p-3 shadow" style="min-width: 280px;">
+
+                  <div class="form-check mb-2">
+                    <input class="form-check-input"
+                           type="checkbox"
+                           name="q_order_type"
+                           value="101"
+                           id="ot101"
+                           {% if "101" in q_order_types %}checked{% endif %}>
+                    <label class="form-check-label" for="ot101">
+                      101（再購入品）
+                    </label>
+                  </div>
+
+                  <div class="form-check mb-2">
+                    <input class="form-check-input"
+                           type="checkbox"
+                           name="q_order_type"
+                           value="102"
+                           id="ot102"
+                           {% if "102" in q_order_types %}checked{% endif %}>
+                    <label class="form-check-label" for="ot102">
+                      102（初回購入品）
+                    </label>
+                  </div>
+
+                  <div class="form-check mb-2">
+                    <input class="form-check-input"
+                           type="checkbox"
+                           name="q_order_type"
+                           value="103"
+                           id="ot103"
+                           {% if "103" in q_order_types %}checked{% endif %}>
+                    <label class="form-check-label" for="ot103">
+                      103（ランクアップ購入品）
+                    </label>
+                  </div>
+
+                  <div class="form-check mb-2">
+                    <input class="form-check-input"
+                           type="checkbox"
+                           name="q_order_type"
+                           value="105"
+                           id="ot105"
+                           {% if "105" in q_order_types %}checked{% endif %}>
+                    <label class="form-check-label" for="ot105">
+                      105（特別対応購入品）
+                    </label>
+                  </div>
+
+                  <div class="form-check">
+                    <input class="form-check-input"
+                           type="checkbox"
+                           name="q_order_type"
+                           value="200"
+                           id="ot200"
+                           {% if "200" in q_order_types %}checked{% endif %}>
+                    <label class="form-check-label" for="ot200">
+                      200（クーリングオフ）
+                    </label>
+                  </div>
+
+                </div>
+              </div>
             </div>
 
             <div style="width: 110px;">
@@ -110,10 +194,24 @@
 
           </form>
 
-          {% if selected_period %}
+          {% if selected_period or q_order_types %}
             <div class="alert alert-info mt-3 mb-0">
               選択中：
-              <strong>{{ selected_period.year }}年{{ selected_period.month }}月</strong>
+
+              {% if selected_period %}
+                <strong>{{ selected_period.year }}年{{ selected_period.month }}月</strong>
+              {% else %}
+                <strong>全件表示</strong>
+              {% endif %}
+
+              {% if q_order_types %}
+                <span class="ms-2">
+                  注文区分：
+                  {% for order_type in q_order_types %}
+                    <span class="badge bg-primary">{{ order_type }}</span>
+                  {% endfor %}
+                </span>
+              {% endif %}
             </div>
           {% endif %}
 
@@ -206,10 +304,10 @@
             </div>
 
           {% else %}
-            {% if selected_month %}
-              <p class="mb-0">この期間のデータはありません。</p>
+            {% if selected_month or q_code or q_name or q_order_code or q_order_types or q_bonus_date_from or q_bonus_date_to %}
+              <p class="mb-0">この条件のデータはありません。</p>
             {% else %}
-              <p class="mb-0 text-muted">対象年月を選択して「検索」を押してください。</p>
+              <p class="mb-0 text-muted">検索条件を指定して「検索」を押してください。</p>
             {% endif %}
           {% endif %}
 

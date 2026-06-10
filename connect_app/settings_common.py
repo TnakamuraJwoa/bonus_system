@@ -8,7 +8,6 @@ AUTH_USER_MODEL = 'accounts.CustomUser'
 
 # カスタムフォームの設定
 ACCOUNT_FORMS = {
-    'signup': 'accounts.forms.CustomSignupForm',
     'login': 'accounts.forms.CustomLoginForm',
 }
 
@@ -19,19 +18,15 @@ SITE_ID = 1
 
 AUTHENTICATION_BACKENDS = (
     'allauth.account.auth_backends.AuthenticationBackend',
-    # 一般ユーザー用(メールアドレス認証)
-    'django.contrib.auth.backends.ModelBackend',
-    # 管理サイト用(ユーザー名認証)
 )
 
 #メールアドレス認証に変更する設定
-ACCOUNT_AUTHENTICATION_METHOD = 'email'
+ACCOUNT_AUTHENTICATION_METHOD = 'username'
 # ユーザー名を要求しない
-ACCOUNT_USERNAME_REQUIRED = False
-
-# サインアップにメールアドレス確認をはさむよう設定
-ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
-ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_USERNAME_REQUIRED = True
+# メールアドレス入力を必須にしない
+ACCOUNT_EMAIL_REQUIRED = False
+ACCOUNT_EMAIL_VERIFICATION = 'none'
 
 # ログイン/ログアウト後の遷移先を設定
 LOGIN_REDIRECT_URL = 'connect:kibetu'

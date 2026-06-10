@@ -6,17 +6,37 @@ WITH RECURSIVE
 
 -- ドライブボーナス
 D_drive_bonus AS (
-    SELECT *
-    FROM bonus_db.B_drive_bonus_result
-    WHERE SUBSTRING(kibetu, 6, 2) = %s
-      AND SUBSTRING(kibetu, 1, 4) = %s
+    SELECT
+        a.*,
+
+        CASE
+            WHEN a.title_name = '1スターダイヤ'
+                THEN TRUNCATE(IFNULL(a.sum_bv, 0) * 0.05, 2)
+            ELSE
+                TRUNCATE(IFNULL(a.sum_bv, 0) * 0.10, 2)
+        END AS custom_bv
+
+    FROM bonus_db.B_drive_bonus_result AS a
+
+    left join bonus_db.period_master as b
+    on a.kibetu = b.kibetu
+
+    WHERE
+        MONTH(st_date) = %s
+        AND YEAR(st_date) = %s
+        AND a.title_name IN (
+            'タイトルなし',
+            '明日の星',
+            'ニュースター',
+            '1スターダイヤ'
+        )
 ),
 
 -- bvの合計
 D_drive_sum_bv AS (
     SELECT
         introducer_code AS jwoa_code,
-        SUM(sum_bonus_amount) AS sum_bv
+        SUM(custom_bv) AS sum_bv
     FROM D_drive_bonus
     GROUP BY introducer_code
 ),
@@ -315,7 +335,7 @@ select
  a.*,
  b.sum_bv,
 TRUNCATE(
-    (b.sum_bv * ((root_bonus_rate - down_bonus_rate) / 100)),
+    (b.sum_bv * ((root_bonus_rate - down_bonus_rate) / 10)),
     2
 ) AS title_diff_bonus
 from introducer_down_tree as a
@@ -325,7 +345,23 @@ on a.down_jwoa_code = b.jwoa_code
 )
 
 
-select *
-from title_diff_bonus_result
-where title_diff_bonus > 0
+SELECT
+    root_title_id,
+    root_bonus_rate,
+    root_jwoa_code,
+    root_name,
+    up_title_id,
+    up_bonus_rate,
+    up_jwoa_code,
+    up_jwoa_name,
+    down_title_id,
+    down_bonus_rate,
+    down_jwoa_code,
+    down_name,
+    root_bonus_rate - down_bonus_rate as pay_bonus_rate,
+    tree_level,
+    sum_bv,
+    title_diff_bonus
+FROM title_diff_bonus_result
+WHERE title_diff_bonus > 0
 """

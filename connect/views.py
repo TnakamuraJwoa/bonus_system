@@ -636,12 +636,15 @@ class RepurchaseListView(generic.TemplateView):
         q_code: str = "",
         q_name: str = "",
         q_order_code: str = "",
-        q_order_type: str = "",
+        q_order_types=None,
         q_bonus_date_from: str = "",
         q_bonus_date_to: str = "",
     ):
         where = ["1=1"]
         params = []
+
+        if q_order_types is None:
+            q_order_types = []
 
         if year is not None and month is not None:
             where.append("register_year = %s")
@@ -660,9 +663,10 @@ class RepurchaseListView(generic.TemplateView):
             where.append("order_code LIKE %s")
             params.append(f"%{q_order_code}%")
 
-        if q_order_type:
-            where.append("order_type = %s")
-            params.append(q_order_type)
+        if q_order_types:
+            placeholders = ", ".join(["%s"] * len(q_order_types))
+            where.append(f"order_type IN ({placeholders})")
+            params.extend(q_order_types)
 
         if q_bonus_date_from:
             where.append("bonus_payment_date >= %s")
@@ -691,7 +695,7 @@ class RepurchaseListView(generic.TemplateView):
         q_code: str = "",
         q_name: str = "",
         q_order_code: str = "",
-        q_order_type: str = "",
+        q_order_types=None,
         q_bonus_date_from: str = "",
         q_bonus_date_to: str = "",
         limit: int = 100,
@@ -703,7 +707,7 @@ class RepurchaseListView(generic.TemplateView):
             q_code=q_code,
             q_name=q_name,
             q_order_code=q_order_code,
-            q_order_type=q_order_type,
+            q_order_types=q_order_types,
             q_bonus_date_from=q_bonus_date_from,
             q_bonus_date_to=q_bonus_date_to,
         )
@@ -744,7 +748,7 @@ class RepurchaseListView(generic.TemplateView):
         q_code: str = "",
         q_name: str = "",
         q_order_code: str = "",
-        q_order_type: str = "",
+        q_order_types=None,
         q_bonus_date_from: str = "",
         q_bonus_date_to: str = "",
     ) -> int:
@@ -754,7 +758,7 @@ class RepurchaseListView(generic.TemplateView):
             q_code=q_code,
             q_name=q_name,
             q_order_code=q_order_code,
-            q_order_type=q_order_type,
+            q_order_types=q_order_types,
             q_bonus_date_from=q_bonus_date_from,
             q_bonus_date_to=q_bonus_date_to,
         )
@@ -789,7 +793,10 @@ class RepurchaseListView(generic.TemplateView):
         q_code = (self.request.GET.get("q_code") or "").strip()
         q_name = (self.request.GET.get("q_name") or "").strip()
         q_order_code = (self.request.GET.get("q_order_code") or "").strip()
-        q_order_type = (self.request.GET.get("q_order_type") or "").strip()
+
+        q_order_types = self.request.GET.getlist("q_order_type")
+        q_order_types = [x for x in q_order_types if x]
+
         q_bonus_date_from = (self.request.GET.get("q_bonus_date_from") or "").strip()
         q_bonus_date_to = (self.request.GET.get("q_bonus_date_to") or "").strip()
 
@@ -814,7 +821,7 @@ class RepurchaseListView(generic.TemplateView):
         ctx["q_code"] = q_code
         ctx["q_name"] = q_name
         ctx["q_order_code"] = q_order_code
-        ctx["q_order_type"] = q_order_type
+        ctx["q_order_types"] = q_order_types
         ctx["q_bonus_date_from"] = q_bonus_date_from
         ctx["q_bonus_date_to"] = q_bonus_date_to
         ctx["per_page"] = per_page
@@ -840,7 +847,7 @@ class RepurchaseListView(generic.TemplateView):
             q_code=q_code,
             q_name=q_name,
             q_order_code=q_order_code,
-            q_order_type=q_order_type,
+            q_order_types=q_order_types,
             q_bonus_date_from=q_bonus_date_from,
             q_bonus_date_to=q_bonus_date_to,
         )
@@ -858,7 +865,7 @@ class RepurchaseListView(generic.TemplateView):
             q_code=q_code,
             q_name=q_name,
             q_order_code=q_order_code,
-            q_order_type=q_order_type,
+            q_order_types=q_order_types,
             q_bonus_date_from=q_bonus_date_from,
             q_bonus_date_to=q_bonus_date_to,
             limit=per_page,
@@ -875,14 +882,19 @@ class RepurchaseListView(generic.TemplateView):
             base_params["q_name"] = q_name
         if q_order_code:
             base_params["q_order_code"] = q_order_code
-        if q_order_type:
-            base_params["q_order_type"] = q_order_type
         if q_bonus_date_from:
             base_params["q_bonus_date_from"] = q_bonus_date_from
         if q_bonus_date_to:
             base_params["q_bonus_date_to"] = q_bonus_date_to
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
+
+        base_qs = urlencode(base_params)
+
+        for order_type in q_order_types:
+            if base_qs:
+                base_qs += "&"
+            base_qs += urlencode({"q_order_type": order_type})
 
         ctx["rows"] = rows
         ctx["total_count"] = total_count
@@ -892,10 +904,9 @@ class RepurchaseListView(generic.TemplateView):
         ctx["has_next"] = page < total_pages
         ctx["prev_page"] = page - 1
         ctx["next_page"] = page + 1
-        ctx["base_qs"] = urlencode(base_params)
+        ctx["base_qs"] = base_qs
 
         return ctx
-
 
 
 
@@ -2115,11 +2126,16 @@ class RepurchaseExportView(RepurchaseListView):
         q_code = (request.GET.get("q_code") or "").strip()
         q_name = (request.GET.get("q_name") or "").strip()
         q_order_code = (request.GET.get("q_order_code") or "").strip()
-        q_order_type = (request.GET.get("q_order_type") or "").strip()
+
+        # ←修正
+        q_order_types = request.GET.getlist("q_order_type")
+        q_order_types = [x for x in q_order_types if x]
+
         q_bonus_date_from = (request.GET.get("q_bonus_date_from") or "").strip()
         q_bonus_date_to = (request.GET.get("q_bonus_date_to") or "").strip()
 
-        year, month = None, None
+        year = None
+        month = None
 
         if selected_month:
             try:
@@ -2133,7 +2149,10 @@ class RepurchaseExportView(RepurchaseListView):
             q_code=q_code,
             q_name=q_name,
             q_order_code=q_order_code,
-            q_order_type=q_order_type,
+
+            # ←修正
+            q_order_types=q_order_types,
+
             q_bonus_date_from=q_bonus_date_from,
             q_bonus_date_to=q_bonus_date_to,
             limit=1000000,
@@ -2145,20 +2164,44 @@ class RepurchaseExportView(RepurchaseListView):
         ws.title = "購入情報一覧"
 
         ws.append([
-            "登録年", "登録月", "注文年", "注文月",
-            "注文番号", "注文区分", "会員番号", "会員名",
-            "total_bv", "bv", "BV反映日時", "注文日時",
-            "ボーナス支払日", "作成日時"
+            "登録年",
+            "登録月",
+            "注文年",
+            "注文月",
+            "注文番号",
+            "注文区分",
+            "会員番号",
+            "会員名",
+            "total_bv",
+            "bv",
+            "BV反映日時",
+            "注文日時",
+            "ボーナス支払日",
+            "作成日時",
         ])
 
         for r in rows:
+
+            if r["order_type"] == 101:
+                order_type_name = "再購入品"
+            elif r["order_type"] == 102:
+                order_type_name = "初回購入品"
+            elif r["order_type"] == 103:
+                order_type_name = "ランクアップ購入品"
+            elif r["order_type"] == 105:
+                order_type_name = "特別対応購入品"
+            elif r["order_type"] == 200:
+                order_type_name = "クーリングオフ"
+            else:
+                order_type_name = r["order_type"]
+
             ws.append([
                 r["register_year"],
                 r["register_month"],
                 r["order_year"],
                 r["order_month"],
                 r["order_code"],
-                r["order_type"],
+                order_type_name,
                 r["jwoa_code"],
                 r["send_bv_name"],
                 r["total_bv"],
@@ -2172,7 +2215,10 @@ class RepurchaseExportView(RepurchaseListView):
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-        response["Content-Disposition"] = 'attachment; filename="repurchase.xlsx"'
+
+        response["Content-Disposition"] = (
+            'attachment; filename="repurchase.xlsx"'
+        )
 
         wb.save(response)
         return response
@@ -2974,11 +3020,12 @@ class S_DriveBonusView(generic.ListView):
             ws = wb.active
             ws.title = "DriveBonusResult"
 
-            headers = ["タイトル", "紹介者ID", "会員ID", "会員名", "BV合計", "報酬"]
+            headers = ["期別", "タイトル", "紹介者ID", "会員ID", "会員名", "BV合計", "報酬"]
             ws.append(headers)
 
             for r in rows:
                 ws.append([
+                    r.get("kibetu"),
                     r.get("title_name"),
                     r.get("introducer_code"),
                     r.get("jwoa_code"),
@@ -2987,22 +3034,26 @@ class S_DriveBonusView(generic.ListView):
                     r.get("sum_bonus_amount"),
                 ])
 
-            ws.column_dimensions["A"].width = 18
-            ws.column_dimensions["B"].width = 15
+            ws.column_dimensions["A"].width = 15
+            ws.column_dimensions["B"].width = 18
             ws.column_dimensions["C"].width = 15
-            ws.column_dimensions["D"].width = 25
-            ws.column_dimensions["E"].width = 12
-            ws.column_dimensions["F"].width = 15
+            ws.column_dimensions["D"].width = 15
+            ws.column_dimensions["E"].width = 25
+            ws.column_dimensions["F"].width = 12
+            ws.column_dimensions["G"].width = 15
 
             for row_idx in range(2, ws.max_row + 1):
-                ws[f"E{row_idx}"].number_format = '#,##0'
-                ws[f"F{row_idx}"].number_format = '#,##0.00'
+                ws[f"F{row_idx}"].number_format = '#,##0'
+                ws[f"G{row_idx}"].number_format = '#,##0.00'
 
             kibetu = context.get("selected_kibetu", "")
             search_introducer_code = context.get("search_introducer_code", "")
             search_jwoa_code = context.get("search_jwoa_code", "")
 
-            filename = f"drive_bonus_result_{kibetu}"
+            filename = "drive_bonus_result"
+
+            if kibetu:
+                filename += f"_{kibetu}"
 
             if search_introducer_code:
                 filename += f"_intro_{search_introducer_code}"
@@ -3025,12 +3076,9 @@ class S_DriveBonusView(generic.ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
-        selected_kibetu = self.request.GET.get("kibetu")
+        selected_kibetu = self.request.GET.get("kibetu", "").strip()
         search_introducer_code = self.request.GET.get("introducer_code", "").strip()
         search_jwoa_code = self.request.GET.get("jwoa_code", "").strip()
-
-        if not selected_kibetu and self.object_list:
-            selected_kibetu = self.object_list[0].kibetu
 
         ctx["selected_kibetu"] = selected_kibetu
         ctx["search_introducer_code"] = search_introducer_code
@@ -3038,14 +3086,12 @@ class S_DriveBonusView(generic.ListView):
         ctx["rows"] = []
         ctx["selected_period"] = None
 
-        if not selected_kibetu:
+        if not selected_kibetu and not search_introducer_code and not search_jwoa_code:
             return ctx
 
-        period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
-        if not period:
-            return ctx
-
-        ctx["selected_period"] = period
+        if selected_kibetu:
+            period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
+            ctx["selected_period"] = period
 
         sql = """
             SELECT
@@ -3059,10 +3105,16 @@ class S_DriveBonusView(generic.ListView):
                 sum_bonus_amount,
                 created_at
             FROM bonus_db.B_drive_bonus_result
-            WHERE kibetu = %s
+            WHERE 1 = 1
         """
 
-        params = [selected_kibetu]
+        params = []
+
+        if selected_kibetu:
+            sql += """
+                AND kibetu = %s
+            """
+            params.append(selected_kibetu)
 
         if search_introducer_code:
             sql += """
@@ -3077,7 +3129,7 @@ class S_DriveBonusView(generic.ListView):
             params.append(f"%{search_jwoa_code}%")
 
         sql += """
-            ORDER BY introducer_code, jwoa_code
+            ORDER BY kibetu, introducer_code, jwoa_code
         """
 
         with connections["rds"].cursor() as cursor:
@@ -3089,8 +3141,6 @@ class S_DriveBonusView(generic.ListView):
         ctx["rows"] = rows
 
         return ctx
-
-
 
 
 class S_BasicBonusView(generic.ListView):
@@ -3797,8 +3847,8 @@ class TitleDiffBonusView(generic.ListView):
         kibetu_month_str = f"{kibetu_month:02d}"
 
         params = [
-            kibetu_month_str,
-            kibetu_year_str,
+            kibetu_month,
+            kibetu_year,
             kibetu_year_str,
             kibetu_month_str,
         ]
@@ -3855,18 +3905,15 @@ class S_TitleDiffBonusView(generic.ListView):
 
             headers = [
                 "kibetu",
+                "root_title_id",
+                "root_bonus_rate",
                 "root_jwoa_code",
                 "root_name",
-                "up_title_id",
-                "up_bonus_rate",
-                "up_jwoa_code",
-                "up_jwoa_name",
                 "down_title_id",
                 "down_bonus_rate",
                 "down_jwoa_code",
                 "down_name",
                 "pay_bonus_rate",
-                "tree_level",
                 "sum_bv",
                 "title_diff_bonus",
                 "created_at",
@@ -3878,18 +3925,15 @@ class S_TitleDiffBonusView(generic.ListView):
             for r in rows:
                 ws.append([
                     r.get("kibetu"),
+                    r.get("root_title_id"),
+                    r.get("root_bonus_rate"),
                     r.get("root_jwoa_code"),
                     r.get("root_name"),
-                    r.get("up_title_id"),
-                    r.get("up_bonus_rate"),
-                    r.get("up_jwoa_code"),
-                    r.get("up_jwoa_name"),
                     r.get("down_title_id"),
                     r.get("down_bonus_rate"),
                     r.get("down_jwoa_code"),
                     r.get("down_name"),
                     r.get("pay_bonus_rate"),
-                    r.get("tree_level"),
                     r.get("sum_bv"),
                     r.get("title_diff_bonus"),
                     r.get("created_at"),
@@ -3900,8 +3944,10 @@ class S_TitleDiffBonusView(generic.ListView):
                 content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
+            kibetu = context.get("selected_kibetu", "")
+
             response["Content-Disposition"] = (
-                'attachment; filename="title_diff_bonus_result.xlsx"'
+                f'attachment; filename="title_diff_bonus_result_{kibetu}.xlsx"'
             )
 
             wb.save(response)
@@ -3909,16 +3955,21 @@ class S_TitleDiffBonusView(generic.ListView):
 
         return self.render_to_response(context)
 
+
     def get_context_data(self, **kwargs):
 
         ctx = super().get_context_data(**kwargs)
 
         selected_kibetu = self.request.GET.get("kibetu")
+        root_jwoa_code = self.request.GET.get("root_jwoa_code", "").strip()
+        down_jwoa_code = self.request.GET.get("down_jwoa_code", "").strip()
 
         if not selected_kibetu and self.object_list:
             selected_kibetu = self.object_list[0].kibetu
 
         ctx["selected_kibetu"] = selected_kibetu
+        ctx["root_jwoa_code"] = root_jwoa_code
+        ctx["down_jwoa_code"] = down_jwoa_code
         ctx["rows"] = []
         ctx["selected_period"] = None
 
@@ -3938,31 +3989,40 @@ class S_TitleDiffBonusView(generic.ListView):
 
         sql = """
             SELECT
-                id,
                 kibetu,
+                root_title_id,
+                root_bonus_rate,
                 root_jwoa_code,
                 root_name,
-                up_title_id,
-                up_bonus_rate,
-                up_jwoa_code,
-                up_jwoa_name,
                 down_title_id,
                 down_bonus_rate,
                 down_jwoa_code,
                 down_name,
                 pay_bonus_rate,
-                tree_level,
                 sum_bv,
                 title_diff_bonus,
                 created_at,
                 updated_at
             FROM bonus_db.B_title_diff_bonus_result
             WHERE kibetu = %s
-            ORDER BY root_jwoa_code, tree_level, down_jwoa_code
+        """
+
+        params = [selected_kibetu]
+
+        if root_jwoa_code:
+            sql += " AND root_jwoa_code LIKE %s"
+            params.append(f"%{root_jwoa_code}%")
+
+        if down_jwoa_code:
+            sql += " AND down_jwoa_code LIKE %s"
+            params.append(f"%{down_jwoa_code}%")
+
+        sql += """
+            ORDER BY root_jwoa_code, down_jwoa_code
         """
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, [selected_kibetu])
+            cursor.execute(sql, params)
             logger.info(f"Executed SQL: {cursor._executed}")
 
             cols = [c[0] for c in cursor.description]
@@ -3971,8 +4031,6 @@ class S_TitleDiffBonusView(generic.ListView):
         ctx["rows"] = rows
 
         return ctx
-
-
 
 class RepurchaseOverBonusView(generic.ListView):
     template_name = "repurchase_over_bonus.html"
