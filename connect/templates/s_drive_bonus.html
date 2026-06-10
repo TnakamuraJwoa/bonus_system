@@ -3,6 +3,8 @@
 
 {% block head %}
     <link href="{% static 'css/common.css' %}" rel="stylesheet">
+
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 {% endblock %}
 
 {% block contents %}
@@ -17,25 +19,48 @@
 
     {% include "com/_sidebar_bonus_kensaku.html" with active_menu="drive_bonus" %}
 
-    <main class="col-12 col-md-9 col-lg-10 d-flex flex-column" style="height: calc(100% - 24px); overflow: hidden;">
+    <main class="col-12 col-md-9 col-lg-10 d-flex flex-column"
+          style="height: calc(100% - 24px); overflow: hidden;">
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
           <h5 class="mb-3">【ボーナス検索 - ドライブボーナス】</h5>
 
-          <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+          <form method="get" class="d-flex gap-3 align-items-end mb-0 flex-wrap">
 
             <div>
               <label class="form-label mb-0 small text-muted">期別</label>
-              <select name="kibetu" class="form-select">
-                <option value="">指定なし</option>
-                {% for obj in object_list %}
-                  <option value="{{ obj.kibetu }}"
-                          {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
-                    【{{ obj.kibetu }}】 ({{ obj.st_date }} - {{ obj.end_date }})
-                  </option>
-                {% endfor %}
-              </select>
+
+              <div class="dropdown">
+                <button class="btn btn-outline-secondary dropdown-toggle"
+                        type="button"
+                        data-bs-toggle="dropdown"
+                        data-bs-auto-close="outside"
+                        style="min-width: 450px;">
+                  期別を選択
+                </button>
+
+                <div class="dropdown-menu p-3"
+                     style="max-height: 300px; overflow-y: auto; min-width: 330px;">
+
+                  {% for obj in object_list %}
+                    <div class="form-check mb-2">
+                      <input class="form-check-input"
+                             type="checkbox"
+                             name="kibetu"
+                             value="{{ obj.kibetu }}"
+                             id="kibetu_{{ forloop.counter }}"
+                             {% if obj.kibetu in selected_kibetu_list %}checked{% endif %}>
+
+                      <label class="form-check-label"
+                             for="kibetu_{{ forloop.counter }}">
+                        【{{ obj.kibetu }}】 {{ obj.st_date }} - {{ obj.end_date }}
+                      </label>
+                    </div>
+                  {% endfor %}
+
+                </div>
+              </div>
             </div>
 
             <div>
@@ -56,28 +81,33 @@
                      placeholder="例：JP00000000">
             </div>
 
+            <input type="hidden" name="sort" value="{{ sort }}">
+            <input type="hidden" name="direction" value="{{ direction }}">
+
             <button type="submit" class="btn btn-primary">表示</button>
 
-            <a class="btn btn-outline-secondary" href="{% url 'connect:s_drive_bonus' %}">
+            <a class="btn btn-outline-secondary"
+               href="{% url 'connect:s_drive_bonus' %}">
               リセット
             </a>
 
-            <button type="submit" name="export" value="excel" class="btn btn-success">
+            <button type="submit"
+                    name="export"
+                    value="excel"
+                    class="btn btn-success">
               Excel出力
             </button>
+
           </form>
 
           <div class="text-muted small mt-3">
-            {% if selected_kibetu %}
-              <span class="badge bg-info text-dark">{{ selected_kibetu }}</span>
+
+            {% if selected_kibetu_list %}
+              {% for kibetu in selected_kibetu_list %}
+                <span class="badge bg-info text-dark">{{ kibetu }}</span>
+              {% endfor %}
             {% else %}
               <span class="badge bg-secondary">期別：指定なし</span>
-            {% endif %}
-
-            {% if selected_period %}
-              <span class="badge bg-secondary">
-                {{ selected_period.st_date }} ～ {{ selected_period.end_date }}
-              </span>
             {% endif %}
 
             {% if search_introducer_code %}
@@ -91,6 +121,7 @@
                 会員ID：{{ search_jwoa_code }}
               </span>
             {% endif %}
+
           </div>
 
         </div>
@@ -100,24 +131,97 @@
         <div class="card-body d-flex flex-column" style="min-height: 0; overflow: hidden;">
 
           {% if rows %}
+
             <div class="d-flex justify-content-between align-items-center mb-2">
               <div class="fw-bold">一覧</div>
-              <div class="text-end"><strong>件数：{{ rows|length }} 件</strong></div>
+              <div class="text-end">
+                <strong>件数：{{ rows|length }} 件</strong>
+              </div>
             </div>
 
-            <div class="table-responsive flex-grow-1" style="min-height: 0; overflow-x: auto; overflow-y: auto;">
-              <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
-                <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+            <div class="table-responsive flex-grow-1"
+                 style="min-height: 0; overflow-x: auto; overflow-y: auto;">
+
+              <table class="table table-bordered table-sm align-middle mb-0"
+                     style="white-space: nowrap;">
+
+                <thead class="table-light"
+                       style="position: sticky; top: 0; z-index: 1;">
                   <tr>
-                    <th class="text-center">期別</th>
-                    <th class="text-center">紹介者タイトル</th>
-                    <th class="text-center">紹介者ID</th>
-                    <th class="text-center">会員ID</th>
-                    <th class="text-center">会員名</th>
-                    <th class="text-center">BV合計</th>
-                    <th class="text-center">報酬</th>
+
+                    <th class="text-center">
+                      <a class="text-decoration-none text-dark"
+                         href="?{% for k in selected_kibetu_list %}kibetu={{ k }}&{% endfor %}introducer_code={{ search_introducer_code }}&jwoa_code={{ search_jwoa_code }}&sort=kibetu&direction={% if sort == 'kibetu' %}{{ next_direction }}{% else %}asc{% endif %}">
+                        期別
+                        {% if sort == 'kibetu' %}
+                          {% if direction == 'asc' %}▲{% else %}▼{% endif %}
+                        {% endif %}
+                      </a>
+                    </th>
+
+                    <th class="text-center">
+                      <a class="text-decoration-none text-dark"
+                         href="?{% for k in selected_kibetu_list %}kibetu={{ k }}&{% endfor %}introducer_code={{ search_introducer_code }}&jwoa_code={{ search_jwoa_code }}&sort=title_name&direction={% if sort == 'title_name' %}{{ next_direction }}{% else %}asc{% endif %}">
+                        紹介者タイトル
+                        {% if sort == 'title_name' %}
+                          {% if direction == 'asc' %}▲{% else %}▼{% endif %}
+                        {% endif %}
+                      </a>
+                    </th>
+
+                    <th class="text-center">
+                      <a class="text-decoration-none text-dark"
+                         href="?{% for k in selected_kibetu_list %}kibetu={{ k }}&{% endfor %}introducer_code={{ search_introducer_code }}&jwoa_code={{ search_jwoa_code }}&sort=introducer_code&direction={% if sort == 'introducer_code' %}{{ next_direction }}{% else %}asc{% endif %}">
+                        紹介者ID
+                        {% if sort == 'introducer_code' %}
+                          {% if direction == 'asc' %}▲{% else %}▼{% endif %}
+                        {% endif %}
+                      </a>
+                    </th>
+
+                    <th class="text-center">
+                      <a class="text-decoration-none text-dark"
+                         href="?{% for k in selected_kibetu_list %}kibetu={{ k }}&{% endfor %}introducer_code={{ search_introducer_code }}&jwoa_code={{ search_jwoa_code }}&sort=jwoa_code&direction={% if sort == 'jwoa_code' %}{{ next_direction }}{% else %}asc{% endif %}">
+                        会員ID
+                        {% if sort == 'jwoa_code' %}
+                          {% if direction == 'asc' %}▲{% else %}▼{% endif %}
+                        {% endif %}
+                      </a>
+                    </th>
+
+                    <th class="text-center">
+                      <a class="text-decoration-none text-dark"
+                         href="?{% for k in selected_kibetu_list %}kibetu={{ k }}&{% endfor %}introducer_code={{ search_introducer_code }}&jwoa_code={{ search_jwoa_code }}&sort=jwoa_name&direction={% if sort == 'jwoa_name' %}{{ next_direction }}{% else %}asc{% endif %}">
+                        会員名
+                        {% if sort == 'jwoa_name' %}
+                          {% if direction == 'asc' %}▲{% else %}▼{% endif %}
+                        {% endif %}
+                      </a>
+                    </th>
+
+                    <th class="text-center">
+                      <a class="text-decoration-none text-dark"
+                         href="?{% for k in selected_kibetu_list %}kibetu={{ k }}&{% endfor %}introducer_code={{ search_introducer_code }}&jwoa_code={{ search_jwoa_code }}&sort=sum_bv&direction={% if sort == 'sum_bv' %}{{ next_direction }}{% else %}asc{% endif %}">
+                        BV合計
+                        {% if sort == 'sum_bv' %}
+                          {% if direction == 'asc' %}▲{% else %}▼{% endif %}
+                        {% endif %}
+                      </a>
+                    </th>
+
+                    <th class="text-center">
+                      <a class="text-decoration-none text-dark"
+                         href="?{% for k in selected_kibetu_list %}kibetu={{ k }}&{% endfor %}introducer_code={{ search_introducer_code }}&jwoa_code={{ search_jwoa_code }}&sort=sum_bonus_amount&direction={% if sort == 'sum_bonus_amount' %}{{ next_direction }}{% else %}asc{% endif %}">
+                        報酬
+                        {% if sort == 'sum_bonus_amount' %}
+                          {% if direction == 'asc' %}▲{% else %}▼{% endif %}
+                        {% endif %}
+                      </a>
+                    </th>
+
                   </tr>
                 </thead>
+
                 <tbody>
                   {% for r in rows %}
                     <tr>
@@ -131,17 +235,21 @@
                     </tr>
                   {% endfor %}
                 </tbody>
+
               </table>
+
             </div>
 
           {% else %}
-            {% if selected_kibetu or search_introducer_code or search_jwoa_code %}
+
+            {% if selected_kibetu_list or search_introducer_code or search_jwoa_code %}
               <p class="mb-0">この条件のデータはありません。</p>
             {% else %}
               <p class="mb-0 text-muted">
                 期別、紹介者ID、会員IDのいずれかを入力して「表示」を押してください。
               </p>
             {% endif %}
+
           {% endif %}
 
         </div>
@@ -150,4 +258,20 @@
     </main>
   </div>
 </div>
+{% endblock %}
+
+{% block script %}
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<script>
+$(function() {
+    $('.js-kibetu-select').select2({
+        placeholder: '期別を選択してください',
+        allowClear: true,
+        closeOnSelect: false,
+        width: '100%'
+    });
+});
+</script>
 {% endblock %}

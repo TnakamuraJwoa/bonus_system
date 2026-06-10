@@ -3046,14 +3046,14 @@ class S_DriveBonusView(generic.ListView):
                 ws[f"F{row_idx}"].number_format = '#,##0'
                 ws[f"G{row_idx}"].number_format = '#,##0.00'
 
-            kibetu = context.get("selected_kibetu", "")
+            selected_kibetu_list = context.get("selected_kibetu_list", [])
             search_introducer_code = context.get("search_introducer_code", "")
             search_jwoa_code = context.get("search_jwoa_code", "")
 
             filename = "drive_bonus_result"
 
-            if kibetu:
-                filename += f"_{kibetu}"
+            if selected_kibetu_list:
+                filename += "_" + "_".join(selected_kibetu_list)
 
             if search_introducer_code:
                 filename += f"_intro_{search_introducer_code}"
@@ -3076,22 +3076,44 @@ class S_DriveBonusView(generic.ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
-        selected_kibetu = self.request.GET.get("kibetu", "").strip()
+        selected_kibetu_list = self.request.GET.getlist("kibetu")
         search_introducer_code = self.request.GET.get("introducer_code", "").strip()
         search_jwoa_code = self.request.GET.get("jwoa_code", "").strip()
 
-        ctx["selected_kibetu"] = selected_kibetu
+        sort = self.request.GET.get("sort", "kibetu")
+        direction = self.request.GET.get("direction", "asc")
+
+        allowed_sort_columns = {
+            "kibetu": "kibetu",
+            "title_name": "title_name",
+            "introducer_code": "introducer_code",
+            "jwoa_code": "jwoa_code",
+            "jwoa_name": "jwoa_name",
+            "sum_bv": "sum_bv",
+            "sum_bonus_amount": "sum_bonus_amount",
+        }
+
+        if sort not in allowed_sort_columns:
+            sort = "kibetu"
+
+        if direction not in ["asc", "desc"]:
+            direction = "asc"
+
+        order_column = allowed_sort_columns[sort]
+        order_direction = "DESC" if direction == "desc" else "ASC"
+
+        next_direction = "desc" if direction == "asc" else "asc"
+
+        ctx["selected_kibetu_list"] = selected_kibetu_list
         ctx["search_introducer_code"] = search_introducer_code
         ctx["search_jwoa_code"] = search_jwoa_code
+        ctx["sort"] = sort
+        ctx["direction"] = direction
+        ctx["next_direction"] = next_direction
         ctx["rows"] = []
-        ctx["selected_period"] = None
 
-        if not selected_kibetu and not search_introducer_code and not search_jwoa_code:
+        if not selected_kibetu_list and not search_introducer_code and not search_jwoa_code:
             return ctx
-
-        if selected_kibetu:
-            period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
-            ctx["selected_period"] = period
 
         sql = """
             SELECT
@@ -3110,11 +3132,12 @@ class S_DriveBonusView(generic.ListView):
 
         params = []
 
-        if selected_kibetu:
-            sql += """
-                AND kibetu = %s
+        if selected_kibetu_list:
+            placeholders = ", ".join(["%s"] * len(selected_kibetu_list))
+            sql += f"""
+                AND kibetu IN ({placeholders})
             """
-            params.append(selected_kibetu)
+            params.extend(selected_kibetu_list)
 
         if search_introducer_code:
             sql += """
@@ -3128,8 +3151,8 @@ class S_DriveBonusView(generic.ListView):
             """
             params.append(f"%{search_jwoa_code}%")
 
-        sql += """
-            ORDER BY kibetu, introducer_code, jwoa_code
+        sql += f"""
+            ORDER BY {order_column} {order_direction}
         """
 
         with connections["rds"].cursor() as cursor:
