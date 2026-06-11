@@ -173,7 +173,7 @@ class DriveBonusView(generic.ListView):
         return (
             PeriodMaster.objects.using("rds")
             .filter(kibetu__in=registered_kibetu_list)
-            .order_by("-year", "-month")
+            .order_by("-kibetu")
         )
 
     def get(self, request, *args, **kwargs):
