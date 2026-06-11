@@ -4237,7 +4237,6 @@ class RepurchaseOverBonusView(generic.ListView):
         return rows
 
 
-
 class S_RepurchaseOverBonusView(generic.ListView):
     template_name = "s_repurchase_over_bonus.html"
     context_object_name = "object_list"
@@ -4273,6 +4272,7 @@ class S_RepurchaseOverBonusView(generic.ListView):
         if request.GET.get("export") == "excel":
 
             rows = context.get("rows", [])
+            selected_kibetu = context.get("selected_kibetu", "")
 
             wb = openpyxl.Workbook()
             ws = wb.active
@@ -4282,8 +4282,6 @@ class S_RepurchaseOverBonusView(generic.ListView):
                 "kibetu",
                 "root_code",
                 "root_name",
-                "up_code",
-                "up_name",
                 "down_code",
                 "down_name",
                 "tree_level",
@@ -4300,8 +4298,6 @@ class S_RepurchaseOverBonusView(generic.ListView):
                     r.get("kibetu"),
                     r.get("root_code"),
                     r.get("root_name"),
-                    r.get("up_code"),
-                    r.get("up_name"),
                     r.get("down_code"),
                     r.get("down_name"),
                     r.get("tree_level"),
@@ -4316,7 +4312,7 @@ class S_RepurchaseOverBonusView(generic.ListView):
             )
 
             response["Content-Disposition"] = (
-                'attachment; filename="title_diff_bonus_result.xlsx"'
+                f'attachment; filename="repurchase_over_bonus_result_{selected_kibetu}.xlsx"'
             )
 
             wb.save(response)
@@ -4328,12 +4324,16 @@ class S_RepurchaseOverBonusView(generic.ListView):
 
         ctx = super().get_context_data(**kwargs)
 
-        selected_kibetu = self.request.GET.get("kibetu")
+        selected_kibetu = self.request.GET.get("kibetu", "").strip()
+        root_code = self.request.GET.get("root_code", "").strip()
+        down_code = self.request.GET.get("down_code", "").strip()
 
         if not selected_kibetu and self.object_list:
             selected_kibetu = self.object_list[0].kibetu
 
         ctx["selected_kibetu"] = selected_kibetu
+        ctx["root_code"] = root_code
+        ctx["down_code"] = down_code
         ctx["rows"] = []
         ctx["selected_period"] = None
 
@@ -4357,8 +4357,6 @@ class S_RepurchaseOverBonusView(generic.ListView):
                 kibetu,
                 root_code,
                 root_name,
-                up_code,
-                up_name,
                 down_code,
                 down_name,
                 tree_level,
@@ -4370,12 +4368,36 @@ class S_RepurchaseOverBonusView(generic.ListView):
             WHERE kibetu = %s
         """
 
+        params = [selected_kibetu]
+
+        if root_code:
+            sql += """
+                AND root_code LIKE %s
+            """
+            params.append(f"%{root_code}%")
+
+        if down_code:
+            sql += """
+                AND down_code LIKE %s
+            """
+            params.append(f"%{down_code}%")
+
+        sql += """
+            ORDER BY
+                root_code,
+                tree_level,
+                down_code
+        """
+
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, [selected_kibetu])
+            cursor.execute(sql, params)
             logger.info(f"Executed SQL: {cursor._executed}")
 
             cols = [c[0] for c in cursor.description]
-            rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
+            rows = [
+                dict(zip(cols, r))
+                for r in cursor.fetchall()
+            ]
 
         ctx["rows"] = rows
 

@@ -34,20 +34,35 @@
               </label>
 
               <select name="kibetu" class="form-select">
-
                 {% for obj in object_list %}
-
                   <option value="{{ obj.kibetu }}"
                           {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
-
-                    【{{ obj.kibetu }}】
-                    {{ obj.payment_date }}
-
+                    【{{ obj.kibetu }}】 {{ obj.payment_date }}
                   </option>
-
                 {% endfor %}
-
               </select>
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">
+                root_code
+              </label>
+              <input type="text"
+                     name="root_code"
+                     class="form-control"
+                     value="{{ root_code }}"
+                     placeholder="">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">
+                down_code
+              </label>
+              <input type="text"
+                     name="down_code"
+                     class="form-control"
+                     value="{{ down_code }}"
+                     placeholder="">
             </div>
 
             <button type="submit" class="btn btn-primary">
@@ -55,7 +70,7 @@
             </button>
 
             <a class="btn btn-outline-secondary"
-               href="{% url 'connect:s_title_diff_bonus' %}">
+               href="{% url 'connect:s_repurchase_over_bonus' %}">
               リセット
             </a>
 
@@ -79,13 +94,10 @@
                 {{ selected_period.payment_date }}
               </span>
             </div>
-
           {% else %}
-
             <div class="text-muted small mt-3">
               期別を選択してください
             </div>
-
           {% endif %}
 
         </div>
@@ -124,8 +136,6 @@
                     <th>kibetu</th>
                     <th>root_code</th>
                     <th>root_name</th>
-                    <th>up_code</th>
-                    <th>up_name</th>
                     <th>down_code</th>
                     <th>down_name</th>
                     <th>tree_level</th>
@@ -143,8 +153,6 @@
                       <td>{{ r.kibetu }}</td>
                       <td>{{ r.root_code }}</td>
                       <td>{{ r.root_name }}</td>
-                      <td>{{ r.up_code }}</td>
-                      <td>{{ r.up_name }}</td>
                       <td>{{ r.down_code }}</td>
                       <td>{{ r.down_name }}</td>
 
@@ -170,17 +178,13 @@
           {% else %}
 
             {% if selected_kibetu %}
-
               <p class="mb-0">
-                この期間のデータはありません。
+                この条件のデータはありません。
               </p>
-
             {% else %}
-
               <p class="mb-0 text-muted">
                 期別を選択して「表示」を押してください。
               </p>
-
             {% endif %}
 
           {% endif %}
