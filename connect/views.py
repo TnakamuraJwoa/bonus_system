@@ -154,7 +154,27 @@ class DriveBonusView(generic.ListView):
     model = PeriodMaster
 
     def get_queryset(self):
-        return PeriodMaster.objects.using("rds").all()
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute("""
+                SELECT DISTINCT kibetu
+                FROM bonus_db.B_drive_bonus_result
+                ORDER BY kibetu DESC
+            """)
+
+            registered_kibetu_list = [
+                row[0]
+                for row in cursor.fetchall()
+            ]
+
+        if not registered_kibetu_list:
+            return PeriodMaster.objects.using("rds").none()
+
+        return (
+            PeriodMaster.objects.using("rds")
+            .filter(kibetu__in=registered_kibetu_list)
+            .order_by("-year", "-month")
+        )
 
     def get(self, request, *args, **kwargs):
         self.object_list = self.get_queryset()
