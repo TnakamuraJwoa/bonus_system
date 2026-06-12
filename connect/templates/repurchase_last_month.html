@@ -1,5 +1,5 @@
-{% extends 'base.html' %}
-{% load static %}
+﻿{% extends 'base.html' %}
+{% load static custom_filters %}
 
 {% block head %}
   <link href="{% static 'css/common.css' %}" rel="stylesheet">
@@ -22,7 +22,7 @@
       <div class="card shadow-sm mb-3">
         <div class="card-body">
 
-          <h5 class="mb-3">【設定 - 購入情報登録】</h5>
+          <h5 class="page-title mb-3">【設定 - 購入情報登録】</h5>
           <div class="fw-bold mb-2">対象年月を選択</div>
 
           <div class="d-flex gap-2 align-items-end flex-wrap">
@@ -65,12 +65,7 @@
           </div>
 
           {% if selected_month %}
-            <div class="alert alert-info mt-3 mb-0">
-              選択中：
-              <strong>
-                {{ selected_month|slice:":4" }}年{{ selected_month|slice:"5:" }}月
-              </strong>
-            </div>
+            {% include "com/_selection_indicator.html" with date_text=selected_month|jp_year_month %}
           {% endif %}
 
         </div>

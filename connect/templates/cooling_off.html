@@ -1,4 +1,4 @@
-{% extends 'base.html' %}
+﻿{% extends 'base.html' %}
 {% load static %}
 
 {% block head %}
@@ -23,7 +23,7 @@
             <div class="card shadow-sm mb-3">
                 <div class="card-body">
 
-                    <h5 class="mb-3">【注文管理 - クーリングオフ】</h5>
+                    <h5 class="page-title mb-3">【注文管理 - クーリングオフ】</h5>
 
                     <form method="post">
                         {% csrf_token %}
@@ -90,7 +90,7 @@
             <div class="card shadow-sm mb-3 border-info">
                 <div class="card-body">
 
-                    <h5 class="mb-3">注文詳細</h5>
+                    <h5 class="page-title mb-3">注文詳細</h5>
 
                     <table class="table table-bordered table-sm">
                         <tr>

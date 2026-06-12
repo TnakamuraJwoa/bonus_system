@@ -1,5 +1,5 @@
-{% extends 'base.html' %}
-{% load static %}
+﻿{% extends 'base.html' %}
+{% load static custom_filters %}
 
 {% block head %}
     <link href="{% static 'css/common.css' %}" rel="stylesheet">
@@ -23,10 +23,12 @@
       <div class="card shadow-sm mb-3">
         <div class="card-body">
 
-          <h5 class="mb-3">【ボーナス検索 - タイトルボーナス】</h5>
+          <h5 class="page-title mb-3">【ボーナス検索 - タイトルボーナス】</h5>
 
           <form method="get"
                 class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+            <input type="hidden" name="sort" value="{{ sort|default:'' }}">
+            <input type="hidden" name="direction" value="{{ direction|default:'' }}">
 
             <div>
               <label class="form-label mb-0 small text-muted">
@@ -42,6 +44,39 @@
                   </option>
                 {% endfor %}
               </select>
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">
+                root会員ID
+              </label>
+              <input type="text"
+                     name="root_jwoa_code"
+                     value="{{ root_jwoa_code }}"
+                     class="form-control"
+                     placeholder="例：JP00000000">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">
+                up会員ID
+              </label>
+              <input type="text"
+                     name="up_jwoa_code"
+                     value="{{ up_jwoa_code }}"
+                     class="form-control"
+                     placeholder="例：JP00000000">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">
+                down会員ID
+              </label>
+              <input type="text"
+                     name="down_jwoa_code"
+                     value="{{ down_jwoa_code }}"
+                     class="form-control"
+                     placeholder="例：JP00000000">
             </div>
 
             <button type="submit" class="btn btn-primary">
@@ -62,25 +97,22 @@
 
           </form>
 
-          {% if selected_period %}
-            <div class="text-muted small mt-3">
-              選択中：
-              <span class="badge bg-info text-dark">
-                {{ selected_period.kibetu }}
-              </span>
-
-              <span class="badge bg-secondary">
-                {{ selected_period.payment_date }}
-              </span>
-            </div>
-
-          {% else %}
-
-            <div class="text-muted small mt-3">
-              期別を選択してください
-            </div>
-
+          <div class="selection-indicator-group mt-3">
+          {% selection_from_period selected_period empty_message="期別を選択してください" %}
+          {% if root_jwoa_code or up_jwoa_code or down_jwoa_code %}
+          <div class="selection-indicator">
+            {% if root_jwoa_code %}
+              <span class="selection-indicator__badge selection-indicator__badge--root-code badge badge-pill">root会員ID：{{ root_jwoa_code }}</span>
+            {% endif %}
+            {% if up_jwoa_code %}
+              <span class="selection-indicator__badge selection-indicator__badge--up-code badge badge-pill">up会員ID：{{ up_jwoa_code }}</span>
+            {% endif %}
+            {% if down_jwoa_code %}
+              <span class="selection-indicator__badge selection-indicator__badge--down-code badge badge-pill">down会員ID：{{ down_jwoa_code }}</span>
+            {% endif %}
+          </div>
           {% endif %}
+          </div>
 
         </div>
       </div>
@@ -109,19 +141,19 @@
               <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                   <tr>
-                    <th>kibetu</th>
-                    <th>root_jwoa_code</th>
-                    <th>root_name</th>
-                    <th>up_jwoa_code</th>
-                    <th>down_jwoa_code</th>
-                    <th>down_name</th>
-                    <th>tree_level</th>
-                    <th>match_level</th>
-                    <th>title_id</th>
-                    <th>sum_bv</th>
-                    <th>rate</th>
-                    <th>bonus_amount</th>
-                    <th>created_at</th>
+                    {% sortable_th "kibetu" "kibetu" %}
+                    {% sortable_th "root_jwoa_code" "root_jwoa_code" %}
+                    {% sortable_th "root_name" "root_name" %}
+                    {% sortable_th "up_jwoa_code" "up_jwoa_code" %}
+                    {% sortable_th "down_jwoa_code" "down_jwoa_code" %}
+                    {% sortable_th "down_name" "down_name" %}
+                    {% sortable_th "tree_level" "tree_level" %}
+                    {% sortable_th "match_level" "match_level" %}
+                    {% sortable_th "title_id" "title_id" %}
+                    {% sortable_th "sum_bv" "sum_bv" %}
+                    {% sortable_th "rate" "rate" %}
+                    {% sortable_th "bonus_amount" "bonus_amount" %}
+                    {% sortable_th "created_at" "created_at" %}
                   </tr>
                 </thead>
 

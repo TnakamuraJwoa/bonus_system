@@ -138,6 +138,221 @@ class KeysetPaginationMixin:
 
 
 
+def get_bonus_sort_context(request, allowed_sort_columns, default_sort="id", default_direction="asc"):
+    sort = request.GET.get("sort", default_sort)
+    direction = request.GET.get("direction", default_direction)
+
+    if sort not in allowed_sort_columns:
+        sort = default_sort
+        direction = default_direction
+
+    if direction not in ("asc", "desc"):
+        direction = default_direction
+
+    order_column = allowed_sort_columns[sort]
+    order_direction = "DESC" if direction == "desc" else "ASC"
+    next_direction = "desc" if direction == "asc" else "asc"
+
+    return {
+        "sort": sort,
+        "direction": direction,
+        "next_direction": next_direction,
+        "order_sql": f"{order_column} {order_direction}",
+    }
+
+
+def apply_like_filters(sql, params, request, field_map):
+    """GETパラメータの部分一致（LIKE）条件をSQLに追加する。"""
+    filter_values = {}
+    for param, column in field_map.items():
+        value = request.GET.get(param, "").strip()
+        filter_values[param] = value
+        if value:
+            sql += f"\n            AND {column} LIKE %s"
+            params.append(f"%{value}%")
+    return sql, filter_values
+
+
+def build_bonus_export_filename(base_name, kibetu=None, kibetu_list=None):
+    """Excel出力ファイル名（期別付き）"""
+    name = base_name
+    if kibetu_list:
+        valid = [str(k) for k in kibetu_list if k]
+        if valid:
+            name += "_" + "_".join(valid)
+    elif kibetu:
+        name += f"_{kibetu}"
+    return f"{name}.xlsx"
+
+
+def _format_export_cell(value, fmt=None):
+    if value is None or value == "":
+        return ""
+    if fmt == "int":
+        try:
+            return int(float(value))
+        except (TypeError, ValueError):
+            return value
+    if fmt == "decimal2":
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return value
+    return value
+
+
+def export_search_rows_to_excel(rows, columns, sheet_title, filename):
+    """検索画面の表示列定義どおりに Excel を出力する。"""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = sheet_title[:31]
+
+    ws.append([col[0] for col in columns])
+
+    for row in rows:
+        ws.append([
+            _format_export_cell(
+                row.get(col[1]),
+                col[2] if len(col) > 2 else None,
+            )
+            for col in columns
+        ])
+
+    for col_idx, col in enumerate(columns, start=1):
+        fmt = col[2] if len(col) > 2 else None
+        if fmt == "int":
+            number_format = "#,##0"
+        elif fmt == "decimal2":
+            number_format = "#,##0.00"
+        else:
+            continue
+        for row_idx in range(2, ws.max_row + 1):
+            ws.cell(row=row_idx, column=col_idx).number_format = number_format
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    wb.save(response)
+    return response
+
+
+# 検索画面の一覧表示と同じ列（label, field_key, optional_format）
+SEARCH_EXPORT_COLUMNS = {
+    "drive_bonus": [
+        ("期別", "kibetu"),
+        ("紹介者タイトル", "title_name"),
+        ("紹介者ID", "introducer_code"),
+        ("会員ID", "jwoa_code"),
+        ("会員名", "jwoa_name"),
+        ("BV合計", "sum_bv", "int"),
+        ("報酬", "sum_bonus_amount", "decimal2"),
+    ],
+    "basic_bonus": [
+        ("期別", "kibetu"),
+        ("上位者コード", "placement_code"),
+        ("上位者名", "placement_name"),
+        ("上位者ランク", "placement_rank"),
+        ("ラインコード", "line_code"),
+        ("購入者コード", "purchaser_code"),
+        ("購入者名", "purchaser_name"),
+        ("BV合計", "sum_bv", "int"),
+        ("レート", "bonus_rate", "decimal2"),
+        ("ボーナス金額", "bonus_amount", "decimal2"),
+        ("ブルーダイヤ判定", "blue_daiya_flg"),
+        ("作成日時", "created_at"),
+    ],
+    "matching_bonus": [
+        ("期別", "kibetu"),
+        ("紹介者コード", "introducer_code"),
+        ("紹介者名", "introducer_name"),
+        ("直紹介アクティブ人数", "active_count", "int"),
+        ("ベーシックBV", "basic_bv", "int"),
+        ("マッチングBV", "matching_bv", "int"),
+        ("作成日時", "created_at"),
+    ],
+    "title_bonus": [
+        ("kibetu", "kibetu"),
+        ("root_jwoa_code", "root_jwoa_code"),
+        ("root_name", "root_name"),
+        ("up_jwoa_code", "up_jwoa_code"),
+        ("down_jwoa_code", "down_jwoa_code"),
+        ("down_name", "down_name"),
+        ("tree_level", "tree_level", "int"),
+        ("match_level", "match_level", "int"),
+        ("title_id", "title_id", "int"),
+        ("sum_bv", "sum_bv", "int"),
+        ("rate", "rate", "decimal2"),
+        ("bonus_amount", "bonus_amount", "decimal2"),
+        ("created_at", "created_at"),
+    ],
+    "title_diff_bonus": [
+        ("期別", "kibetu"),
+        ("root_title_id", "root_title_id", "int"),
+        ("root_bonus_rate", "root_bonus_rate", "decimal2"),
+        ("root_jwoa_code", "root_jwoa_code"),
+        ("root_name", "root_name"),
+        ("down_title_id", "down_title_id", "int"),
+        ("down_bonus_rate", "down_bonus_rate", "decimal2"),
+        ("down_jwoa_code", "down_jwoa_code"),
+        ("down_name", "down_name"),
+        ("pay_bonus_rate", "pay_bonus_rate", "decimal2"),
+        ("sum_bv", "sum_bv", "int"),
+        ("title_diff_bonus", "title_diff_bonus", "decimal2"),
+        ("created_at", "created_at"),
+        ("updated_at", "updated_at"),
+    ],
+    "repurchase_over_bonus": [
+        ("kibetu", "kibetu"),
+        ("root_code", "root_code"),
+        ("root_name", "root_name"),
+        ("down_code", "down_code"),
+        ("down_name", "down_name"),
+        ("tree_level", "tree_level", "int"),
+        ("match_count", "match_count", "int"),
+        ("rate", "rate", "decimal2"),
+        ("sum_bv", "sum_bv", "int"),
+        ("over_bonus", "over_bonus", "decimal2"),
+        ("created_at", "created_at"),
+        ("updated_at", "updated_at"),
+    ],
+    "three_star_global_bonus": [
+        ("kibetu", "kibetu"),
+        ("jwoa_code", "jwoa_code"),
+        ("jwoa_name", "jwoa_name"),
+        ("title_id", "title_id", "int"),
+        ("score", "score", "int"),
+        ("total_over_bv", "total_over_bv", "int"),
+        ("one_score_bonus", "one_score_bonus", "decimal2"),
+        ("bonus_amount", "bonus_amount", "decimal2"),
+        ("created_at", "created_at"),
+        ("updated_at", "updated_at"),
+    ],
+    "week_bonus": [
+        ("期別", "kibetu"),
+        ("会員コード", "jwoa_code"),
+        ("会員名", "jwoa_name"),
+        ("ドライブボーナス", "drive_bonus", "int"),
+        ("ベーシックボーナス", "basic_bonus", "int"),
+        ("マッチングボーナス", "matching_bonus", "int"),
+        ("週間ボーナス", "week_bonus", "int"),
+        ("決済時間", "updated_at"),
+    ],
+    "month_bonus": [
+        ("期別", "kibetu"),
+        ("会員コード", "jwoa_code"),
+        ("会員名", "jwoa_name"),
+        ("タイトルボーナス", "title_bonus", "int"),
+        ("リピート購入オーバーボーナス", "repurchase_over_bonus", "int"),
+        ("差額ボーナス", "title_diff_bonus", "int"),
+        ("３つ星ダイヤグローバル配当", "three_star_diamond_global_bonus", "int"),
+        ("大使ダイヤグローバル配当", "crown_three_star_diamond_global_bonus", "int"),
+        ("月間ボーナス", "month_bonus", "int"),
+        ("決済時間", "updated_at"),
+    ],
+}
+
+
 class IndexView(LoginView):
     template_name = "account/login.html"
     form_class = LoginForm
@@ -2933,60 +3148,25 @@ class S_DriveBonusView(generic.ListView):
         if request.GET.get("export") == "excel":
             rows = context.get("rows", [])
 
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "DriveBonusResult"
-
-            headers = ["期別", "タイトル", "紹介者ID", "会員ID", "会員名", "BV合計", "報酬"]
-            ws.append(headers)
-
-            for r in rows:
-                ws.append([
-                    r.get("kibetu"),
-                    r.get("title_name"),
-                    r.get("introducer_code"),
-                    r.get("jwoa_code"),
-                    r.get("jwoa_name"),
-                    r.get("sum_bv"),
-                    r.get("sum_bonus_amount"),
-                ])
-
-            ws.column_dimensions["A"].width = 15
-            ws.column_dimensions["B"].width = 18
-            ws.column_dimensions["C"].width = 15
-            ws.column_dimensions["D"].width = 15
-            ws.column_dimensions["E"].width = 25
-            ws.column_dimensions["F"].width = 12
-            ws.column_dimensions["G"].width = 15
-
-            for row_idx in range(2, ws.max_row + 1):
-                ws[f"F{row_idx}"].number_format = '#,##0'
-                ws[f"G{row_idx}"].number_format = '#,##0.00'
-
             selected_kibetu_list = context.get("selected_kibetu_list", [])
             search_introducer_code = context.get("search_introducer_code", "")
             search_jwoa_code = context.get("search_jwoa_code", "")
 
             filename = "drive_bonus_result"
-
             if selected_kibetu_list:
                 filename += "_" + "_".join(selected_kibetu_list)
-
             if search_introducer_code:
                 filename += f"_intro_{search_introducer_code}"
-
             if search_jwoa_code:
                 filename += f"_member_{search_jwoa_code}"
+            filename += ".xlsx"
 
-            response = HttpResponse(
-                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            return export_search_rows_to_excel(
+                rows,
+                SEARCH_EXPORT_COLUMNS["drive_bonus"],
+                "DriveBonusResult",
+                filename,
             )
-            response["Content-Disposition"] = (
-                f'attachment; filename="{filename}.xlsx"'
-            )
-
-            wb.save(response)
-            return response
 
         return self.render_to_response(context)
 
@@ -2997,36 +3177,24 @@ class S_DriveBonusView(generic.ListView):
         search_introducer_code = self.request.GET.get("introducer_code", "").strip()
         search_jwoa_code = self.request.GET.get("jwoa_code", "").strip()
 
-        sort = self.request.GET.get("sort", "kibetu")
-        direction = self.request.GET.get("direction", "asc")
-
-        allowed_sort_columns = {
-            "kibetu": "kibetu",
-            "title_name": "title_name",
-            "introducer_code": "introducer_code",
-            "jwoa_code": "jwoa_code",
-            "jwoa_name": "jwoa_name",
-            "sum_bv": "sum_bv",
-            "sum_bonus_amount": "sum_bonus_amount",
-        }
-
-        if sort not in allowed_sort_columns:
-            sort = "kibetu"
-
-        if direction not in ["asc", "desc"]:
-            direction = "asc"
-
-        order_column = allowed_sort_columns[sort]
-        order_direction = "DESC" if direction == "desc" else "ASC"
-
-        next_direction = "desc" if direction == "asc" else "asc"
+        sort_ctx = get_bonus_sort_context(
+            self.request,
+            {
+                "kibetu": "kibetu",
+                "title_name": "title_name",
+                "introducer_code": "introducer_code",
+                "jwoa_code": "jwoa_code",
+                "jwoa_name": "jwoa_name",
+                "sum_bv": "sum_bv",
+                "sum_bonus_amount": "sum_bonus_amount",
+            },
+            default_sort="kibetu",
+        )
+        ctx.update(sort_ctx)
 
         ctx["selected_kibetu_list"] = selected_kibetu_list
         ctx["search_introducer_code"] = search_introducer_code
         ctx["search_jwoa_code"] = search_jwoa_code
-        ctx["sort"] = sort
-        ctx["direction"] = direction
-        ctx["next_direction"] = next_direction
         ctx["rows"] = []
 
         if not selected_kibetu_list and not search_introducer_code and not search_jwoa_code:
@@ -3069,7 +3237,7 @@ class S_DriveBonusView(generic.ListView):
             params.append(f"%{search_jwoa_code}%")
 
         sql += f"""
-            ORDER BY {order_column} {order_direction}
+            ORDER BY {sort_ctx['order_sql']}
         """
 
         with connections["rds"].cursor() as cursor:
@@ -3113,42 +3281,14 @@ class S_BasicBonusView(generic.ListView):
 
         if request.GET.get("export") == "excel":
             rows = context.get("rows", [])
-
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "DriveBonusResult"
-
-            headers = ["タイトル", "紹介者ID", "会員ID", "会員名", "BV合計", "報酬"]
-            ws.append(headers)
-
-            for r in rows:
-                ws.append([
-                    r.get("title_name"),
-                    r.get("introducer_code"),
-                    r.get("jwoa_code"),
-                    r.get("jwoa_name"),
-                    r.get("sum_bv"),
-                    r.get("sum_bonus_amount"),
-                ])
-
-            ws.column_dimensions["A"].width = 18
-            ws.column_dimensions["B"].width = 15
-            ws.column_dimensions["C"].width = 15
-            ws.column_dimensions["D"].width = 25
-            ws.column_dimensions["E"].width = 12
-            ws.column_dimensions["F"].width = 15
-
-            for row_idx in range(2, ws.max_row + 1):
-                ws[f"E{row_idx}"].number_format = '#,##0'
-                ws[f"F{row_idx}"].number_format = '#,##0.00'
-
-            response = HttpResponse(
-                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            kibetu = context.get("selected_kibetu", "")
+            filename = build_bonus_export_filename("basic_bonus_result", kibetu=kibetu)
+            return export_search_rows_to_excel(
+                rows,
+                SEARCH_EXPORT_COLUMNS["basic_bonus"],
+                "BasicBonusResult",
+                filename,
             )
-            response["Content-Disposition"] = 'attachment; filename="drive_bonus_result.xlsx"'
-
-            wb.save(response)
-            return response
 
         return self.render_to_response(context)
 
@@ -3174,6 +3314,26 @@ class S_BasicBonusView(generic.ListView):
 
         ctx["selected_period"] = period
 
+        sort_ctx = get_bonus_sort_context(
+            self.request,
+            {
+                "kibetu": "kibetu",
+                "placement_code": "placement_code",
+                "placement_name": "placement_name",
+                "placement_rank": "placement_rank",
+                "line_code": "line_code",
+                "purchaser_code": "purchaser_code",
+                "purchaser_name": "purchaser_name",
+                "sum_bv": "sum_bv",
+                "bonus_rate": "bonus_rate",
+                "bonus_amount": "bonus_amount",
+                "blue_daiya_flg": "blue_daiya_flg",
+                "created_at": "created_at",
+            },
+            default_sort="placement_code",
+        )
+        ctx.update(sort_ctx)
+
         sql = """
             SELECT
                 id,
@@ -3191,11 +3351,25 @@ class S_BasicBonusView(generic.ListView):
                 created_at
             FROM bonus_db.B_basic_bonus_result
             WHERE kibetu = %s
-            ORDER BY placement_code, line_code, purchaser_code
         """
 
+        params = [selected_kibetu]
+        sql, filter_values = apply_like_filters(
+            sql,
+            params,
+            self.request,
+            {
+                "placement_code": "placement_code",
+                "purchaser_code": "purchaser_code",
+                "purchaser_name": "purchaser_name",
+                "line_code": "line_code",
+            },
+        )
+        ctx.update(filter_values)
+        sql += "\n            ORDER BY " + sort_ctx["order_sql"]
+
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, [selected_kibetu])
+            cursor.execute(sql, params)
             logger.info(f"Executed SQL: {cursor._executed}")
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
@@ -3237,43 +3411,14 @@ class S_MatchingBonusView(generic.ListView):
 
         if request.GET.get("export") == "excel":
             rows = context.get("rows", [])
-
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "MatchingBonusResult"
-
-            headers = ["kibetu", "introducer_code", "introducer_name", "active_count", "basic_bv", "matching_bv", "created_at"]
-            ws.append(headers)
-
-            for r in rows:
-                ws.append([
-                    r.get("kibetu"),
-                    r.get("introducer_code"),
-                    r.get("introducer_name"),
-                    r.get("active_count"),
-                    r.get("basic_bv"),
-                    r.get("matching_bv"),
-                    r.get("created_at"),
-                ])
-
-            ws.column_dimensions["A"].width = 18
-            ws.column_dimensions["B"].width = 15
-            ws.column_dimensions["C"].width = 15
-            ws.column_dimensions["D"].width = 25
-            ws.column_dimensions["E"].width = 12
-            ws.column_dimensions["F"].width = 15
-
-            for row_idx in range(2, ws.max_row + 1):
-                ws[f"E{row_idx}"].number_format = '#,##0'
-                ws[f"F{row_idx}"].number_format = '#,##0.00'
-
-            response = HttpResponse(
-                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            kibetu = context.get("selected_kibetu", "")
+            filename = build_bonus_export_filename("matching_bonus_result", kibetu=kibetu)
+            return export_search_rows_to_excel(
+                rows,
+                SEARCH_EXPORT_COLUMNS["matching_bonus"],
+                "MatchingBonusResult",
+                filename,
             )
-            response["Content-Disposition"] = 'attachment; filename="matching_bonus_result.xlsx"'
-
-            wb.save(response)
-            return response
 
         return self.render_to_response(context)
 
@@ -3299,6 +3444,21 @@ class S_MatchingBonusView(generic.ListView):
 
         ctx["selected_period"] = period
 
+        sort_ctx = get_bonus_sort_context(
+            self.request,
+            {
+                "kibetu": "kibetu",
+                "introducer_code": "introducer_code",
+                "introducer_name": "introducer_name",
+                "active_count": "active_count",
+                "basic_bv": "basic_bv",
+                "matching_bv": "matching_bv",
+                "created_at": "created_at",
+            },
+            default_sort="introducer_code",
+        )
+        ctx.update(sort_ctx)
+
         sql = """
             SELECT
                 id,
@@ -3311,11 +3471,23 @@ class S_MatchingBonusView(generic.ListView):
                 created_at
             FROM bonus_db.B_matching_bonus_result
             WHERE kibetu = %s
-            ORDER BY introducer_code
         """
 
+        params = [selected_kibetu]
+        sql, filter_values = apply_like_filters(
+            sql,
+            params,
+            self.request,
+            {
+                "introducer_code": "introducer_code",
+                "introducer_name": "introducer_name",
+            },
+        )
+        ctx.update(filter_values)
+        sql += "\n            ORDER BY " + sort_ctx["order_sql"]
+
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, [selected_kibetu])
+            cursor.execute(sql, params)
             logger.info(f"Executed SQL: {cursor._executed}")
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
@@ -3527,64 +3699,15 @@ class S_TitleBonusView(generic.ListView):
         context = self.get_context_data()
 
         if request.GET.get("export") == "excel":
-
             rows = context.get("rows", [])
-
-            wb = openpyxl.Workbook()
-
-            ws = wb.active
-
-            ws.title = "TitleBonusResult"
-
-            headers = [
-                "kibetu",
-                "root_jwoa_code",
-                "root_name",
-                "up_jwoa_code",
-                "down_jwoa_code",
-                "down_name",
-                "tree_level",
-                "match_level",
-                "title_id",
-                "sum_bv",
-                "rate",
-                "bonus_amount",
-                "created_at",
-            ]
-
-            ws.append(headers)
-
-            for r in rows:
-
-                ws.append([
-                    r.get("kibetu"),
-                    r.get("root_jwoa_code"),
-                    r.get("root_name"),
-                    r.get("up_jwoa_code"),
-                    r.get("down_jwoa_code"),
-                    r.get("down_name"),
-                    r.get("tree_level"),
-                    r.get("match_level"),
-                    r.get("title_id"),
-                    r.get("sum_bv"),
-                    r.get("rate"),
-                    r.get("bonus_amount"),
-                    r.get("created_at"),
-                ])
-
-            response = HttpResponse(
-                content_type=(
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
+            kibetu = context.get("selected_kibetu", "")
+            filename = build_bonus_export_filename("title_bonus_result", kibetu=kibetu)
+            return export_search_rows_to_excel(
+                rows,
+                SEARCH_EXPORT_COLUMNS["title_bonus"],
+                "TitleBonusResult",
+                filename,
             )
-
-            response["Content-Disposition"] = (
-                'attachment; filename="title_bonus_result.xlsx"'
-            )
-
-            wb.save(response)
-
-            return response
 
         return self.render_to_response(context)
 
@@ -3615,6 +3738,27 @@ class S_TitleBonusView(generic.ListView):
 
         ctx["selected_period"] = period
 
+        sort_ctx = get_bonus_sort_context(
+            self.request,
+            {
+                "kibetu": "kibetu",
+                "root_jwoa_code": "root_jwoa_code",
+                "root_name": "root_name",
+                "up_jwoa_code": "up_jwoa_code",
+                "down_jwoa_code": "down_jwoa_code",
+                "down_name": "down_name",
+                "tree_level": "tree_level",
+                "match_level": "match_level",
+                "title_id": "title_id",
+                "sum_bv": "sum_bv",
+                "rate": "rate",
+                "bonus_amount": "bonus_amount",
+                "created_at": "created_at",
+            },
+            default_sort="root_jwoa_code",
+        )
+        ctx.update(sort_ctx)
+
         sql = """
             SELECT
                 id,
@@ -3633,12 +3777,25 @@ class S_TitleBonusView(generic.ListView):
                 created_at
             FROM bonus_db.B_title_bonus_result
             WHERE kibetu = %s
-            ORDER BY root_jwoa_code, match_level
         """
+
+        params = [selected_kibetu]
+        sql, filter_values = apply_like_filters(
+            sql,
+            params,
+            self.request,
+            {
+                "root_jwoa_code": "root_jwoa_code",
+                "up_jwoa_code": "up_jwoa_code",
+                "down_jwoa_code": "down_jwoa_code",
+            },
+        )
+        ctx.update(filter_values)
+        sql += "\n            ORDER BY " + sort_ctx["order_sql"]
 
         with connections["rds"].cursor() as cursor:
 
-            cursor.execute(sql, [selected_kibetu])
+            cursor.execute(sql, params)
 
             logger.info(f"Executed SQL: {cursor._executed}")
 
@@ -3836,62 +3993,15 @@ class S_TitleDiffBonusView(generic.ListView):
         context = self.get_context_data()
 
         if request.GET.get("export") == "excel":
-
             rows = context.get("rows", [])
-
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "TitleDiffBonusResult"
-
-            headers = [
-                "kibetu",
-                "root_title_id",
-                "root_bonus_rate",
-                "root_jwoa_code",
-                "root_name",
-                "down_title_id",
-                "down_bonus_rate",
-                "down_jwoa_code",
-                "down_name",
-                "pay_bonus_rate",
-                "sum_bv",
-                "title_diff_bonus",
-                "created_at",
-                "updated_at",
-            ]
-
-            ws.append(headers)
-
-            for r in rows:
-                ws.append([
-                    r.get("kibetu"),
-                    r.get("root_title_id"),
-                    r.get("root_bonus_rate"),
-                    r.get("root_jwoa_code"),
-                    r.get("root_name"),
-                    r.get("down_title_id"),
-                    r.get("down_bonus_rate"),
-                    r.get("down_jwoa_code"),
-                    r.get("down_name"),
-                    r.get("pay_bonus_rate"),
-                    r.get("sum_bv"),
-                    r.get("title_diff_bonus"),
-                    r.get("created_at"),
-                    r.get("updated_at"),
-                ])
-
-            response = HttpResponse(
-                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
             kibetu = context.get("selected_kibetu", "")
-
-            response["Content-Disposition"] = (
-                f'attachment; filename="title_diff_bonus_result_{kibetu}.xlsx"'
+            filename = build_bonus_export_filename("title_diff_bonus_result", kibetu=kibetu)
+            return export_search_rows_to_excel(
+                rows,
+                SEARCH_EXPORT_COLUMNS["title_diff_bonus"],
+                "TitleDiffBonusResult",
+                filename,
             )
-
-            wb.save(response)
-            return response
 
         return self.render_to_response(context)
 
@@ -3901,15 +4011,11 @@ class S_TitleDiffBonusView(generic.ListView):
         ctx = super().get_context_data(**kwargs)
 
         selected_kibetu = self.request.GET.get("kibetu")
-        root_jwoa_code = self.request.GET.get("root_jwoa_code", "").strip()
-        down_jwoa_code = self.request.GET.get("down_jwoa_code", "").strip()
 
         if not selected_kibetu and self.object_list:
             selected_kibetu = self.object_list[0].kibetu
 
         ctx["selected_kibetu"] = selected_kibetu
-        ctx["root_jwoa_code"] = root_jwoa_code
-        ctx["down_jwoa_code"] = down_jwoa_code
         ctx["rows"] = []
         ctx["selected_period"] = None
 
@@ -3926,6 +4032,28 @@ class S_TitleDiffBonusView(generic.ListView):
             return ctx
 
         ctx["selected_period"] = period
+
+        sort_ctx = get_bonus_sort_context(
+            self.request,
+            {
+                "kibetu": "kibetu",
+                "root_title_id": "root_title_id",
+                "root_bonus_rate": "root_bonus_rate",
+                "root_jwoa_code": "root_jwoa_code",
+                "root_name": "root_name",
+                "down_title_id": "down_title_id",
+                "down_bonus_rate": "down_bonus_rate",
+                "down_jwoa_code": "down_jwoa_code",
+                "down_name": "down_name",
+                "pay_bonus_rate": "pay_bonus_rate",
+                "sum_bv": "sum_bv",
+                "title_diff_bonus": "title_diff_bonus",
+                "created_at": "created_at",
+                "updated_at": "updated_at",
+            },
+            default_sort="root_jwoa_code",
+        )
+        ctx.update(sort_ctx)
 
         sql = """
             SELECT
@@ -3948,18 +4076,19 @@ class S_TitleDiffBonusView(generic.ListView):
         """
 
         params = [selected_kibetu]
-
-        if root_jwoa_code:
-            sql += " AND root_jwoa_code LIKE %s"
-            params.append(f"%{root_jwoa_code}%")
-
-        if down_jwoa_code:
-            sql += " AND down_jwoa_code LIKE %s"
-            params.append(f"%{down_jwoa_code}%")
-
-        sql += """
-            ORDER BY root_jwoa_code, down_jwoa_code
-        """
+        sql, filter_values = apply_like_filters(
+            sql,
+            params,
+            self.request,
+            {
+                "root_jwoa_code": "root_jwoa_code",
+                "down_jwoa_code": "down_jwoa_code",
+                "root_name": "root_name",
+                "down_name": "down_name",
+            },
+        )
+        ctx.update(filter_values)
+        sql += "\n            ORDER BY " + sort_ctx["order_sql"]
 
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql, params)
@@ -4186,57 +4315,15 @@ class S_RepurchaseOverBonusView(generic.ListView):
         context = self.get_context_data()
 
         if request.GET.get("export") == "excel":
-
             rows = context.get("rows", [])
-            selected_kibetu = context.get("selected_kibetu", "")
-
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "RepurchaseOverBonusResult"
-
-            headers = [
-                "kibetu",
-                "root_code",
-                "root_name",
-                "down_code",
-                "down_name",
-                "tree_level",
-                "match_count",
-                "rate",
-                "sum_bv",
-                "over_bonus",
-                "created_at",
-                "updated_at",
-            ]
-
-            ws.append(headers)
-
-            for r in rows:
-                ws.append([
-                    r.get("kibetu"),
-                    r.get("root_code"),
-                    r.get("root_name"),
-                    r.get("down_code"),
-                    r.get("down_name"),
-                    r.get("tree_level"),
-                    r.get("match_count"),
-                    r.get("rate"),
-                    r.get("sum_bv"),
-                    r.get("over_bonus"),
-                    r.get("created_at"),
-                    r.get("updated_at"),
-                ])
-
-            response = HttpResponse(
-                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            kibetu = context.get("selected_kibetu", "")
+            filename = build_bonus_export_filename("repurchase_over_bonus_result", kibetu=kibetu)
+            return export_search_rows_to_excel(
+                rows,
+                SEARCH_EXPORT_COLUMNS["repurchase_over_bonus"],
+                "RepurchaseOverBonusResult",
+                filename,
             )
-
-            response["Content-Disposition"] = (
-                f'attachment; filename="repurchase_over_bonus_result_{selected_kibetu}.xlsx"'
-            )
-
-            wb.save(response)
-            return response
 
         return self.render_to_response(context)
 
@@ -4245,15 +4332,11 @@ class S_RepurchaseOverBonusView(generic.ListView):
         ctx = super().get_context_data(**kwargs)
 
         selected_kibetu = self.request.GET.get("kibetu", "").strip()
-        root_code = self.request.GET.get("root_code", "").strip()
-        down_code = self.request.GET.get("down_code", "").strip()
 
         if not selected_kibetu and self.object_list:
             selected_kibetu = self.object_list[0].kibetu
 
         ctx["selected_kibetu"] = selected_kibetu
-        ctx["root_code"] = root_code
-        ctx["down_code"] = down_code
         ctx["rows"] = []
         ctx["selected_period"] = None
 
@@ -4271,6 +4354,26 @@ class S_RepurchaseOverBonusView(generic.ListView):
 
         ctx["selected_period"] = period
 
+        sort_ctx = get_bonus_sort_context(
+            self.request,
+            {
+                "kibetu": "kibetu",
+                "root_code": "root_code",
+                "root_name": "root_name",
+                "down_code": "down_code",
+                "down_name": "down_name",
+                "tree_level": "tree_level",
+                "match_count": "match_count",
+                "rate": "rate",
+                "sum_bv": "sum_bv",
+                "over_bonus": "over_bonus",
+                "created_at": "created_at",
+                "updated_at": "updated_at",
+            },
+            default_sort="root_code",
+        )
+        ctx.update(sort_ctx)
+
         sql = """
             SELECT
                 *
@@ -4279,25 +4382,19 @@ class S_RepurchaseOverBonusView(generic.ListView):
         """
 
         params = [selected_kibetu]
-
-        if root_code:
-            sql += """
-                AND root_code LIKE %s
-            """
-            params.append(f"%{root_code}%")
-
-        if down_code:
-            sql += """
-                AND down_code LIKE %s
-            """
-            params.append(f"%{down_code}%")
-
-        sql += """
-            ORDER BY
-                root_code,
-                tree_level,
-                down_code
-        """
+        sql, filter_values = apply_like_filters(
+            sql,
+            params,
+            self.request,
+            {
+                "root_code": "root_code",
+                "down_code": "down_code",
+                "root_name": "root_name",
+                "down_name": "down_name",
+            },
+        )
+        ctx.update(filter_values)
+        sql += "\n            ORDER BY " + sort_ctx["order_sql"]
 
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql, params)
@@ -4753,54 +4850,15 @@ class S_ThreeStarGlobalBonusView(generic.ListView):
         context = self.get_context_data()
 
         if request.GET.get("export") == "excel":
-
             rows = context.get("rows", [])
-
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "ThreeStarGlobalBonus"
-
-            headers = [
-                "id",
-                "kibetu",
-                "jwoa_code",
-                "jwoa_name",
-                "title_id",
-                "score",
-                "total_over_bv",
-                "one_score_bonus",
-                "bonus_amount",
-                "created_at",
-                "updated_at",
-            ]
-
-            ws.append(headers)
-
-            for r in rows:
-                ws.append([
-                    r.get("id"),
-                    r.get("kibetu"),
-                    r.get("jwoa_code"),
-                    r.get("jwoa_name"),
-                    r.get("title_id"),
-                    r.get("score"),
-                    r.get("total_over_bv"),
-                    r.get("one_score_bonus"),
-                    r.get("bonus_amount"),
-                    r.get("created_at"),
-                    r.get("updated_at"),
-                ])
-
-            response = HttpResponse(
-                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            kibetu = context.get("selected_kibetu", "")
+            filename = build_bonus_export_filename("three_star_global_bonus_result", kibetu=kibetu)
+            return export_search_rows_to_excel(
+                rows,
+                SEARCH_EXPORT_COLUMNS["three_star_global_bonus"],
+                "ThreeStarGlobalBonus",
+                filename,
             )
-
-            response["Content-Disposition"] = (
-                'attachment; filename="three_star_global_bonus_result.xlsx"'
-            )
-
-            wb.save(response)
-            return response
 
         return self.render_to_response(context)
 
@@ -4831,6 +4889,25 @@ class S_ThreeStarGlobalBonusView(generic.ListView):
 
         ctx["selected_period"] = period
 
+        sort_ctx = get_bonus_sort_context(
+            self.request,
+            {
+                "kibetu": "kibetu",
+                "jwoa_code": "jwoa_code",
+                "jwoa_name": "jwoa_name",
+                "title_id": "title_id",
+                "score": "score",
+                "total_over_bv": "total_over_bv",
+                "one_score_bonus": "one_score_bonus",
+                "bonus_amount": "bonus_amount",
+                "created_at": "created_at",
+                "updated_at": "updated_at",
+            },
+            default_sort="bonus_amount",
+            default_direction="desc",
+        )
+        ctx.update(sort_ctx)
+
         sql = """
             SELECT
                 id,
@@ -4846,11 +4923,23 @@ class S_ThreeStarGlobalBonusView(generic.ListView):
                 updated_at
             FROM bonus_db.B_three_star_global_bonus_result
             WHERE kibetu = %s
-            ORDER BY bonus_amount DESC, jwoa_code
         """
 
+        params = [selected_kibetu]
+        sql, filter_values = apply_like_filters(
+            sql,
+            params,
+            self.request,
+            {
+                "jwoa_code": "jwoa_code",
+                "jwoa_name": "jwoa_name",
+            },
+        )
+        ctx.update(filter_values)
+        sql += "\n            ORDER BY " + sort_ctx["order_sql"]
+
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, [selected_kibetu])
+            cursor.execute(sql, params)
             logger.info(f"Executed SQL: {cursor._executed}")
 
             cols = [c[0] for c in cursor.description]
@@ -5543,54 +5632,14 @@ class S_WeekBonusView(generic.ListView):
 
         if request.GET.get("export") == "excel":
             rows = context.get("rows", [])
-
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "WeekBonusResult"
-
-            headers = [
-                "期別",
-                "会員コード",
-                "会員名",
-                "ドライブボーナス",
-                "ベーシックボーナス",
-                "マッチングボーナス",
-                "週間ボーナス",
-            ]
-            ws.append(headers)
-
-            for r in rows:
-                ws.append([
-                    r.get("kibetu"),
-                    r.get("jwoa_code"),
-                    r.get("jwoa_name"),
-                    r.get("drive_bonus"),
-                    r.get("basic_bonus"),
-                    r.get("matching_bonus"),
-                    r.get("week_bonus"),
-                ])
-
-            ws.column_dimensions["A"].width = 15
-            ws.column_dimensions["B"].width = 15
-            ws.column_dimensions["C"].width = 25
-            ws.column_dimensions["D"].width = 18
-            ws.column_dimensions["E"].width = 20
-            ws.column_dimensions["F"].width = 20
-            ws.column_dimensions["G"].width = 18
-
-            for row_idx in range(2, ws.max_row + 1):
-                ws[f"D{row_idx}"].number_format = '#,##0.00'
-                ws[f"E{row_idx}"].number_format = '#,##0.00'
-                ws[f"F{row_idx}"].number_format = '#,##0.00'
-                ws[f"G{row_idx}"].number_format = '#,##0.00'
-
-            response = HttpResponse(
-                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            kibetu = context.get("selected_kibetu", "")
+            filename = build_bonus_export_filename("week_bonus_result", kibetu=kibetu)
+            return export_search_rows_to_excel(
+                rows,
+                SEARCH_EXPORT_COLUMNS["week_bonus"],
+                "WeekBonusResult",
+                filename,
             )
-            response["Content-Disposition"] = 'attachment; filename="week_bonus_result.xlsx"'
-
-            wb.save(response)
-            return response
 
         return self.render_to_response(context)
 
@@ -5616,6 +5665,24 @@ class S_WeekBonusView(generic.ListView):
 
         ctx["selected_period"] = period
 
+        sort_ctx = get_bonus_sort_context(
+            self.request,
+            {
+                "kibetu": "kibetu",
+                "jwoa_code": "jwoa_code",
+                "jwoa_name": "jwoa_name",
+                "drive_bonus": "drive_bonus",
+                "basic_bonus": "basic_bonus",
+                "matching_bonus": "matching_bonus",
+                "week_bonus": "week_bonus",
+                "created_at": "created_at",
+                "updated_at": "updated_at",
+            },
+            default_sort="week_bonus",
+            default_direction="desc",
+        )
+        ctx.update(sort_ctx)
+
         sql = """
             SELECT
                 id,
@@ -5630,11 +5697,23 @@ class S_WeekBonusView(generic.ListView):
                 updated_at
             FROM bonus_db.B_week_bonus_result
             WHERE kibetu = %s
-            ORDER BY week_bonus DESC, jwoa_code
         """
 
+        params = [selected_kibetu]
+        sql, filter_values = apply_like_filters(
+            sql,
+            params,
+            self.request,
+            {
+                "jwoa_code": "jwoa_code",
+                "jwoa_name": "jwoa_name",
+            },
+        )
+        ctx.update(filter_values)
+        sql += "\n            ORDER BY " + sort_ctx["order_sql"]
+
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, [selected_kibetu])
+            cursor.execute(sql, params)
             logger.info(f"Executed SQL: {cursor._executed}")
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
@@ -5828,58 +5907,14 @@ class S_MonthBonusView(generic.ListView):
 
         if request.GET.get("export") == "excel":
             rows = context.get("rows", [])
-
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "MonthBonusResult"
-
-            headers = [
-                "期別",
-                "会員コード",
-                "会員名",
-                "タイトルボーナス",
-                "リピート購入オーバーボーナス",
-                "差額ボーナス",
-                "３つ星ダイヤグローバル配当",
-                "大使ダイヤグローバル配当",
-                "月間ボーナス",
-            ]
-            ws.append(headers)
-
-            for r in rows:
-                ws.append([
-                    r.get("kibetu"),
-                    r.get("jwoa_code"),
-                    r.get("jwoa_name"),
-                    r.get("title_bonus"),
-                    r.get("repurchase_over_bonus"),
-                    r.get("title_diff_bonus"),
-                    r.get("three_star_diamond_global_bonus"),
-                    r.get("crown_three_star_diamond_global_bonus"),
-                    r.get("month_bonus"),
-                ])
-
-            ws.column_dimensions["A"].width = 15
-            ws.column_dimensions["B"].width = 15
-            ws.column_dimensions["C"].width = 25
-            ws.column_dimensions["D"].width = 18
-            ws.column_dimensions["E"].width = 28
-            ws.column_dimensions["F"].width = 18
-            ws.column_dimensions["G"].width = 30
-            ws.column_dimensions["H"].width = 30
-            ws.column_dimensions["I"].width = 18
-
-            for row_idx in range(2, ws.max_row + 1):
-                for col in ["D", "E", "F", "G", "H", "I"]:
-                    ws[f"{col}{row_idx}"].number_format = '#,##0'
-
-            response = HttpResponse(
-                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            kibetu = context.get("selected_kibetu", "")
+            filename = build_bonus_export_filename("month_bonus_result", kibetu=kibetu)
+            return export_search_rows_to_excel(
+                rows,
+                SEARCH_EXPORT_COLUMNS["month_bonus"],
+                "MonthBonusResult",
+                filename,
             )
-            response["Content-Disposition"] = 'attachment; filename="month_bonus_result.xlsx"'
-
-            wb.save(response)
-            return response
 
         return self.render_to_response(context)
 
@@ -5909,6 +5944,26 @@ class S_MonthBonusView(generic.ListView):
 
         ctx["selected_period"] = period
 
+        sort_ctx = get_bonus_sort_context(
+            self.request,
+            {
+                "kibetu": "kibetu",
+                "jwoa_code": "jwoa_code",
+                "jwoa_name": "jwoa_name",
+                "title_bonus": "title_bonus",
+                "repurchase_over_bonus": "repurchase_over_bonus",
+                "title_diff_bonus": "title_diff_bonus",
+                "three_star_diamond_global_bonus": "three_star_diamond_global_bonus",
+                "crown_three_star_diamond_global_bonus": "crown_three_star_diamond_global_bonus",
+                "month_bonus": "month_bonus",
+                "created_at": "created_at",
+                "updated_at": "updated_at",
+            },
+            default_sort="month_bonus",
+            default_direction="desc",
+        )
+        ctx.update(sort_ctx)
+
         sql = """
             SELECT
                 id,
@@ -5925,11 +5980,23 @@ class S_MonthBonusView(generic.ListView):
                 updated_at
             FROM bonus_db.B_month_bonus_result
             WHERE kibetu = %s
-            ORDER BY month_bonus DESC, jwoa_code
         """
 
+        params = [selected_kibetu]
+        sql, filter_values = apply_like_filters(
+            sql,
+            params,
+            self.request,
+            {
+                "jwoa_code": "jwoa_code",
+                "jwoa_name": "jwoa_name",
+            },
+        )
+        ctx.update(filter_values)
+        sql += "\n            ORDER BY " + sort_ctx["order_sql"]
+
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, [selected_kibetu])
+            cursor.execute(sql, params)
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
 

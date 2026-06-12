@@ -1,5 +1,5 @@
-{% extends 'base.html' %}
-{% load static %}
+﻿{% extends 'base.html' %}
+{% load static custom_filters %}
 
 {% block head %}
     <link href="{% static 'css/common.css' %}" rel="stylesheet">
@@ -21,9 +21,11 @@
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <h5 class="mb-3">【ボーナス検索 - マッチングボーナス】</h5>
+          <h5 class="page-title mb-3">【ボーナス検索 - マッチングボーナス】</h5>
 
           <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+            <input type="hidden" name="sort" value="{{ sort|default:'' }}">
+            <input type="hidden" name="direction" value="{{ direction|default:'' }}">
             <div>
               <label class="form-label mb-0 small text-muted">期別</label>
               <select name="kibetu" class="form-select">
@@ -36,22 +38,38 @@
               </select>
             </div>
 
+            <div>
+              <label class="form-label mb-0 small text-muted">紹介者コード</label>
+              <input type="text" name="introducer_code" class="form-control"
+                     value="{{ introducer_code }}" placeholder="例：JP00000000">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">紹介者名</label>
+              <input type="text" name="introducer_name" class="form-control"
+                     value="{{ introducer_name }}" placeholder="部分一致">
+            </div>
+
             <button type="submit" class="btn btn-primary">表示</button>
-            <a class="btn btn-outline-secondary" href="{% url 'connect:drive_bonus' %}">リセット</a>
+            <a class="btn btn-outline-secondary" href="{% url 'connect:s_matching_bonus' %}">リセット</a>
             <button type="submit" name="export" value="excel" class="btn btn-success">
               Excel出力
             </button>
           </form>
 
-          {% if selected_period %}
-            <div class="text-muted small mt-3">
-              選択中：
-              <span class="badge bg-info text-dark">{{ selected_period.kibetu }}</span>
-              <span class="badge bg-secondary">{{ selected_period.st_date }} ～ {{ selected_period.end_date }}</span>
-            </div>
-          {% else %}
-            <div class="text-muted small mt-3">期別を選択してください</div>
+          <div class="selection-indicator-group mt-3">
+          {% selection_from_period selected_period empty_message="期別を選択してください" %}
+          {% if introducer_code or introducer_name %}
+          <div class="selection-indicator">
+            {% if introducer_code %}
+              <span class="selection-indicator__badge selection-indicator__badge--introducer-code badge badge-pill">紹介者コード：{{ introducer_code }}</span>
+            {% endif %}
+            {% if introducer_name %}
+              <span class="selection-indicator__badge selection-indicator__badge--introducer-name badge badge-pill">紹介者名：{{ introducer_name }}</span>
+            {% endif %}
+          </div>
           {% endif %}
+          </div>
         </div>
       </div>
 
@@ -68,13 +86,13 @@
               <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                   <tr>
-                    <th>期別</th>
-                    <th>紹介者コード</th>
-                    <th>紹介者名</th>
-                    <th>直紹介アクティブ人数</th>
-                    <th>ベーシックBV</th>
-                    <th>マッチングBV</th>
-                    <th>作成日時</th>
+                    {% sortable_th "kibetu" "期別" %}
+                    {% sortable_th "introducer_code" "紹介者コード" %}
+                    {% sortable_th "introducer_name" "紹介者名" %}
+                    {% sortable_th "active_count" "直紹介アクティブ人数" %}
+                    {% sortable_th "basic_bv" "ベーシックBV" %}
+                    {% sortable_th "matching_bv" "マッチングBV" %}
+                    {% sortable_th "created_at" "作成日時" %}
                   </tr>
                 </thead>
                 <tbody>

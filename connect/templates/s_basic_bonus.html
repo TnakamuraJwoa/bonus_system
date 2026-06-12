@@ -1,5 +1,5 @@
-{% extends 'base.html' %}
-{% load static %}
+﻿{% extends 'base.html' %}
+{% load static custom_filters %}
 
 {% block head %}
     <link href="{% static 'css/common.css' %}" rel="stylesheet">
@@ -21,9 +21,11 @@
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <h5 class="mb-3">【ボーナス検索 - ベーシックボーナス】</h5>
+          <h5 class="page-title mb-3">【ボーナス検索 - ベーシックボーナス】</h5>
 
           <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+            <input type="hidden" name="sort" value="{{ sort|default:'' }}">
+            <input type="hidden" name="direction" value="{{ direction|default:'' }}">
             <div>
               <label class="form-label mb-0 small text-muted">期別</label>
               <select name="kibetu" class="form-select">
@@ -36,22 +38,56 @@
               </select>
             </div>
 
+            <div>
+              <label class="form-label mb-0 small text-muted">上位者コード</label>
+              <input type="text" name="placement_code" class="form-control"
+                     value="{{ placement_code }}" placeholder="例：JP00000000">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">購入者コード</label>
+              <input type="text" name="purchaser_code" class="form-control"
+                     value="{{ purchaser_code }}" placeholder="例：JP00000000">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">購入者名</label>
+              <input type="text" name="purchaser_name" class="form-control"
+                     value="{{ purchaser_name }}" placeholder="部分一致">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">ラインコード</label>
+              <input type="text" name="line_code" class="form-control"
+                     value="{{ line_code }}" placeholder="例：JP00000000">
+            </div>
+
             <button type="submit" class="btn btn-primary">表示</button>
-            <a class="btn btn-outline-secondary" href="{% url 'connect:drive_bonus' %}">リセット</a>
+            <a class="btn btn-outline-secondary" href="{% url 'connect:s_basic_bonus' %}">リセット</a>
             <button type="submit" name="export" value="excel" class="btn btn-success">
               Excel出力
             </button>
           </form>
 
-          {% if selected_period %}
-            <div class="text-muted small mt-3">
-              選択中：
-              <span class="badge bg-info text-dark">{{ selected_period.kibetu }}</span>
-              <span class="badge bg-secondary">{{ selected_period.st_date }} ～ {{ selected_period.end_date }}</span>
-            </div>
-          {% else %}
-            <div class="text-muted small mt-3">期別を選択してください</div>
+          <div class="selection-indicator-group mt-3">
+          {% selection_from_period selected_period empty_message="期別を選択してください" %}
+          {% if placement_code or purchaser_code or purchaser_name or line_code %}
+          <div class="selection-indicator">
+            {% if placement_code %}
+              <span class="selection-indicator__badge selection-indicator__badge--placement badge badge-pill">上位者コード：{{ placement_code }}</span>
+            {% endif %}
+            {% if purchaser_code %}
+              <span class="selection-indicator__badge selection-indicator__badge--purchaser-code badge badge-pill">購入者コード：{{ purchaser_code }}</span>
+            {% endif %}
+            {% if purchaser_name %}
+              <span class="selection-indicator__badge selection-indicator__badge--purchaser-name badge badge-pill">購入者名：{{ purchaser_name }}</span>
+            {% endif %}
+            {% if line_code %}
+              <span class="selection-indicator__badge selection-indicator__badge--line badge badge-pill">ラインコード：{{ line_code }}</span>
+            {% endif %}
+          </div>
           {% endif %}
+          </div>
         </div>
       </div>
 
@@ -68,18 +104,18 @@
               <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                   <tr>
-                    <th>期別</th>
-                    <th>上位者コード</th>
-                    <th>上位者名</th>
-                    <th>上位者ランク</th>
-                    <th>ラインコード</th>
-                    <th>購入者コード</th>
-                    <th>購入者名</th>
-                    <th>BV合計</th>
-                    <th>レート</th>
-                    <th>ボーナス金額</th>
-                    <th>ブルーダイヤ判定</th>
-                    <th>作成日時</th>
+                    {% sortable_th "kibetu" "期別" %}
+                    {% sortable_th "placement_code" "上位者コード" %}
+                    {% sortable_th "placement_name" "上位者名" %}
+                    {% sortable_th "placement_rank" "上位者ランク" %}
+                    {% sortable_th "line_code" "ラインコード" %}
+                    {% sortable_th "purchaser_code" "購入者コード" %}
+                    {% sortable_th "purchaser_name" "購入者名" %}
+                    {% sortable_th "sum_bv" "BV合計" %}
+                    {% sortable_th "bonus_rate" "レート" %}
+                    {% sortable_th "bonus_amount" "ボーナス金額" %}
+                    {% sortable_th "blue_daiya_flg" "ブルーダイヤ判定" %}
+                    {% sortable_th "created_at" "作成日時" %}
                   </tr>
                 </thead>
                 <tbody>

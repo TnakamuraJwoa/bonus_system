@@ -1,5 +1,5 @@
-{% extends 'base.html' %}
-{% load static %}
+﻿{% extends 'base.html' %}
+{% load static custom_filters %}
 
 {% block head %}
     <link href="{% static 'css/common.css' %}" rel="stylesheet">
@@ -24,7 +24,7 @@
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <h5 class="mb-3">【ボーナス検索 - ドライブボーナス】</h5>
+          <h5 class="page-title mb-3">【ボーナス検索 - ドライブボーナス】</h5>
 
           <form method="get" class="d-flex gap-3 align-items-end mb-0 flex-wrap">
 
@@ -100,28 +100,21 @@
 
           </form>
 
-          <div class="text-muted small mt-3">
-
+          <div class="selection-indicator-group mt-3">
+            <span class="selection-indicator__label mr-1">選択中：</span>
             {% if selected_kibetu_list %}
               {% for kibetu in selected_kibetu_list %}
-                <span class="badge bg-info text-dark">{{ kibetu }}</span>
+                <span class="selection-indicator__badge selection-indicator__badge--kibetu badge badge-pill">{{ kibetu }}</span>
               {% endfor %}
             {% else %}
-              <span class="badge bg-secondary">期別：指定なし</span>
+              <span class="selection-indicator__badge selection-indicator__badge--kibetu-none badge badge-pill">期別：指定なし</span>
             {% endif %}
-
             {% if search_introducer_code %}
-              <span class="badge bg-success">
-                紹介者ID：{{ search_introducer_code }}
-              </span>
+              <span class="selection-indicator__badge selection-indicator__badge--introducer-code badge badge-pill">紹介者ID：{{ search_introducer_code }}</span>
             {% endif %}
-
             {% if search_jwoa_code %}
-              <span class="badge bg-primary">
-                会員ID：{{ search_jwoa_code }}
-              </span>
+              <span class="selection-indicator__badge selection-indicator__badge--member-code badge badge-pill">会員ID：{{ search_jwoa_code }}</span>
             {% endif %}
-
           </div>
 
         </div>
@@ -148,77 +141,13 @@
                 <thead class="table-light"
                        style="position: sticky; top: 0; z-index: 1;">
                   <tr>
-
-                    <th class="text-center">
-                      <a class="text-decoration-none text-dark"
-                         href="?{% for k in selected_kibetu_list %}kibetu={{ k }}&{% endfor %}introducer_code={{ search_introducer_code }}&jwoa_code={{ search_jwoa_code }}&sort=kibetu&direction={% if sort == 'kibetu' %}{{ next_direction }}{% else %}asc{% endif %}">
-                        期別
-                        {% if sort == 'kibetu' %}
-                          {% if direction == 'asc' %}▲{% else %}▼{% endif %}
-                        {% endif %}
-                      </a>
-                    </th>
-
-                    <th class="text-center">
-                      <a class="text-decoration-none text-dark"
-                         href="?{% for k in selected_kibetu_list %}kibetu={{ k }}&{% endfor %}introducer_code={{ search_introducer_code }}&jwoa_code={{ search_jwoa_code }}&sort=title_name&direction={% if sort == 'title_name' %}{{ next_direction }}{% else %}asc{% endif %}">
-                        紹介者タイトル
-                        {% if sort == 'title_name' %}
-                          {% if direction == 'asc' %}▲{% else %}▼{% endif %}
-                        {% endif %}
-                      </a>
-                    </th>
-
-                    <th class="text-center">
-                      <a class="text-decoration-none text-dark"
-                         href="?{% for k in selected_kibetu_list %}kibetu={{ k }}&{% endfor %}introducer_code={{ search_introducer_code }}&jwoa_code={{ search_jwoa_code }}&sort=introducer_code&direction={% if sort == 'introducer_code' %}{{ next_direction }}{% else %}asc{% endif %}">
-                        紹介者ID
-                        {% if sort == 'introducer_code' %}
-                          {% if direction == 'asc' %}▲{% else %}▼{% endif %}
-                        {% endif %}
-                      </a>
-                    </th>
-
-                    <th class="text-center">
-                      <a class="text-decoration-none text-dark"
-                         href="?{% for k in selected_kibetu_list %}kibetu={{ k }}&{% endfor %}introducer_code={{ search_introducer_code }}&jwoa_code={{ search_jwoa_code }}&sort=jwoa_code&direction={% if sort == 'jwoa_code' %}{{ next_direction }}{% else %}asc{% endif %}">
-                        会員ID
-                        {% if sort == 'jwoa_code' %}
-                          {% if direction == 'asc' %}▲{% else %}▼{% endif %}
-                        {% endif %}
-                      </a>
-                    </th>
-
-                    <th class="text-center">
-                      <a class="text-decoration-none text-dark"
-                         href="?{% for k in selected_kibetu_list %}kibetu={{ k }}&{% endfor %}introducer_code={{ search_introducer_code }}&jwoa_code={{ search_jwoa_code }}&sort=jwoa_name&direction={% if sort == 'jwoa_name' %}{{ next_direction }}{% else %}asc{% endif %}">
-                        会員名
-                        {% if sort == 'jwoa_name' %}
-                          {% if direction == 'asc' %}▲{% else %}▼{% endif %}
-                        {% endif %}
-                      </a>
-                    </th>
-
-                    <th class="text-center">
-                      <a class="text-decoration-none text-dark"
-                         href="?{% for k in selected_kibetu_list %}kibetu={{ k }}&{% endfor %}introducer_code={{ search_introducer_code }}&jwoa_code={{ search_jwoa_code }}&sort=sum_bv&direction={% if sort == 'sum_bv' %}{{ next_direction }}{% else %}asc{% endif %}">
-                        BV合計
-                        {% if sort == 'sum_bv' %}
-                          {% if direction == 'asc' %}▲{% else %}▼{% endif %}
-                        {% endif %}
-                      </a>
-                    </th>
-
-                    <th class="text-center">
-                      <a class="text-decoration-none text-dark"
-                         href="?{% for k in selected_kibetu_list %}kibetu={{ k }}&{% endfor %}introducer_code={{ search_introducer_code }}&jwoa_code={{ search_jwoa_code }}&sort=sum_bonus_amount&direction={% if sort == 'sum_bonus_amount' %}{{ next_direction }}{% else %}asc{% endif %}">
-                        報酬
-                        {% if sort == 'sum_bonus_amount' %}
-                          {% if direction == 'asc' %}▲{% else %}▼{% endif %}
-                        {% endif %}
-                      </a>
-                    </th>
-
+                    {% sortable_th "kibetu" "期別" %}
+                    {% sortable_th "title_name" "紹介者タイトル" %}
+                    {% sortable_th "introducer_code" "紹介者ID" %}
+                    {% sortable_th "jwoa_code" "会員ID" %}
+                    {% sortable_th "jwoa_name" "会員名" %}
+                    {% sortable_th "sum_bv" "BV合計" %}
+                    {% sortable_th "sum_bonus_amount" "報酬" %}
                   </tr>
                 </thead>
 

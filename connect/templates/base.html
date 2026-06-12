@@ -5,10 +5,15 @@
 <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}{% endblock %}</title>
+    <title>{% block title %}Bonus System{% endblock %}</title>
 
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <link href="{% static 'css/base_style.css' %}" rel="stylesheet"/>
+    <link href="{% static 'css/theme.css' %}?v=3" rel="stylesheet"/>
+    <link href="{% static 'css/common.css' %}?v=9" rel="stylesheet"/>
     <!-- Bootstrap CSS -->
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
     <link href="{% static 'vendor/bootstrap.min.css' %}" rel="stylesheet"/>
@@ -22,8 +27,8 @@
 <body>
 <div id="wrapper">
     <!-- Navigation-->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark px-3">
-        <a class="navbar-brand brand-saas" href="#">
+    <nav class="navbar navbar-expand-lg app-navbar px-3">
+        <a class="navbar-brand brand-saas d-flex align-items-center" href="{% if user.is_authenticated %}{% url 'connect:users' %}{% else %}{% url 'account_login' %}{% endif %}">
             <span class="logo-box"></span>
             Bonus System
         </a>
@@ -137,8 +142,6 @@
         </footer>
     </footer>
 </div>
-</body>
-</html>
 
 <script>
 document.addEventListener("DOMContentLoaded", function(){
@@ -157,5 +160,75 @@ document.addEventListener("DOMContentLoaded", function(){
 
     },3500);
 
+    var numHeaderPattern = /(件数|合計|金額|報酬|BV|ボーナス|ランク|rate|level|total|sum|bonus|bv|title_id|score|amount|flg|count|rank|basic_bv|matching_bv|income_bv|one_score|人数|レート|配当|差額|tree_level|match_level|pay_bonus|over_bonus|month_bonus|week_bonus|drive_bonus|match_count|active_count|sum_bv|bonus_rate|bonus_amount|期別|kibetu|over_bv|three_star|crown_|repurchase|title_diff|title_bonus|matching_bonus|basic_bonus|placement_rank|blue_daiya|グループID|ID)/i;
+    var dateHeaderPattern = /(日付|date|日時|時刻|時間|支払|開始|終了|登録|更新|決済|created|updated|payment|deposit|order_at|st_date|end_date|購入日)/i;
+
+    function isNumericValue(text) {
+        text = text.trim();
+        if (!text || text === "-") {
+            return false;
+        }
+        var normalized = text.replace(/,/g, "");
+        return /^-?\d+(\.\d+)?%?$/.test(normalized);
+    }
+
+    function isDateValue(text) {
+        text = text.trim();
+        if (!text) {
+            return false;
+        }
+        return /^\d{4}[-\/年]\d{1,2}([-\/月]\d{1,2}(日)?)?(\s+\d{1,2}:\d{2}(:\d{2})?)?$/.test(text)
+            || /^\d{4}-\d{2}-\d{2}/.test(text);
+    }
+
+    function classifyColumn(headerText) {
+        if (numHeaderPattern.test(headerText)) {
+            return "col-num";
+        }
+        if (dateHeaderPattern.test(headerText)) {
+            return "col-date";
+        }
+        return null;
+    }
+
+    document.querySelectorAll(".table").forEach(function(table) {
+        var headers = table.querySelectorAll("thead th");
+        var columnClasses = [];
+
+        headers.forEach(function(th, index) {
+            var text = th.textContent.replace(/[\u25b2\u25bc]/g, "").trim();
+            columnClasses[index] = classifyColumn(text);
+        });
+
+        table.querySelectorAll("tbody tr").forEach(function(row) {
+            Array.from(row.children).forEach(function(cell, index) {
+                if (cell.tagName !== "TD") {
+                    return;
+                }
+                if (cell.classList.contains("text-start") || cell.classList.contains("text-left")) {
+                    return;
+                }
+
+                var value = cell.textContent.trim();
+                var colClass = null;
+
+                if (isDateValue(value)) {
+                    colClass = "col-date";
+                } else if (isNumericValue(value)) {
+                    colClass = "col-num";
+                } else {
+                    colClass = columnClasses[index];
+                }
+
+                if (colClass) {
+                    cell.classList.add(colClass);
+                }
+            });
+        });
+    });
+
 });
 </script>
+{% block script %}{% endblock %}
+</body>
+</html>

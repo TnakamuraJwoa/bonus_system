@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static custom_filters %}
 
 {% block contents %}
 
@@ -28,11 +28,7 @@
 
   <!-- ② 選択された期間表示 -->
   {% if selected_period %}
-      <div class="alert alert-info">
-          選択中：
-          <strong>{{ selected_period.kibetu }}</strong>
-          （{{ selected_period.st_date }} ～ {{ selected_period.end_date }}）
-      </div>
+      {% selection_from_period selected_period %}
   {% endif %}
 
   <!-- ③ 期間内データ表示 -->

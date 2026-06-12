@@ -1,6 +1,5 @@
-{% extends 'base.html' %}
-{% load static %}
-{% load custom_filters %}
+﻿{% extends 'base.html' %}
+{% load static custom_filters %}
 
 {% block contents %}
 
@@ -22,10 +21,8 @@
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <div class="d-flex align-items-center mb-3 flex-wrap gap-2">
-            <h5 class="mb-0">【設定 - ユーザーランク】</h5>
-            <span class="text-muted">※指定月のランクを登録</span>
-          </div>
+          <h5 class="page-title mb-2">【設定 - ユーザーランク】</h5>
+          <p class="text-muted mb-3">※指定月のランクを登録</p>
 
           <div class="mb-2">
             <span class="fw-bold">対象年月を選択</span>
@@ -95,10 +92,8 @@
           </form>
 
           {% if selected_period %}
-          <div class="alert alert-info mt-3 mb-0">
-            選択中：
-            <strong>{{ selected_period.year }}年{{ selected_period.month }}月</strong>
-          </div>
+            {% jp_year_month_label selected_period.year selected_period.month as period_label %}
+            {% include "com/_selection_indicator.html" with date_text=period_label %}
           {% endif %}
         </div>
       </div>

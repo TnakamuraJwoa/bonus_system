@@ -1,5 +1,5 @@
-{% extends 'base.html' %}
-{% load static %}
+﻿{% extends 'base.html' %}
+{% load static custom_filters %}
 
 {% block head %}
     <link href="{% static 'css/common.css' %}" rel="stylesheet">
@@ -23,10 +23,12 @@
       <div class="card shadow-sm mb-3">
         <div class="card-body">
 
-          <h5 class="mb-3">【ボーナス検索 - 再購入オーバーボーナス】</h5>
+          <h5 class="page-title mb-3">【ボーナス検索 - 再購入オーバーボーナス】</h5>
 
           <form method="get"
                 class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+            <input type="hidden" name="sort" value="{{ sort|default:'' }}">
+            <input type="hidden" name="direction" value="{{ direction|default:'' }}">
 
             <div>
               <label class="form-label mb-0 small text-muted">
@@ -45,24 +47,46 @@
 
             <div>
               <label class="form-label mb-0 small text-muted">
-                root_code
+                root会員ID
               </label>
               <input type="text"
                      name="root_code"
                      class="form-control"
                      value="{{ root_code }}"
-                     placeholder="">
+                     placeholder="例：JP00000000">
             </div>
 
             <div>
               <label class="form-label mb-0 small text-muted">
-                down_code
+                root会員名
+              </label>
+              <input type="text"
+                     name="root_name"
+                     class="form-control"
+                     value="{{ root_name }}"
+                     placeholder="部分一致">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">
+                down会員ID
               </label>
               <input type="text"
                      name="down_code"
                      class="form-control"
                      value="{{ down_code }}"
-                     placeholder="">
+                     placeholder="例：JP00000000">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">
+                down会員名
+              </label>
+              <input type="text"
+                     name="down_name"
+                     class="form-control"
+                     value="{{ down_name }}"
+                     placeholder="部分一致">
             </div>
 
             <button type="submit" class="btn btn-primary">
@@ -83,22 +107,25 @@
 
           </form>
 
-          {% if selected_period %}
-            <div class="text-muted small mt-3">
-              選択中：
-              <span class="badge bg-info text-dark">
-                {{ selected_period.kibetu }}
-              </span>
-
-              <span class="badge bg-secondary">
-                {{ selected_period.payment_date }}
-              </span>
-            </div>
-          {% else %}
-            <div class="text-muted small mt-3">
-              期別を選択してください
-            </div>
+          <div class="selection-indicator-group mt-3">
+          {% selection_from_period selected_period empty_message="期別を選択してください" %}
+          {% if root_code or root_name or down_code or down_name %}
+          <div class="selection-indicator">
+            {% if root_code %}
+              <span class="selection-indicator__badge selection-indicator__badge--root-code badge badge-pill">root会員ID：{{ root_code }}</span>
+            {% endif %}
+            {% if root_name %}
+              <span class="selection-indicator__badge selection-indicator__badge--root-name badge badge-pill">root会員名：{{ root_name }}</span>
+            {% endif %}
+            {% if down_code %}
+              <span class="selection-indicator__badge selection-indicator__badge--down-code badge badge-pill">down会員ID：{{ down_code }}</span>
+            {% endif %}
+            {% if down_name %}
+              <span class="selection-indicator__badge selection-indicator__badge--down-name badge badge-pill">down会員名：{{ down_name }}</span>
+            {% endif %}
+          </div>
           {% endif %}
+          </div>
 
         </div>
       </div>
@@ -133,17 +160,18 @@
                        style="position: sticky; top: 0; z-index: 1;">
 
                   <tr>
-                    <th>kibetu</th>
-                    <th>root_code</th>
-                    <th>root_name</th>
-                    <th>down_code</th>
-                    <th>down_name</th>
-                    <th>tree_level</th>
-                    <th>rate</th>
-                    <th>sum_bv</th>
-                    <th>over_bonus</th>
-                    <th>created_at</th>
-                    <th>updated_at</th>
+                    {% sortable_th "kibetu" "kibetu" %}
+                    {% sortable_th "root_code" "root_code" %}
+                    {% sortable_th "root_name" "root_name" %}
+                    {% sortable_th "down_code" "down_code" %}
+                    {% sortable_th "down_name" "down_name" %}
+                    {% sortable_th "tree_level" "tree_level" %}
+                    {% sortable_th "match_count" "match_count" %}
+                    {% sortable_th "rate" "rate" %}
+                    {% sortable_th "sum_bv" "sum_bv" %}
+                    {% sortable_th "over_bonus" "over_bonus" %}
+                    {% sortable_th "created_at" "created_at" %}
+                    {% sortable_th "updated_at" "updated_at" %}
                   </tr>
 
                 </thead>
@@ -159,6 +187,10 @@
 
                       <td class="text-end">
                         {{ r.tree_level }}
+                      </td>
+
+                      <td class="text-end">
+                        {{ r.match_count }}
                       </td>
 
                       <td class="text-end">

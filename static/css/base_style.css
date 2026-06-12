@@ -1,19 +1,21 @@
 .dropdown-item:hover,
 .dropdown-item:focus {
-    background-color: darkgray !important;
-    color: black !important;
+    background-color: #eef2ff !important;
+    color: #4f46e5 !important;
 }
 
 .card-group > .card {
-    border: 1px solid rgba(0, 0, 0, .125) !important;
+    border: 1px solid #e2e8f0 !important;
 }
 
 .my-btn1 {
     color: #fff !important;
-    background-color: #ee0979 !important;
-    border-color: #ee0979 !important;
+    background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%) !important;
+    border-color: #4f46e5 !important;
     width: 131px;
     height: 41px;
+    border-radius: 8px;
+    font-weight: 600;
 }
 
 body, #wrapper {
@@ -27,8 +29,8 @@ footer {
 }
 
 .my-mt {
-    margin-top: 3.5rem;
-    margin-bottom: 50px !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
 }
 
 .messages-container {
@@ -43,32 +45,26 @@ footer {
     top: 20% !important;
 }
 
-footer > P {
-    color: #5e5e5e;
+.alert-container {
+    position: fixed;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    width: min(90vw, 900px);
 }
 
-.alert-container{
-  position: fixed;
-  top: 70px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 9999;
-  width: min(90vw, 900px);
-}
-
-.alert-container .alert{
-  margin-bottom: 10px;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+.alert-container .alert {
+    margin-bottom: 10px;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+    border-radius: 8px;
 }
 
 .brand-saas {
-  margin-bottom: 5px !important;
-  color: blanchedalmond !important;
-  font-size: 23.5px !important;
-  line-height: 1 !important;
-  letter-spacing: 0.5px !important;
+    margin-bottom: 0 !important;
 }
 
 .alert-success {
- height: 51px !important;
+    height: auto !important;
+    min-height: 51px;
 }
