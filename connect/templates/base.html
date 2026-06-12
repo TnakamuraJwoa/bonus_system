@@ -1,4 +1,4 @@
-{% load static %}
+{% load static custom_filters %}
 
 <!DOCTYPE html>
 <html lang="ja">
@@ -54,13 +54,11 @@
                     </a>
 
                     <div class="dropdown-menu">
-                        <a class="dropdown-item"
-                           href="{% url 'connect:s_drive_bonus' %}">
+                        <a class="dropdown-item" href="{% paired_bonus_url request.resolver_match.url_name 'search' 'individual' %}">
                             個人実績
                         </a>
 
-                        <a class="dropdown-item"
-                           href="{% url 'connect:s_week_bonus' %}">
+                        <a class="dropdown-item" href="{% paired_bonus_url request.resolver_match.url_name 'search' 'total' %}">
                             合計実績
                         </a>
                     </div>
@@ -78,13 +76,11 @@
                     </a>
 
                     <div class="dropdown-menu">
-                        <a class="dropdown-item"
-                           href="{% url 'connect:drive_bonus' %}">
+                        <a class="dropdown-item" href="{% paired_bonus_url request.resolver_match.url_name 'calc' 'individual' %}">
                             個人実績
                         </a>
 
-                        <a class="dropdown-item"
-                           href="{% url 'connect:week_bonus' %}">
+                        <a class="dropdown-item" href="{% paired_bonus_url request.resolver_match.url_name 'calc' 'total' %}">
                             合計実績
                         </a>
                     </div>
