@@ -4075,6 +4075,7 @@ class S_TitleDiffBonusView(generic.ListView):
 
         return ctx
 
+
 class RepurchaseOverBonusView(generic.ListView):
     template_name = "repurchase_over_bonus.html"
     context_object_name = "object_list"
@@ -4122,9 +4123,7 @@ class RepurchaseOverBonusView(generic.ListView):
 
             if not repurchase_over_bonus_rows:
                 messages.warning(request, "登録対象データがありません。")
-                return redirect(
-                    f"/repurchase_over_bonus/?kibetu={selected_kibetu}"
-                )
+                return redirect(f"/repurchase_over_bonus/?kibetu={selected_kibetu}")
 
             insert_sql, insert_params = (
                 register_sql.get_repurchase_over_bonus_insert_data(
@@ -4135,16 +4134,12 @@ class RepurchaseOverBonusView(generic.ListView):
 
             if not insert_params:
                 messages.warning(request, "登録対象データがありません。")
-                return redirect(
-                    f"/repurchase_over_bonus/?kibetu={selected_kibetu}"
-                )
+                return redirect(f"/repurchase_over_bonus/?kibetu={selected_kibetu}")
 
             with transaction.atomic(using="rds"):
                 with connections["rds"].cursor() as cursor:
-                    # 再購入オーバーボーナス登録
                     cursor.executemany(insert_sql, insert_params)
 
-                    # 登録履歴
                     history_sql = """
                         INSERT INTO bonus_db.bonus_register_history (
                             bonus_name,
@@ -4181,16 +4176,18 @@ class RepurchaseOverBonusView(generic.ListView):
             logger.exception("再購入オーバーボーナス結果登録エラー")
             messages.error(request, f"登録中にエラーが発生しました: {e}")
 
-        return redirect(
-            f"/repurchase_over_bonus/?kibetu={selected_kibetu}"
-        )
+        return redirect(f"/repurchase_over_bonus/?kibetu={selected_kibetu}")
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
-        selected_kibetu = self.request.GET.get("kibetu")
+        selected_kibetu = self.request.GET.get("kibetu", "").strip()
+        root_code = self.request.GET.get("root_code", "").strip()
+        down_code = self.request.GET.get("down_code", "").strip()
 
         ctx["selected_kibetu"] = selected_kibetu
+        ctx["root_code"] = root_code
+        ctx["down_code"] = down_code
         ctx["rows"] = []
         ctx["selected_period"] = None
 
@@ -4211,11 +4208,19 @@ class RepurchaseOverBonusView(generic.ListView):
         ctx["rows"] = self._get_repurchase_over_bonus_rows(
             selected_kibetu=selected_kibetu,
             period=period,
+            root_code=root_code,
+            down_code=down_code,
         )
 
         return ctx
 
-    def _get_repurchase_over_bonus_rows(self, selected_kibetu, period):
+    def _get_repurchase_over_bonus_rows(
+        self,
+        selected_kibetu,
+        period,
+        root_code="",
+        down_code="",
+    ):
         kibetu_year = period.year
         kibetu_month = period.month
 
@@ -4232,6 +4237,20 @@ class RepurchaseOverBonusView(generic.ListView):
             rows = [
                 dict(zip(cols, r))
                 for r in cursor.fetchall()
+            ]
+
+        if root_code:
+            root_code = root_code.upper()
+            rows = [
+                r for r in rows
+                if root_code in str(r.get("root_code", "")).upper()
+            ]
+
+        if down_code:
+            down_code = down_code.upper()
+            rows = [
+                r for r in rows
+                if down_code in str(r.get("down_code", "")).upper()
             ]
 
         return rows
@@ -4286,7 +4305,9 @@ class S_RepurchaseOverBonusView(generic.ListView):
                 "down_name",
                 "tree_level",
                 "match_count",
+                "rate",
                 "sum_bv",
+                "over_bonus",
                 "created_at",
                 "updated_at",
             ]
@@ -4302,7 +4323,9 @@ class S_RepurchaseOverBonusView(generic.ListView):
                     r.get("down_name"),
                     r.get("tree_level"),
                     r.get("match_count"),
+                    r.get("rate"),
                     r.get("sum_bv"),
+                    r.get("over_bonus"),
                     r.get("created_at"),
                     r.get("updated_at"),
                 ])
@@ -4353,17 +4376,7 @@ class S_RepurchaseOverBonusView(generic.ListView):
 
         sql = """
             SELECT
-                id,
-                kibetu,
-                root_code,
-                root_name,
-                down_code,
-                down_name,
-                tree_level,
-                match_count,
-                sum_bv,
-                created_at,
-                updated_at
+                *
             FROM bonus_db.B_repurchase_over_bonus_result
             WHERE kibetu = %s
         """
@@ -4402,6 +4415,7 @@ class S_RepurchaseOverBonusView(generic.ListView):
         ctx["rows"] = rows
 
         return ctx
+
 
 
 class UsersView(KeysetPaginationMixin, generic.TemplateView):

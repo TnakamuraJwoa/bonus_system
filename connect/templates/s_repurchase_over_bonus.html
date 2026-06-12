@@ -139,8 +139,9 @@
                     <th>down_code</th>
                     <th>down_name</th>
                     <th>tree_level</th>
-                    <th>match_count</th>
+                    <th>rate</th>
                     <th>sum_bv</th>
+                    <th>over_bonus</th>
                     <th>created_at</th>
                     <th>updated_at</th>
                   </tr>
@@ -161,11 +162,15 @@
                       </td>
 
                       <td class="text-end">
-                        {{ r.match_count }}
+                        {{ r.rate }}
                       </td>
 
                       <td class="text-end">
                         {{ r.sum_bv }}
+                      </td>
+
+                      <td class="text-end">
+                        {{ r.over_bonus }}
                       </td>
 
                       <td>{{ r.created_at }}</td>

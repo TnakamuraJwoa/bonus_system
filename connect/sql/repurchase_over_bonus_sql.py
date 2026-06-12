@@ -1,4 +1,5 @@
 REPURCHASE_OVER_BONUS_SQL = """
+
 WITH RECURSIVE
 
 repurchase_users AS (
@@ -25,7 +26,8 @@ repurchase_50bv_users AS (
     SELECT
         jwoa_code,
         send_bv_name AS jwoa_name,
-        SUM(bv) AS sum_bv
+        SUM(bv) AS sum_bv,
+        SUM(bv)-50 as custom_bv
     FROM repurchase_users
     GROUP BY
         jwoa_code,
@@ -53,7 +55,7 @@ tree AS (
             ELSE 0
         END AS match_count,
 
-        r50.sum_bv AS sum_bv
+        r50.custom_bv AS sum_bv
 
     FROM repurchase_100bv_users AS a
 
@@ -88,7 +90,7 @@ tree AS (
             ELSE 0
           END AS match_count,
 
-        r50.sum_bv AS sum_bv
+        r50.custom_bv AS sum_bv
 
     FROM tree AS a
 
@@ -104,21 +106,31 @@ tree AS (
 -- 再購入オーバーボーナス結果
 repurchase_over_bonus_result as (
 SELECT
- root_code,
- root_name,
- up_code,
- up_name,
- down_code,
- down_name,
- tree_level,
- match_count,
- sum_bv
+    root_code,
+    root_name,
+    up_code,
+    up_name,
+    down_code,
+    down_name,
+    tree_level,
+    match_count,
+    CASE
+        WHEN match_count in (1, 2, 4, 5, 7, 8) THEN 0.1
+        WHEN match_count in (3, 6, 9) THEN 0.05
+        ELSE 0
+    END AS rate,
+    sum_bv,
+    CASE
+        WHEN match_count in (1, 2, 4, 5, 7, 8) THEN sum_bv * 0.1
+        WHEN match_count in (3, 6, 9) THEN sum_bv * 0.05
+        ELSE 0
+    END AS over_bonus
 FROM tree
-where matched_flg = 1
-order by
- root_code,
- tree_level,
- match_count
+WHERE matched_flg = 1
+ORDER BY
+    root_code,
+    tree_level,
+    match_count
 )
 
 SELECT * FROM repurchase_over_bonus_result
