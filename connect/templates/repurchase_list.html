@@ -7,17 +7,12 @@
 
 {% block contents %}
 
-<div class="container-fluid mt-3">
-  <div class="row g-1">
-    <div class="col-12 text-end">
-      {% if user.is_authenticated %}
-        <span class="small text-muted">👤 {{ user.username }}</span>
-      {% endif %}
-    </div>
+<div class="container-fluid mt-3 list-page-viewport">
+  <div class="row g-1 h-100">
 
     {% include "com/_sidebar.html" with active_menu="repurchase_list" %}
 
-    <main class="col-12 col-md-9 col-lg-10">
+    <main class="col-12 col-md-9 col-lg-10 list-page-main">
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
@@ -91,11 +86,11 @@
             <div>
               <label class="form-label mb-0 small text-muted">注文区分</label>
 
-              <div class="dropdown">
-                <button class="btn btn-outline-secondary dropdown-toggle"
+              <div class="filter-dropdown">
+                <button class="btn btn-outline-secondary filter-dropdown__toggle"
                         type="button"
-                        data-bs-toggle="dropdown"
-                        data-bs-auto-close="outside"
+                        aria-haspopup="true"
+                        aria-expanded="false"
                         style="min-width: 220px; text-align: left;">
                   {% if q_order_types %}
                     注文区分（{{ q_order_types|length }}件）
@@ -104,7 +99,7 @@
                   {% endif %}
                 </button>
 
-                <div class="dropdown-menu p-3 shadow" style="min-width: 280px;">
+                <div class="filter-dropdown__menu p-3" style="min-width: 280px;">
 
                   <div class="form-check mb-2">
                     <input class="form-check-input"
@@ -220,13 +215,7 @@
         <div class="card-body">
 
           {% if rows %}
-            <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
-              <div class="fw-bold">一覧</div>
-              <div class="text-end">
-                <strong>総件数：{{ total_count }} 件</strong>
-                <span class="text-muted ms-2">({{ page }} / {{ total_pages }})</span>
-              </div>
-            </div>
+            {% include "com/_list_summary.html" %}
 
             <div class="table-responsive">
               <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
@@ -285,21 +274,7 @@
               </table>
             </div>
 
-            <div class="d-flex justify-content-end align-items-center gap-2 mt-3 flex-wrap">
-              {% if has_prev %}
-                <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}page={{ prev_page }}"
-                   class="btn btn-outline-secondary">
-                  ← 前へ
-                </a>
-              {% endif %}
-
-              {% if has_next %}
-                <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}page={{ next_page }}"
-                   class="btn btn-primary">
-                  次へ →
-                </a>
-              {% endif %}
-            </div>
+            {% include "com/_pagination.html" %}
 
           {% else %}
             {% if selected_month or q_code or q_name or q_order_code or q_order_types or q_bonus_date_from or q_bonus_date_to %}

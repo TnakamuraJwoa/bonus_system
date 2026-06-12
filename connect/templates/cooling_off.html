@@ -6,19 +6,13 @@
 {% endblock %}
 
 {% block contents %}
-<div class="container-fluid mt-3" style="height: calc(100vh - 170px); overflow: hidden;">
+<div class="container-fluid mt-3 app-page-viewport">
     <div class="row g-1 h-100">
 
-        <div class="col-12 text-end">
-            {% if user.is_authenticated %}
-                <span class="small text-muted">👤 {{ user.username }}</span>
-            {% endif %}
-        </div>
 
         {% include "com/_sidebar_orders.html" with active_menu="cooling_off" %}
 
-        <main class="col-12 col-md-9 col-lg-10 d-flex flex-column"
-              style="height: calc(100% - 24px); overflow: hidden;">
+        <main class="col-12 col-md-9 col-lg-10 app-page-main">
 
             <div class="card shadow-sm mb-3">
                 <div class="card-body">
@@ -35,9 +29,9 @@
                             <input type="hidden" name="action" value="create">
                         {% endif %}
 
-                        <div class="row g-2">
+                        <div class="row g-2 align-items-end">
                             <div class="col-md-3">
-                                <label class="form-label">注文番号</label>
+                                <label class="form-label mb-1 small text-muted">注文番号</label>
                                 <input type="text"
                                        name="order_code"
                                        class="form-control"
@@ -46,8 +40,8 @@
                             </div>
 
                             <div class="col-md-2">
-                                <label class="form-label">状態</label>
-                                <select name="active_flag" class="form-select">
+                                <label class="form-label mb-1 small text-muted">状態</label>
+                                <select name="active_flag" class="form-control">
                                     <option value="1" {% if not edit_row or edit_row.active_flag == 1 %}selected{% endif %}>
                                         有効
                                     </option>
@@ -58,20 +52,20 @@
                             </div>
 
                             <div class="col-md-5">
-                                <label class="form-label">備考</label>
+                                <label class="form-label mb-1 small text-muted">備考</label>
                                 <textarea name="remarks"
                                           rows="1"
                                           class="form-control">{{ edit_row.remarks|default:'' }}</textarea>
                             </div>
 
-                            <div class="col-md-2 d-flex align-items-end">
+                            <div class="col-md-2">
                                 {% if edit_row %}
                                     <button type="submit" class="btn btn-warning">
                                         更新
                                     </button>
 
                                     <a href="{% url 'connect:cooling_off' %}"
-                                       class="btn btn-secondary ms-2">
+                                       class="btn btn-secondary ml-2">
                                         戻る
                                     </a>
                                 {% else %}
@@ -251,7 +245,7 @@
 
                                 {% empty %}
                                 <tr>
-                                    <td colspan="9" class="text-center">
+                                    <td colspan="9" class="text-center table-empty-cell text-muted py-4">
                                         データがありません
                                     </td>
                                 </tr>

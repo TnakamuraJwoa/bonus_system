@@ -10,11 +10,6 @@
 <div class="container-fluid mt-3">
   <div class="row g-1">
 
-    <div class="col-12 text-end">
-      {% if user.is_authenticated %}
-        <span class="small text-muted">👤 {{ user.username }}</span>
-      {% endif %}
-    </div>
 
     {% include "com/_sidebar.html" with active_menu="kibetu_month" %}
 
@@ -66,7 +61,7 @@
 
           <h6 class="mb-3">新規追加</h6>
 
-          <form method="post" class="row g-2 align-items-end">
+          <form method="post" id="kibetu-month-create-form" class="row g-2 align-items-end">
             {% csrf_token %}
             <input type="hidden" name="action" value="create">
 
@@ -74,8 +69,9 @@
               <label class="form-label small text-muted">期別</label>
               <input type="text"
                      name="kibetu"
-                     class="form-control"
+                     class="form-control js-create-field"
                      placeholder="例: 2026C01"
+                     value="{{ create_form.kibetu|default:'' }}"
                      required>
             </div>
 
@@ -83,8 +79,10 @@
               <label class="form-label small text-muted">年</label>
               <input type="number"
                      name="year"
-                     class="form-control"
-                     placeholder="2026"
+                     class="form-control js-create-field js-create-auto-field bg-light"
+                     placeholder=""
+                     value="{{ create_form.year|default:'' }}"
+                     readonly
                      required>
             </div>
 
@@ -92,10 +90,12 @@
               <label class="form-label small text-muted">月</label>
               <input type="number"
                      name="month"
-                     class="form-control"
+                     class="form-control js-create-field js-create-auto-field bg-light"
                      min="1"
                      max="12"
-                     placeholder="1"
+                     placeholder=""
+                     value="{{ create_form.month|default:'' }}"
+                     readonly
                      required>
             </div>
 
@@ -103,14 +103,21 @@
               <label class="form-label small text-muted">支払日</label>
               <input type="text"
                      name="payment_date"
-                     class="form-control"
-                     placeholder="YYYY-MM-DD">
+                     class="form-control js-create-field"
+                     placeholder="YYYY-MM-DD または YYYY/MM/DD"
+                     value="{{ create_form.payment_date|default:'' }}"
+                     autocomplete="off">
             </div>
 
-            <div class="col-md-2">
-              <button type="submit" class="btn btn-success w-100">
-                追加
-              </button>
+            <div class="col-md-3">
+              <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-success flex-fill">
+                  追加
+                </button>
+                <button type="button" class="btn btn-outline-secondary flex-fill" id="clear-kibetu-month-create">
+                  値削除
+                </button>
+              </div>
             </div>
           </form>
 
@@ -178,10 +185,9 @@
                           <input type="text"
                                  name="payment_date"
                                  class="form-control form-control-sm"
-                                 value="{{ r.payment_date|date:'Y-m-d' }}"
-                                 placeholder="YYYY-MM-DD"
-                                 onfocus="this.type='date'"
-                                 onblur="if(!this.value)this.type='text'">
+                                 value="{% if r.payment_date %}{{ r.payment_date|date:'Y-m-d' }}{% endif %}"
+                                 placeholder="YYYY-MM-DD または YYYY/MM/DD"
+                                 autocomplete="off">
                         </td>
 
                         <td>
@@ -234,4 +240,53 @@
   </div>
 </div>
 
+{% endblock %}
+
+{% block script %}
+<script>
+(function () {
+  var form = document.getElementById("kibetu-month-create-form");
+  if (!form) return;
+
+  var kibetuField = form.querySelector('input[name="kibetu"]');
+  var yearField = form.querySelector('input[name="year"]');
+  var monthField = form.querySelector('input[name="month"]');
+
+  function fillYearMonthFromKibetu() {
+    if (!kibetuField || !yearField || !monthField) return;
+
+    var kibetu = kibetuField.value.trim();
+    if (kibetu.length < 7 || kibetu.charAt(4).toUpperCase() !== "C") {
+      yearField.value = "";
+      monthField.value = "";
+      return;
+    }
+
+    var year = kibetu.substring(0, 4);
+    var month = parseInt(kibetu.substring(5, 7), 10);
+    if (!/^\d{4}$/.test(year) || isNaN(month) || month < 1 || month > 12) {
+      yearField.value = "";
+      monthField.value = "";
+      return;
+    }
+
+    yearField.value = year;
+    monthField.value = String(month);
+  }
+
+  if (kibetuField) {
+    kibetuField.addEventListener("input", fillYearMonthFromKibetu);
+    fillYearMonthFromKibetu();
+  }
+
+  var clearBtn = document.getElementById("clear-kibetu-month-create");
+  if (clearBtn) {
+    clearBtn.addEventListener("click", function () {
+      form.querySelectorAll(".js-create-field").forEach(function (field) {
+        field.value = "";
+      });
+    });
+  }
+})();
+</script>
 {% endblock %}

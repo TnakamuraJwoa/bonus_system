@@ -48,6 +48,30 @@ from connect.sql import register_sql
 logger = logging.getLogger(__name__)
 
 
+def parse_input_date(value):
+    if value is None:
+        return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    normalized = text.replace("/", "-")
+    parts = normalized.split("-")
+    if len(parts) != 3:
+        raise ValueError(
+            f'"{text}" は無効な日付形式です。YYYY-MM-DD または YYYY/MM/DD 形式にしてください。'
+        )
+
+    try:
+        year, month, day = (int(parts[0]), int(parts[1]), int(parts[2]))
+        return date(year, month, day)
+    except ValueError as exc:
+        raise ValueError(
+            f'"{text}" は無効な日付形式です。YYYY-MM-DD または YYYY/MM/DD 形式にしてください。'
+        ) from exc
+
+
 class KeysetPaginationMixin:
 
     DEFAULT_PER_PAGE = 200
@@ -71,20 +95,14 @@ class KeysetPaginationMixin:
             min(per_page, self.MAX_PER_PAGE)
         )
 
-    def get_current_page(self, after_values):
+    def get_page_number(self, total_pages):
 
-        if any(after_values):
+        try:
+            page = int(self.request.GET.get("page") or "1")
+        except ValueError:
+            page = 1
 
-            try:
-                return max(
-                    1,
-                    int(self.request.GET.get("page", 2))
-                )
-
-            except ValueError:
-                return 2
-
-        return 1
+        return max(1, min(page, total_pages))
 
     def build_base_qs(self, params):
 
@@ -97,45 +115,60 @@ class KeysetPaginationMixin:
 
         return urlencode(clean_params)
 
-    def set_keyset_context(
+    @staticmethod
+    def build_pagination_pages(current_page, total_pages, adjacent=3):
+
+        if total_pages <= 1:
+            return []
+
+        pages = []
+
+        if current_page > adjacent + 1:
+            pages.append(1)
+            pages.append(None)
+
+        start = max(1, current_page - adjacent)
+        end = min(total_pages, current_page + adjacent)
+
+        for num in range(start, end + 1):
+            pages.append(num)
+
+        if current_page < total_pages - adjacent:
+            pages.append(None)
+            pages.append(total_pages)
+
+        return pages
+
+    def set_page_context(
         self,
         ctx,
         rows,
         per_page,
         total_count,
         total_pages,
-        next_keys,
-        after_values,
+        page,
         base_params,
     ):
 
         ctx["rows"] = rows
-
         ctx["total_count"] = total_count
-
         ctx["per_page"] = per_page
-
+        ctx["page"] = page
         ctx["total_pages"] = total_pages
-
-        ctx["page"] = self.get_current_page(after_values)
-
+        if total_count > 0:
+            ctx["display_from"] = (page - 1) * per_page + 1
+            ctx["display_to"] = min(page * per_page, total_count)
+        else:
+            ctx["display_from"] = 0
+            ctx["display_to"] = 0
         ctx["base_qs"] = self.build_base_qs(base_params)
-
-        ctx["has_next"] = (
-            len(rows) == per_page
-            and all(bool(v) for v in next_keys.values())
-        )
-
-        for key, value in next_keys.items():
-            ctx[key] = value
-
-        ctx["has_prev_hint"] = any(
-            bool(v)
-            for v in after_values
-        )
+        ctx["has_prev"] = page > 1
+        ctx["has_next"] = page < total_pages
+        ctx["prev_page"] = page - 1
+        ctx["next_page"] = page + 1
+        ctx["pagination_pages"] = self.build_pagination_pages(page, total_pages)
 
         return ctx
-
 
 
 def get_bonus_sort_context(request, allowed_sort_columns, default_sort="id", default_direction="asc"):
@@ -500,7 +533,7 @@ class DriveBonusView(generic.ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
-        selected_kibetu = self.request.GET.get("kibetu")
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
         ctx["selected_kibetu"] = selected_kibetu
         ctx["rows"] = []
         ctx["selected_period"] = None
@@ -695,12 +728,35 @@ class KibetuMonthView(generic.ListView):
         action = request.POST.get("action")
 
         kibetu = (request.POST.get("kibetu") or "").strip()
-        year = request.POST.get("year") or None
-        month = request.POST.get("month") or None
-        payment_date = request.POST.get("payment_date") or None
+        year = request.POST.get("year") or ""
+        month = request.POST.get("month") or ""
+        payment_date = request.POST.get("payment_date") or ""
+
+        create_form = {
+            "kibetu": kibetu,
+            "year": year,
+            "month": month,
+            "payment_date": payment_date,
+        }
+
+        def render_create_form_on_error():
+            if action != "create":
+                return redirect("connect:kibetu_month")
+            self.object_list = self.get_queryset()
+            context = self.get_context_data()
+            context["create_form"] = create_form
+            return self.render_to_response(context)
 
         if not kibetu:
             messages.error(request, "期別を入力してください。")
+            return render_create_form_on_error()
+
+        try:
+            parsed_payment_date = parse_input_date(payment_date)
+        except ValueError as e:
+            messages.error(request, str(e))
+            if action == "create":
+                return render_create_form_on_error()
             return redirect("connect:kibetu_month")
 
         try:
@@ -709,17 +765,17 @@ class KibetuMonthView(generic.ListView):
                 if action == "create":
                     MonthlyPeriod.objects.using("rds").create(
                         kibetu=kibetu,
-                        year=year,
-                        month=month,
-                        payment_date=payment_date,
+                        year=year or None,
+                        month=month or None,
+                        payment_date=parsed_payment_date,
                     )
                     messages.success(request, f"{kibetu} を追加しました。")
 
                 elif action == "update":
                     obj = MonthlyPeriod.objects.using("rds").get(kibetu=kibetu)
-                    obj.year = year
-                    obj.month = month
-                    obj.payment_date = payment_date
+                    obj.year = year or None
+                    obj.month = month or None
+                    obj.payment_date = parsed_payment_date
                     obj.save(using="rds")
                     messages.success(request, f"{kibetu} を変更しました。")
 
@@ -732,10 +788,13 @@ class KibetuMonthView(generic.ListView):
 
         except MonthlyPeriod.DoesNotExist:
             messages.error(request, f"{kibetu} は存在しません。")
+            return render_create_form_on_error()
         except IntegrityError:
             messages.error(request, f"{kibetu} はすでに存在します。")
+            return render_create_form_on_error()
         except Exception as e:
             messages.error(request, f"エラーが発生しました: {e}")
+            return render_create_form_on_error()
 
         return redirect("connect:kibetu_month")
 
@@ -744,6 +803,7 @@ class KibetuMonthView(generic.ListView):
 
         ctx["selected_kibetu"] = (self.request.GET.get("kibetu") or "").strip()
         ctx["q_kibetu"] = (self.request.GET.get("q_kibetu") or "").strip()
+        ctx.setdefault("create_form", {})
 
         ctx["kibetu_choices"] = list(
             MonthlyPeriod.objects.using("rds")
@@ -755,7 +815,7 @@ class KibetuMonthView(generic.ListView):
         return ctx
 
 
-class RepurchaseListView(generic.TemplateView):
+class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "repurchase_list.html"
 
     DEFAULT_PER_PAGE = 100
@@ -1021,21 +1081,21 @@ class RepurchaseListView(generic.TemplateView):
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
 
-        base_qs = urlencode(base_params)
+        ctx = self.set_page_context(
+            ctx=ctx,
+            rows=rows,
+            per_page=per_page,
+            total_count=total_count,
+            total_pages=total_pages,
+            page=page,
+            base_params=base_params,
+        )
 
+        base_qs = ctx["base_qs"]
         for order_type in q_order_types:
             if base_qs:
                 base_qs += "&"
             base_qs += urlencode({"q_order_type": order_type})
-
-        ctx["rows"] = rows
-        ctx["total_count"] = total_count
-        ctx["page"] = page
-        ctx["total_pages"] = total_pages
-        ctx["has_prev"] = page > 1
-        ctx["has_next"] = page < total_pages
-        ctx["prev_page"] = page - 1
-        ctx["next_page"] = page + 1
         ctx["base_qs"] = base_qs
 
         return ctx
@@ -1058,7 +1118,7 @@ class SettingsView(generic.ListView):
         return ctx
 
 
-class UserTargetRankView(generic.TemplateView):
+class UserTargetRankView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "user_target_rank.html"
 
     DISPLAY_COLUMNS = [
@@ -1332,17 +1392,19 @@ LIMIT %s OFFSET %s
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
 
-        ctx["rows"] = rows
-        ctx["total_count"] = total_count
-        ctx["page"] = page
-        ctx["total_pages"] = total_pages
-        ctx["has_prev"] = page > 1
-        ctx["has_next"] = page < total_pages
-        ctx["prev_page"] = page - 1
-        ctx["next_page"] = page + 1
-        ctx["base_qs"] = urlencode(base_params)
+        ctx["q_code"] = q_code
+        ctx["q_name"] = q_name
+        ctx["q_new_rank"] = q_new_rank
 
-        return ctx
+        return self.set_page_context(
+            ctx=ctx,
+            rows=rows,
+            per_page=per_page,
+            total_count=total_count,
+            total_pages=total_pages,
+            page=page,
+            base_params=base_params,
+        )
 
     # ----------------------------
     # POST: 登録（全件）
@@ -1440,7 +1502,7 @@ LEFT JOIN (
         return redirect(f"{redirect('connect:user_target_rank').url}?prev_month={selected_prev_month}")
 
 
-class TitleUserView(generic.TemplateView):
+class TitleUserView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "title_user.html"
 
     DEFAULT_PER_PAGE = 200
@@ -1476,33 +1538,14 @@ LEFT JOIN bonus_db.users u
             cursor.execute(sql, params)
             return int(cursor.fetchone()[0])
 
-    def _fetch_rows_keyset(
+    def _fetch_rows(
         self,
         title_id: str,
         q_jpid: str,
         limit: int,
-        after_title_id: str = "",
-        after_jmoa_code: str = "",
+        offset: int = 0,
     ):
         where_sql, params = self._build_where(title_id, q_jpid)
-
-        keyset_sql = ""
-        if after_title_id and after_jmoa_code:
-            if where_sql:
-                keyset_sql = """
- AND (
-      ut.title_id > %s
-      OR (ut.title_id = %s AND ut.jmoa_code > %s)
- )
-                """
-            else:
-                keyset_sql = """
-WHERE (
-      ut.title_id > %s
-      OR (ut.title_id = %s AND ut.jmoa_code > %s)
-)
-                """
-            params += [after_title_id, after_title_id, after_jmoa_code]
 
         sql = f"""
 SELECT
@@ -1517,13 +1560,12 @@ LEFT JOIN bonus_db.users u
 LEFT JOIN bonus_db.title_master tm
   ON ut.title_id = tm.title_id
 {where_sql}
-{keyset_sql}
 ORDER BY ut.title_id, ut.jmoa_code
-LIMIT %s
+LIMIT %s OFFSET %s
         """
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, params + [limit])
+            cursor.execute(sql, params + [limit, offset])
             cols = [c[0] for c in cursor.description]
             return [dict(zip(cols, r)) for r in cursor.fetchall()]
 
@@ -1551,26 +1593,17 @@ ORDER BY tm.title_id
             per_page = self.DEFAULT_PER_PAGE
         per_page = max(1, min(per_page, self.MAX_PER_PAGE))
 
-        after_title_id = (self.request.GET.get("after_title_id") or "").strip()
-        after_jmoa_code = (self.request.GET.get("after_jmoa_code") or "").strip()
-
         total_count = self._fetch_total_count(title_id, q_jpid)
         total_pages = max(1, math.ceil(total_count / per_page))
+        page = self.get_page_number(total_pages)
+        offset = (page - 1) * per_page
 
-        rows = self._fetch_rows_keyset(
+        rows = self._fetch_rows(
             title_id=title_id,
             q_jpid=q_jpid,
             limit=per_page,
-            after_title_id=after_title_id,
-            after_jmoa_code=after_jmoa_code,
+            offset=offset,
         )
-
-        next_after_title_id = ""
-        next_after_jmoa_code = ""
-        if rows:
-            last = rows[-1]
-            next_after_title_id = str(last["title_id"])
-            next_after_jmoa_code = str(last["jmoa_code"])
 
         base_params = {}
         if title_id:
@@ -1584,35 +1617,15 @@ ORDER BY tm.title_id
         ctx["selected_title_id"] = title_id
         ctx["q_jpid"] = q_jpid
 
-        ctx["rows"] = rows
-        ctx["total_count"] = total_count
-        ctx["per_page"] = per_page
-
-        # キーセットなので厳密なページ番号ではなく表示用
-        current_page = 1
-        if after_title_id and after_jmoa_code:
-            req_page = self.request.GET.get("page")
-            try:
-                current_page = max(1, int(req_page)) if req_page else 2
-            except ValueError:
-                current_page = 2
-
-        ctx["page"] = current_page
-        ctx["total_pages"] = total_pages
-
-        ctx["base_qs"] = urlencode(base_params)
-
-        ctx["has_next"] = (
-            len(rows) == per_page
-            and bool(next_after_title_id)
-            and bool(next_after_jmoa_code)
+        return self.set_page_context(
+            ctx=ctx,
+            rows=rows,
+            per_page=per_page,
+            total_count=total_count,
+            total_pages=total_pages,
+            page=page,
+            base_params=base_params,
         )
-        ctx["next_after_title_id"] = next_after_title_id
-        ctx["next_after_jmoa_code"] = next_after_jmoa_code
-
-        ctx["has_prev_hint"] = bool(after_title_id and after_jmoa_code)
-
-        return ctx
 
 
 
@@ -1720,7 +1733,7 @@ class BasicBonusView(generic.ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
-        selected_kibetu = self.request.GET.get("kibetu")
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
         ctx["selected_kibetu"] = selected_kibetu
         ctx["rows"] = []
         ctx["selected_period"] = None
@@ -2737,7 +2750,7 @@ class ActiveUsersView(generic.TemplateView):
 
 
 
-class PlacementTreeView(generic.TemplateView):
+class PlacementTreeView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "placement_tree.html"
 
     DEFAULT_PER_PAGE = 200
@@ -2775,23 +2788,15 @@ FROM bonus_db.C_users_placement_tree_cache c
             cursor.execute(sql, params)
             return int(cursor.fetchone()[0])
 
-    def _fetch_rows_keyset(
+    def _fetch_rows(
         self,
         q_jwoa_code: str,
         q_name: str,
         q_placement_code: str,
         limit: int,
-        after_id: str = "",
+        offset: int = 0,
     ):
         where_sql, params = self._build_where(q_jwoa_code, q_name, q_placement_code)
-
-        keyset_sql = ""
-        if after_id:
-            if where_sql:
-                keyset_sql = " AND c.id > %s"
-            else:
-                keyset_sql = "WHERE c.id > %s"
-            params.append(after_id)
 
         sql = f"""
 SELECT
@@ -2806,13 +2811,12 @@ SELECT
     c.created_at
 FROM bonus_db.C_users_placement_tree_cache c
 {where_sql}
-{keyset_sql}
 ORDER BY c.id
-LIMIT %s
+LIMIT %s OFFSET %s
         """
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, params + [limit])
+            cursor.execute(sql, params + [limit, offset])
             cols = [col[0] for col in cursor.description]
             return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
@@ -2894,22 +2898,18 @@ FROM bonus_db.v_user_placement_tree
             per_page = self.DEFAULT_PER_PAGE
         per_page = max(1, min(per_page, self.MAX_PER_PAGE))
 
-        after_id = (self.request.GET.get("after_id") or "").strip()
-
         total_count = self._fetch_total_count(q_jwoa_code, q_name, q_placement_code)
         total_pages = max(1, math.ceil(total_count / per_page)) if total_count > 0 else 1
+        page = self.get_page_number(total_pages)
+        offset = (page - 1) * per_page
 
-        rows = self._fetch_rows_keyset(
+        rows = self._fetch_rows(
             q_jwoa_code=q_jwoa_code,
             q_name=q_name,
             q_placement_code=q_placement_code,
             limit=per_page,
-            after_id=after_id,
+            offset=offset,
         )
-
-        next_after_id = ""
-        if rows:
-            next_after_id = str(rows[-1]["id"])
 
         base_params = {}
         if q_jwoa_code:
@@ -2921,34 +2921,19 @@ FROM bonus_db.v_user_placement_tree
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
 
-        current_page = 1
-        if after_id:
-            req_page = self.request.GET.get("page")
-            try:
-                current_page = max(1, int(req_page)) if req_page else 2
-            except ValueError:
-                current_page = 2
-
-        ctx["rows"] = rows
-        ctx["total_count"] = total_count
-        ctx["per_page"] = per_page
-
         ctx["q_jwoa_code"] = q_jwoa_code
         ctx["q_name"] = q_name
         ctx["q_placement_code"] = q_placement_code
 
-        ctx["page"] = current_page
-        ctx["total_pages"] = total_pages
-        ctx["base_qs"] = urlencode(base_params)
-
-        ctx["has_next"] = (
-            len(rows) == per_page
-            and bool(next_after_id)
+        return self.set_page_context(
+            ctx=ctx,
+            rows=rows,
+            per_page=per_page,
+            total_count=total_count,
+            total_pages=total_pages,
+            page=page,
+            base_params=base_params,
         )
-        ctx["next_after_id"] = next_after_id
-        ctx["has_prev_hint"] = bool(after_id)
-
-        return ctx
 
 
 
@@ -3065,7 +3050,7 @@ class MatchingBonusView(generic.ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
-        selected_kibetu = self.request.GET.get("kibetu")
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
         ctx["selected_kibetu"] = selected_kibetu
         ctx["rows"] = []
         ctx["selected_period"] = None
@@ -3257,11 +3242,11 @@ class S_BasicBonusView(generic.ListView):
     model = PeriodMaster
 
     def get_queryset(self):
-        # B_drive_bonus_result に登録済みの期別だけ取得
+        # B_basic_bonus_result に登録済みの期別だけ取得
         with connections["rds"].cursor() as cursor:
             cursor.execute("""
                 SELECT DISTINCT kibetu
-                FROM bonus_db.B_drive_bonus_result
+                FROM bonus_db.B_basic_bonus_result
                 ORDER BY kibetu
             """)
             registered_kibetu_list = [row[0] for row in cursor.fetchall()]
@@ -3281,7 +3266,8 @@ class S_BasicBonusView(generic.ListView):
 
         if request.GET.get("export") == "excel":
             rows = context.get("rows", [])
-            kibetu = context.get("selected_kibetu", "")
+            selected_kibetu_list = context.get("selected_kibetu_list", [])
+            kibetu = "_".join(selected_kibetu_list) if selected_kibetu_list else ""
             filename = build_bonus_export_filename("basic_bonus_result", kibetu=kibetu)
             return export_search_rows_to_excel(
                 rows,
@@ -3295,24 +3281,9 @@ class S_BasicBonusView(generic.ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
-        selected_kibetu = self.request.GET.get("kibetu")
-
-        # 期別未選択なら、登録済み期別の先頭を自動選択
-        if not selected_kibetu and self.object_list:
-            selected_kibetu = self.object_list[0].kibetu
-
-        ctx["selected_kibetu"] = selected_kibetu
+        selected_kibetu_list = self.request.GET.getlist("kibetu")
+        ctx["selected_kibetu_list"] = selected_kibetu_list
         ctx["rows"] = []
-        ctx["selected_period"] = None
-
-        if not selected_kibetu:
-            return ctx
-
-        period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
-        if not period:
-            return ctx
-
-        ctx["selected_period"] = period
 
         sort_ctx = get_bonus_sort_context(
             self.request,
@@ -3334,6 +3305,26 @@ class S_BasicBonusView(generic.ListView):
         )
         ctx.update(sort_ctx)
 
+        placement_code = self.request.GET.get("placement_code", "").strip()
+        purchaser_code = self.request.GET.get("purchaser_code", "").strip()
+        purchaser_name = self.request.GET.get("purchaser_name", "").strip()
+        line_code = self.request.GET.get("line_code", "").strip()
+
+        if (
+            not selected_kibetu_list
+            and not placement_code
+            and not purchaser_code
+            and not purchaser_name
+            and not line_code
+        ):
+            ctx.update({
+                "placement_code": placement_code,
+                "purchaser_code": purchaser_code,
+                "purchaser_name": purchaser_name,
+                "line_code": line_code,
+            })
+            return ctx
+
         sql = """
             SELECT
                 id,
@@ -3350,10 +3341,18 @@ class S_BasicBonusView(generic.ListView):
                 blue_daiya_flg,
                 created_at
             FROM bonus_db.B_basic_bonus_result
-            WHERE kibetu = %s
+            WHERE 1 = 1
         """
 
-        params = [selected_kibetu]
+        params = []
+
+        if selected_kibetu_list:
+            placeholders = ", ".join(["%s"] * len(selected_kibetu_list))
+            sql += f"""
+                AND kibetu IN ({placeholders})
+            """
+            params.extend(selected_kibetu_list)
+
         sql, filter_values = apply_like_filters(
             sql,
             params,
@@ -3411,7 +3410,8 @@ class S_MatchingBonusView(generic.ListView):
 
         if request.GET.get("export") == "excel":
             rows = context.get("rows", [])
-            kibetu = context.get("selected_kibetu", "")
+            selected_kibetu_list = context.get("selected_kibetu_list", [])
+            kibetu = "_".join(selected_kibetu_list) if selected_kibetu_list else ""
             filename = build_bonus_export_filename("matching_bonus_result", kibetu=kibetu)
             return export_search_rows_to_excel(
                 rows,
@@ -3425,24 +3425,9 @@ class S_MatchingBonusView(generic.ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
-        selected_kibetu = self.request.GET.get("kibetu")
-
-        # 期別未選択なら、登録済み期別の先頭を自動選択
-        if not selected_kibetu and self.object_list:
-            selected_kibetu = self.object_list[0].kibetu
-
-        ctx["selected_kibetu"] = selected_kibetu
+        selected_kibetu_list = self.request.GET.getlist("kibetu")
+        ctx["selected_kibetu_list"] = selected_kibetu_list
         ctx["rows"] = []
-        ctx["selected_period"] = None
-
-        if not selected_kibetu:
-            return ctx
-
-        period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
-        if not period:
-            return ctx
-
-        ctx["selected_period"] = period
 
         sort_ctx = get_bonus_sort_context(
             self.request,
@@ -3459,6 +3444,16 @@ class S_MatchingBonusView(generic.ListView):
         )
         ctx.update(sort_ctx)
 
+        introducer_code = self.request.GET.get("introducer_code", "").strip()
+        introducer_name = self.request.GET.get("introducer_name", "").strip()
+
+        if not selected_kibetu_list and not introducer_code and not introducer_name:
+            ctx.update({
+                "introducer_code": introducer_code,
+                "introducer_name": introducer_name,
+            })
+            return ctx
+
         sql = """
             SELECT
                 id,
@@ -3470,10 +3465,18 @@ class S_MatchingBonusView(generic.ListView):
                 matching_bv,
                 created_at
             FROM bonus_db.B_matching_bonus_result
-            WHERE kibetu = %s
+            WHERE 1 = 1
         """
 
-        params = [selected_kibetu]
+        params = []
+
+        if selected_kibetu_list:
+            placeholders = ", ".join(["%s"] * len(selected_kibetu_list))
+            sql += f"""
+                AND kibetu IN ({placeholders})
+            """
+            params.extend(selected_kibetu_list)
+
         sql, filter_values = apply_like_filters(
             sql,
             params,
@@ -3596,7 +3599,7 @@ class TitleBonusView(generic.ListView):
 
         ctx = super().get_context_data(**kwargs)
 
-        selected_kibetu = self.request.GET.get("kibetu")
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
 
         ctx["selected_kibetu"] = selected_kibetu
         ctx["rows"] = []
@@ -3715,7 +3718,7 @@ class S_TitleBonusView(generic.ListView):
 
         ctx = super().get_context_data(**kwargs)
 
-        selected_kibetu = self.request.GET.get("kibetu")
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
 
         if not selected_kibetu and self.object_list:
             selected_kibetu = self.object_list[0].kibetu
@@ -3908,7 +3911,7 @@ class TitleDiffBonusView(generic.ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
-        selected_kibetu = self.request.GET.get("kibetu")
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
 
         ctx["selected_kibetu"] = selected_kibetu
         ctx["rows"] = []
@@ -4010,7 +4013,7 @@ class S_TitleDiffBonusView(generic.ListView):
 
         ctx = super().get_context_data(**kwargs)
 
-        selected_kibetu = self.request.GET.get("kibetu")
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
 
         if not selected_kibetu and self.object_list:
             selected_kibetu = self.object_list[0].kibetu
@@ -4487,7 +4490,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
 
         return int(row[0]) if row else 0
 
-    def _fetch_rows_keyset(
+    def _fetch_rows(
         self,
         q_jpid: str = "",
         q_name: str = "",
@@ -4496,7 +4499,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         q_status: str = "",
         q_rank: str = "",
         limit: int = 200,
-        after_id: str = "",
+        offset: int = 0,
     ):
 
         where_sql, params = self._build_where(
@@ -4507,16 +4510,6 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             q_status=q_status,
             q_rank=q_rank,
         )
-
-        keyset_sql = ""
-
-        if after_id:
-            if where_sql:
-                keyset_sql = " AND u.id > %s "
-            else:
-                keyset_sql = " WHERE u.id > %s "
-
-            params.append(after_id)
 
         sql = f"""
             SELECT
@@ -4537,13 +4530,12 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
                 u.updated_at
             FROM nexus_production.users u
             {where_sql}
-            {keyset_sql}
             ORDER BY u.status_code, u.jmoa_code
-            LIMIT %s
+            LIMIT %s OFFSET %s
         """
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, params + [limit])
+            cursor.execute(sql, params + [limit, offset])
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
 
@@ -4561,8 +4553,6 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
 
         per_page = self.get_per_page()
 
-        after_id = (self.request.GET.get("after_id") or "").strip()
-
         total_count = self._fetch_total_count(
             q_jpid=q_jpid,
             q_name=q_name,
@@ -4573,8 +4563,10 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         )
 
         total_pages = max(1, math.ceil(total_count / per_page))
+        page = self.get_page_number(total_pages)
+        offset = (page - 1) * per_page
 
-        rows = self._fetch_rows_keyset(
+        rows = self._fetch_rows(
             q_jpid=q_jpid,
             q_name=q_name,
             q_introducer=q_introducer,
@@ -4582,13 +4574,8 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             q_status=q_status,
             q_rank=q_rank,
             limit=per_page,
-            after_id=after_id,
+            offset=offset,
         )
-
-        next_after_id = ""
-
-        if rows:
-            next_after_id = str(rows[-1]["id"])
 
         ctx["q_jpid"] = q_jpid
         ctx["q_name"] = q_name
@@ -4620,18 +4607,13 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
 
-        return self.set_keyset_context(
+        return self.set_page_context(
             ctx=ctx,
             rows=rows,
             per_page=per_page,
             total_count=total_count,
             total_pages=total_pages,
-            next_keys={
-                "next_after_id": next_after_id,
-            },
-            after_values=[
-                after_id,
-            ],
+            page=page,
             base_params=base_params,
         )
 
@@ -4750,7 +4732,7 @@ class ThreeStarGlobalBonusView(generic.ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
-        selected_kibetu = self.request.GET.get("kibetu")
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
 
         ctx["selected_kibetu"] = selected_kibetu
         ctx["rows"] = []
@@ -4866,7 +4848,7 @@ class S_ThreeStarGlobalBonusView(generic.ListView):
 
         ctx = super().get_context_data(**kwargs)
 
-        selected_kibetu = self.request.GET.get("kibetu")
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
 
         if not selected_kibetu and self.object_list:
             selected_kibetu = self.object_list[0].kibetu
@@ -4962,11 +4944,18 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
         q_order_code="",
         q_jwoa_code="",
         q_name="",
-        q_order_status="",
-        q_order_type="",
+        q_order_statuses=None,
+        q_order_types=None,
+        q_deposit_from="",
+        q_deposit_to="",
         q_year="",
         q_month="",
     ):
+        if q_order_statuses is None:
+            q_order_statuses = []
+        if q_order_types is None:
+            q_order_types = []
+
         where = []
         params = []
 
@@ -4982,13 +4971,23 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
             where.append("o.order_name LIKE %s")
             params.append(f"%{q_name}%")
 
-        if q_order_status:
-            where.append("o.order_status = %s")
-            params.append(q_order_status)
+        if q_order_statuses:
+            placeholders = ", ".join(["%s"] * len(q_order_statuses))
+            where.append(f"o.order_status IN ({placeholders})")
+            params.extend(q_order_statuses)
 
-        if q_order_type:
-            where.append("o.order_type = %s")
-            params.append(q_order_type)
+        if q_order_types:
+            placeholders = ", ".join(["%s"] * len(q_order_types))
+            where.append(f"o.order_type IN ({placeholders})")
+            params.extend(q_order_types)
+
+        if q_deposit_from:
+            where.append("o.deposit_at >= %s")
+            params.append(q_deposit_from)
+
+        if q_deposit_to:
+            where.append("o.deposit_at < DATE_ADD(%s, INTERVAL 1 DAY)")
+            params.append(q_deposit_to)
 
         if q_year:
             where.append("o.order_year = %s")
@@ -5016,17 +5015,8 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
 
         return int(row[0]) if row else 0
 
-    def _fetch_rows_keyset(self, limit=200, after_id="", **filters):
+    def _fetch_rows(self, limit=200, offset=0, **filters):
         where_sql, params = self._build_where(**filters)
-
-        keyset_sql = ""
-
-        if after_id:
-            if where_sql:
-                keyset_sql = " AND o.id > %s "
-            else:
-                keyset_sql = " WHERE o.id > %s "
-            params.append(after_id)
 
         sql = f"""
             SELECT
@@ -5044,18 +5034,18 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
                 o.total_bv,
                 o.jwoa_point,
                 o.order_at,
+                o.deposit_at,
                 o.delivery_date_at,
                 o.created_at,
                 o.updated_at
             FROM nexus_production.orders o
             {where_sql}
-            {keyset_sql}
             ORDER BY o.id
-            LIMIT %s
+            LIMIT %s OFFSET %s
         """
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, params + [limit])
+            cursor.execute(sql, params + [limit, offset])
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
 
@@ -5064,60 +5054,106 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
+        q_order_statuses = [
+            x for x in self.request.GET.getlist("q_order_status") if x
+        ]
+        q_order_types = [
+            x for x in self.request.GET.getlist("q_order_type") if x
+        ]
+
         filters = {
             "q_order_code": (self.request.GET.get("q_order_code") or "").strip(),
             "q_jwoa_code": (self.request.GET.get("q_jwoa_code") or "").strip(),
             "q_name": (self.request.GET.get("q_name") or "").strip(),
-            "q_order_status": (self.request.GET.get("q_order_status") or "").strip(),
-            "q_order_type": (self.request.GET.get("q_order_type") or "").strip(),
+            "q_order_statuses": q_order_statuses,
+            "q_order_types": q_order_types,
+            "q_deposit_from": (self.request.GET.get("q_deposit_from") or "").strip(),
+            "q_deposit_to": (self.request.GET.get("q_deposit_to") or "").strip(),
             "q_year": (self.request.GET.get("q_year") or "").strip(),
             "q_month": (self.request.GET.get("q_month") or "").strip(),
         }
 
         per_page = self.get_per_page()
-        after_id = (self.request.GET.get("after_id") or "").strip()
 
         total_count = self._fetch_total_count(**filters)
         total_pages = max(1, math.ceil(total_count / per_page))
+        page = self.get_page_number(total_pages)
+        offset = (page - 1) * per_page
 
-        rows = self._fetch_rows_keyset(
+        rows = self._fetch_rows(
             limit=per_page,
-            after_id=after_id,
+            offset=offset,
             **filters,
         )
 
-        next_after_id = str(rows[-1]["id"]) if rows else ""
+        ctx["q_order_code"] = filters["q_order_code"]
+        ctx["q_jwoa_code"] = filters["q_jwoa_code"]
+        ctx["q_name"] = filters["q_name"]
+        ctx["q_order_statuses"] = q_order_statuses
+        ctx["q_order_types"] = q_order_types
+        ctx["q_deposit_from"] = filters["q_deposit_from"]
+        ctx["q_deposit_to"] = filters["q_deposit_to"]
+        ctx["q_year"] = filters["q_year"]
+        ctx["q_month"] = filters["q_month"]
 
-        ctx.update(filters)
-
-        base_params = {
-            k: v for k, v in filters.items() if v
-        }
+        base_params = {}
+        for key in (
+            "q_order_code",
+            "q_jwoa_code",
+            "q_name",
+            "q_deposit_from",
+            "q_deposit_to",
+            "q_year",
+            "q_month",
+        ):
+            value = filters[key]
+            if value:
+                base_params[key] = value
 
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
 
-        return self.set_keyset_context(
+        ctx = self.set_page_context(
             ctx=ctx,
             rows=rows,
             per_page=per_page,
             total_count=total_count,
             total_pages=total_pages,
-            next_keys={
-                "next_after_id": next_after_id,
-            },
-            after_values=[
-                after_id,
-            ],
+            page=page,
             base_params=base_params,
         )
+
+        base_qs = ctx["base_qs"]
+        for status in q_order_statuses:
+            if base_qs:
+                base_qs += "&"
+            base_qs += urlencode({"q_order_status": status})
+        for order_type in q_order_types:
+            if base_qs:
+                base_qs += "&"
+            base_qs += urlencode({"q_order_type": order_type})
+        ctx["base_qs"] = base_qs
+
+        return ctx
 
 
 class OrderDetailView(generic.TemplateView):
     template_name = "order_detail.html"
 
+    @staticmethod
+    def _format_order_value(value):
+        if value is None:
+            return ""
+        if isinstance(value, datetime):
+            if value.time() == time.min:
+                return value.strftime("%Y-%m-%d")
+            return value.strftime("%Y-%m-%d %H:%M:%S")
+        return value
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
+
+        from connect.order_field_labels import get_order_field_label
 
         order_id = self.kwargs.get("pk")
 
@@ -5134,7 +5170,20 @@ class OrderDetailView(generic.TemplateView):
             cols = [c[0] for c in cursor.description]
             row = cursor.fetchone()
 
-        ctx["order"] = dict(zip(cols, row)) if row else None
+        if row:
+            order = dict(zip(cols, row))
+            ctx["order"] = order
+            ctx["order_rows"] = [
+                (
+                    get_order_field_label(col),
+                    self._format_order_value(order.get(col)),
+                )
+                for col in cols
+            ]
+        else:
+            ctx["order"] = None
+            ctx["order_rows"] = []
+
         return ctx
 
 
@@ -5192,18 +5241,8 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
 
         return int(row[0]) if row else 0
 
-    def _fetch_rows_keyset(self, limit=200, after_id="", **filters):
+    def _fetch_rows(self, limit=200, offset=0, **filters):
         where_sql, params = self._build_where(**filters)
-
-        keyset_sql = ""
-
-        if after_id:
-            if where_sql:
-                keyset_sql = " AND a.id < %s "
-            else:
-                keyset_sql = " WHERE a.id < %s "
-
-            params.append(after_id)
 
         sql = f"""
             SELECT
@@ -5217,13 +5256,12 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
                 a.updated_at
             FROM bonus_db.orders_distribution_bv AS a
             {where_sql}
-            {keyset_sql}
             ORDER BY a.id DESC
-            LIMIT %s
+            LIMIT %s OFFSET %s
         """
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, params + [limit])
+            cursor.execute(sql, params + [limit, offset])
             cols = [c[0] for c in cursor.description]
             rows = [
                 dict(zip(cols, r))
@@ -5244,18 +5282,17 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
         }
 
         per_page = self.get_per_page()
-        after_id = (self.request.GET.get("after_id") or "").strip()
 
         total_count = self._fetch_total_count(**filters)
         total_pages = max(1, math.ceil(total_count / per_page))
+        page = self.get_page_number(total_pages)
+        offset = (page - 1) * per_page
 
-        rows = self._fetch_rows_keyset(
+        rows = self._fetch_rows(
             limit=per_page,
-            after_id=after_id,
+            offset=offset,
             **filters,
         )
-
-        next_after_id = str(rows[-1]["id"]) if rows else ""
 
         ctx.update(filters)
 
@@ -5267,18 +5304,13 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
 
-        return self.set_keyset_context(
+        return self.set_page_context(
             ctx=ctx,
             rows=rows,
             per_page=per_page,
             total_count=total_count,
             total_pages=total_pages,
-            next_keys={
-                "next_after_id": next_after_id,
-            },
-            after_values=[
-                after_id,
-            ],
+            page=page,
             base_params=base_params,
         )
 
@@ -5354,18 +5386,8 @@ class ApiUsersBvView(KeysetPaginationMixin, generic.TemplateView):
 
         return int(row[0]) if row else 0
 
-    def _fetch_rows_keyset(self, limit=200, after_id="", **filters):
+    def _fetch_rows(self, limit=200, offset=0, **filters):
         where_sql, params = self._build_where(**filters)
-
-        keyset_sql = ""
-
-        if after_id:
-            if where_sql:
-                keyset_sql = " AND a.id < %s "
-            else:
-                keyset_sql = " WHERE a.id < %s "
-
-            params.append(after_id)
 
         sql = f"""
             SELECT
@@ -5386,13 +5408,12 @@ class ApiUsersBvView(KeysetPaginationMixin, generic.TemplateView):
                 a.post_by
             FROM bonus_db.api_users_bv AS a
             {where_sql}
-            {keyset_sql}
             ORDER BY a.id DESC
-            LIMIT %s
+            LIMIT %s OFFSET %s
         """
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, params + [limit])
+            cursor.execute(sql, params + [limit, offset])
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
 
@@ -5414,18 +5435,17 @@ class ApiUsersBvView(KeysetPaginationMixin, generic.TemplateView):
         }
 
         per_page = self.get_per_page()
-        after_id = (self.request.GET.get("after_id") or "").strip()
 
         total_count = self._fetch_total_count(**filters)
         total_pages = max(1, math.ceil(total_count / per_page))
+        page = self.get_page_number(total_pages)
+        offset = (page - 1) * per_page
 
-        rows = self._fetch_rows_keyset(
+        rows = self._fetch_rows(
             limit=per_page,
-            after_id=after_id,
+            offset=offset,
             **filters,
         )
-
-        next_after_id = str(rows[-1]["id"]) if rows else ""
 
         ctx.update(filters)
 
@@ -5434,14 +5454,13 @@ class ApiUsersBvView(KeysetPaginationMixin, generic.TemplateView):
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
 
-        return self.set_keyset_context(
+        return self.set_page_context(
             ctx=ctx,
             rows=rows,
             per_page=per_page,
             total_count=total_count,
             total_pages=total_pages,
-            next_keys={"next_after_id": next_after_id},
-            after_values=[after_id],
+            page=page,
             base_params=base_params,
         )
 
@@ -5568,7 +5587,7 @@ class WeekBonusView(generic.ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
-        selected_kibetu = self.request.GET.get("kibetu")
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
         ctx["selected_kibetu"] = selected_kibetu
         ctx["rows"] = []
         ctx["selected_period"] = None
@@ -5646,7 +5665,7 @@ class S_WeekBonusView(generic.ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
-        selected_kibetu = self.request.GET.get("kibetu")
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
 
         # 期別未選択なら、登録済み期別の先頭を自動選択
         if not selected_kibetu and self.object_list:
@@ -5843,7 +5862,7 @@ class MonthBonusView(generic.ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
-        selected_kibetu = self.request.GET.get("kibetu")
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
         ctx["selected_kibetu"] = selected_kibetu
         ctx["rows"] = []
         ctx["selected_period"] = None
@@ -5921,7 +5940,7 @@ class S_MonthBonusView(generic.ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
-        selected_kibetu = self.request.GET.get("kibetu")
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
 
         if not selected_kibetu and self.object_list:
             selected_kibetu = self.object_list[0].kibetu

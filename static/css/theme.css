@@ -3,6 +3,9 @@
    ============================================================ */
 
 :root {
+    --app-navbar-height: 56px;
+    --app-footer-height: 52px;
+    --app-page-gutter: 1.5rem;
     --color-primary: #4f46e5;
     --color-primary-hover: #4338ca;
     --color-primary-light: #eef2ff;
@@ -13,6 +16,12 @@
     --color-surface: #ffffff;
     --color-navbar: #0f172a;
     --color-navbar-end: #1e293b;
+    --color-nav-active-bg: rgba(6, 182, 212, 0.16);
+    --color-nav-active-bg-hover: rgba(6, 182, 212, 0.24);
+    --color-nav-active-line: rgba(103, 232, 249, 0.9);
+    --color-nav-active-text: #ecfeff;
+    --color-nav-dropdown-active-bg: #f0fdfa;
+    --color-nav-dropdown-active-text: #0f766e;
     --color-text: #1e293b;
     --color-text-muted: #64748b;
     --color-border: #e2e8f0;
@@ -52,11 +61,15 @@ body {
 
 /* ---- Navbar ---- */
 .app-navbar {
+    position: sticky;
+    top: 0;
+    z-index: 1030;
     background: linear-gradient(135deg, var(--color-navbar) 0%, var(--color-navbar-end) 100%) !important;
     box-shadow: 0 2px 12px rgba(15, 23, 42, 0.25);
     padding-top: 0.55rem;
     padding-bottom: 0.55rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    flex-wrap: nowrap;
 }
 
 .app-navbar .navbar-brand.brand-saas {
@@ -92,6 +105,53 @@ body {
     background: rgba(255, 255, 255, 0.1);
 }
 
+.app-navbar .nav-item--active > .nav-link,
+.app-navbar .nav-link--active {
+    color: var(--color-nav-active-text) !important;
+    background: var(--color-nav-active-bg) !important;
+    box-shadow: inset 0 -1px 0 var(--color-nav-active-line);
+    font-weight: 600;
+}
+
+.app-navbar .nav-item--active > .nav-link:hover,
+.app-navbar .nav-item--active > .nav-link:focus,
+.app-navbar .nav-link--active:hover,
+.app-navbar .nav-link--active:focus {
+    color: var(--color-nav-active-text) !important;
+    background: var(--color-nav-active-bg-hover) !important;
+}
+
+.app-navbar .dropdown-menu .dropdown-item.active,
+.app-navbar .dropdown-menu .dropdown-item:active {
+    background: var(--color-nav-dropdown-active-bg) !important;
+    color: var(--color-nav-dropdown-active-text) !important;
+    font-weight: 600;
+}
+
+.app-navbar .nav-link--logout {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: 0.35rem;
+    padding: 0.42rem 0.9rem !important;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    background: rgba(255, 255, 255, 0.1);
+    font-weight: 600;
+}
+
+.app-navbar .nav-link--logout .nav-icon {
+    width: 1.05rem;
+    height: 1.05rem;
+    flex-shrink: 0;
+}
+
+.app-navbar .nav-link--logout:hover,
+.app-navbar .nav-link--logout:focus {
+    color: #fff !important;
+    background: rgba(239, 68, 68, 0.35) !important;
+    border-color: rgba(252, 165, 165, 0.65);
+}
+
 .app-navbar .dropdown-menu {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
@@ -112,6 +172,42 @@ body {
 .app-navbar .dropdown-item:focus {
     background: var(--color-primary-light) !important;
     color: var(--color-primary) !important;
+}
+
+.navbar-user-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-left: 1rem;
+    padding: 0.35rem 0.85rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 50rem;
+    color: rgba(248, 250, 252, 0.92);
+    font-weight: 600;
+    font-size: 0.8125rem;
+    white-space: nowrap;
+}
+
+.navbar-user-role {
+    color: rgba(248, 250, 252, 0.65);
+    font-weight: 500;
+    font-size: 0.75rem;
+}
+
+@media (max-width: 991.98px) {
+    .navbar-user-badge {
+        max-width: calc(100vw - 11rem);
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .app-navbar .navbar-collapse {
+        background: linear-gradient(135deg, var(--color-navbar) 0%, var(--color-navbar-end) 100%);
+        border-radius: var(--radius-md);
+        margin-top: 0.5rem;
+        padding: 0.35rem 0.5rem 0.5rem;
+    }
 }
 
 /* ---- Cards ---- */
@@ -142,22 +238,12 @@ body {
     margin-bottom: 0;
 }
 
-/* ---- User pill (top-right) ---- */
-.col-12.text-end > .small.text-muted {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.4rem 0.9rem;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 50rem;
-    box-shadow: var(--shadow-sm);
-    color: var(--color-text-muted) !important;
-    font-weight: 500;
-    font-size: 0.8125rem !important;
+/* ---- Sidebar ---- */
+nav.col-md-3 .position-sticky,
+nav.col-lg-2 .position-sticky {
+    top: calc(var(--app-navbar-height) + 0.75rem) !important;
 }
 
-/* ---- Sidebar ---- */
 nav.col-md-3 .card,
 nav.col-lg-2 .card {
     border-radius: var(--radius-md);
@@ -223,6 +309,8 @@ select.form-control:focus {
 
 .form-label,
 label.form-label {
+    display: block;
+    margin-bottom: 0.35rem;
     font-size: 0.75rem;
     font-weight: 600;
     color: var(--color-text-muted);
@@ -540,6 +628,16 @@ td.fw-bold.text-danger {
 }
 
 /* ---- Pagination ---- */
+.pagination-wrap {
+    display: flex;
+    justify-content: flex-end;
+    width: 100%;
+    flex-shrink: 0;
+    padding-top: 0.75rem;
+    padding-bottom: 0.5rem;
+    background: var(--color-surface);
+}
+
 .pagination .page-link {
     border-radius: var(--radius-sm);
     margin: 0 0.15rem;
@@ -566,9 +664,110 @@ td.fw-bold.text-danger {
 .container-fluid.mt-3 {
     padding-left: 1.25rem;
     padding-right: 1.25rem;
+    padding-bottom: var(--app-page-gutter);
 }
 
 main .fw-bold {
     color: var(--color-text);
     font-weight: 700;
+}
+
+/* ボーナス等: ビューポート内に収めてテーブルのみスクロール */
+.app-page-viewport {
+    height: calc(100vh - var(--app-navbar-height) - var(--app-footer-height) - 3.75rem);
+    max-height: calc(100vh - var(--app-navbar-height) - var(--app-footer-height) - 3.75rem);
+    overflow: hidden;
+}
+
+.app-page-viewport > .row {
+    height: 100%;
+    min-height: 0;
+}
+
+.app-page-main {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.app-page-main > .card.mb-3 {
+    flex-shrink: 0;
+    position: relative;
+    z-index: 20;
+    overflow: visible;
+}
+
+.app-page-main > .card.mb-3 > .card-body {
+    overflow: visible;
+}
+
+/* 一覧ページ: ビューポート内に収め、テーブルのみスクロール */
+.list-page-viewport {
+    height: calc(100vh - var(--app-navbar-height) - var(--app-footer-height) - 2rem);
+    max-height: calc(100vh - var(--app-navbar-height) - var(--app-footer-height) - 2rem);
+    overflow: hidden;
+    padding-bottom: 0;
+}
+
+.list-page-viewport > .row {
+    height: 100%;
+    min-height: 0;
+}
+
+.list-page-main {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: visible;
+}
+
+.list-page-main > .card.mb-3 {
+    flex-shrink: 0;
+    position: relative;
+    z-index: 20;
+    overflow: visible;
+}
+
+.list-page-main > .card.mb-3 > .card-body {
+    overflow: visible;
+}
+
+.list-page-main > .card:last-child {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0;
+    position: relative;
+    z-index: 1;
+}
+
+.list-page-main > .card:last-child > .card-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.list-page-main .dropdown-menu {
+    z-index: 1060;
+}
+
+.list-page-main .list-summary {
+    flex-shrink: 0;
+}
+
+.list-page-main .table-responsive {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none !important;
+    overflow: auto;
+}
+
+.list-page-main .pagination-wrap {
+    flex-shrink: 0;
 }

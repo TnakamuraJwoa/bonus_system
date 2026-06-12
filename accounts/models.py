@@ -23,6 +23,13 @@ class UserAccessProfile(models.Model):
     can_delete = models.BooleanField("削除", default=False)
     can_execute = models.BooleanField("実行（ボーナス計算・一括登録など）", default=False)
     can_export = models.BooleanField("Excel出力", default=False)
+    menu_permissions = models.JSONField(
+        "閲覧可能な画面",
+        null=True,
+        blank=True,
+        default=None,
+        help_text="未設定（null）の場合は全画面を閲覧できます。リスト指定時は選択した画面のみ。",
+    )
 
     class Meta:
         verbose_name = "操作権限"

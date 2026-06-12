@@ -35,7 +35,7 @@ footer {
 
 .messages-container {
     position: fixed;
-    top: 56px;
+    top: var(--app-navbar-height, 56px);
     left: 0;
     right: 0;
     width: 100%;

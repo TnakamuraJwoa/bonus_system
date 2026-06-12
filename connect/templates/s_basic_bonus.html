@@ -6,18 +6,13 @@
 {% endblock %}
 
 {% block contents %}
-<div class="container-fluid mt-3" style="height: calc(100vh - 170px); overflow: hidden;">
+<div class="container-fluid mt-3 app-page-viewport">
   <div class="row g-1 h-100">
 
-    <div class="col-12 text-end">
-      {% if user.is_authenticated %}
-        <span class="small text-muted">👤 {{ user.username }}</span>
-      {% endif %}
-    </div>
 
     {% include "com/_sidebar_bonus_kensaku.html" with active_menu="basic_bonus" %}
 
-    <main class="col-12 col-md-9 col-lg-10 d-flex flex-column" style="height: calc(100% - 24px); overflow: hidden;">
+    <main class="col-12 col-md-9 col-lg-10 app-page-main">
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
@@ -28,14 +23,34 @@
             <input type="hidden" name="direction" value="{{ direction|default:'' }}">
             <div>
               <label class="form-label mb-0 small text-muted">期別</label>
-              <select name="kibetu" class="form-select">
-                {% for obj in object_list %}
-                  <option value="{{ obj.kibetu }}"
-                          {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
-                    【{{ obj.kibetu }}】 ({{ obj.st_date }} - {{ obj.end_date }})
-                  </option>
-                {% endfor %}
-              </select>
+              <div class="filter-dropdown filter-dropdown--kibetu">
+                <button class="btn btn-outline-secondary filter-dropdown__toggle"
+                        type="button"
+                        aria-haspopup="true"
+                        aria-expanded="false">
+                  {% if selected_kibetu_list %}
+                    期別（{{ selected_kibetu_list|length }}件）
+                  {% else %}
+                    期別を選択
+                  {% endif %}
+                </button>
+                <div class="filter-dropdown__menu p-3">
+                  {% for obj in object_list %}
+                    <div class="form-check mb-2">
+                      <input class="form-check-input"
+                             type="checkbox"
+                             name="kibetu"
+                             value="{{ obj.kibetu }}"
+                             id="basic_kibetu_{{ forloop.counter }}"
+                             {% if obj.kibetu in selected_kibetu_list %}checked{% endif %}>
+                      <label class="form-check-label"
+                             for="basic_kibetu_{{ forloop.counter }}">
+                        {{ obj.kibetu }}
+                      </label>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
             </div>
 
             <div>
@@ -72,7 +87,14 @@
           </form>
 
           <div class="selection-indicator-group mt-3">
-          {% selection_from_period selected_period empty_message="期別を選択してください" %}
+            <span class="selection-indicator__label mr-1">選択中：</span>
+            {% if selected_kibetu_list %}
+              {% for kibetu in selected_kibetu_list %}
+                <span class="selection-indicator__badge selection-indicator__badge--kibetu badge badge-pill">{{ kibetu }}</span>
+              {% endfor %}
+            {% else %}
+              <span class="selection-indicator__badge selection-indicator__badge--kibetu-none badge badge-pill">期別：指定なし</span>
+            {% endif %}
           {% if placement_code or purchaser_code or purchaser_name or line_code %}
           <div class="selection-indicator">
             {% if placement_code %}
@@ -142,10 +164,12 @@
             </div>
 
           {% else %}
-            {% if selected_kibetu %}
-              <p class="mb-0">この期間のデータはありません。</p>
+            {% if selected_kibetu_list or placement_code or purchaser_code or purchaser_name or line_code %}
+              <p class="mb-0">この条件のデータはありません。</p>
             {% else %}
-              <p class="mb-0 text-muted">期別を選択して「選択」を押してください。</p>
+              <p class="mb-0 text-muted">
+                期別、上位者コード、購入者コード、購入者名、ラインコードのいずれかを入力して「表示」を押してください。
+              </p>
             {% endif %}
           {% endif %}
 

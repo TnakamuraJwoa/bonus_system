@@ -8,8 +8,10 @@ from django.shortcuts import redirect
 from django.urls import reverse
 
 from accounts.access import (
+    menu_denied_message,
     permission_denied_message,
     required_permission_for_request,
+    user_can_access_url,
     user_has_permission,
 )
 
@@ -66,6 +68,14 @@ class UserPermissionMiddleware:
         if request.user.is_authenticated:
             path = request.path
             if path != "/" and not path.startswith(self.EXEMPT_PREFIXES):
+                resolver = getattr(request, "resolver_match", None)
+                url_name = resolver.url_name if resolver else None
+
+                if request.method == "GET" and url_name:
+                    if not user_can_access_url(request.user, url_name):
+                        messages.error(request, menu_denied_message(url_name))
+                        return redirect(settings.LOGIN_REDIRECT_URL)
+
                 permission = required_permission_for_request(request)
                 if permission and not user_has_permission(request.user, permission):
                     messages.error(request, permission_denied_message(permission))

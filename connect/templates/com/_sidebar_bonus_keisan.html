@@ -1,47 +1,62 @@
-{# templates/com/_sidebar.html #}
+{% load access_tags %}
 <nav class="col-12 col-md-3 col-lg-2">
   <div class="card shadow-sm position-sticky" style="top: 1rem;">
+    {% if user_access|can_menu:"drive_bonus" or user_access|can_menu:"basic_bonus" or user_access|can_menu:"matching_bonus" %}
     <div class="card-body">
       <div class="fw-bold mb-2">【個人実績】</div>
       <div class="fw-bold mb-2">■ 週ボーナス</div>
 
       <div class="list-group">
+        {% if user_access|can_menu:"drive_bonus" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'drive_bonus' %}active{% endif %}"
            href="{% url 'connect:drive_bonus' %}">ドライブボーナス</a>
+        {% endif %}
 
+        {% if user_access|can_menu:"basic_bonus" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'basic_bonus' %}active{% endif %}"
            href="{% url 'connect:basic_bonus' %}">ベーシックボーナス</a>
+        {% endif %}
 
+        {% if user_access|can_menu:"matching_bonus" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'matching_bonus' %}active{% endif %}"
            href="{% url 'connect:matching_bonus' %}">マッチングボーナス</a>
+        {% endif %}
       </div>
     </div>
+    {% endif %}
 
+    {% if user_access|can_menu:"title_bonus" or user_access|can_menu:"title_diff_bonus" or user_access|can_menu:"repurchase_over_bonus" %}
     <div class="card-body">
       <div class="fw-bold mb-2">■ 月ボーナス</div>
 
       <div class="list-group">
+        {% if user_access|can_menu:"title_bonus" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'title_bonus' %}active{% endif %}"
            href="{% url 'connect:title_bonus' %}">タイトルボーナス</a>
+        {% endif %}
 
+        {% if user_access|can_menu:"title_diff_bonus" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'title_diff_bonus' %}active{% endif %}"
            href="{% url 'connect:title_diff_bonus' %}">タイトル差額ボーナス</a>
+        {% endif %}
 
+        {% if user_access|can_menu:"repurchase_over_bonus" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'repurchase_over_bonus' %}active{% endif %}"
            href="{% url 'connect:repurchase_over_bonus' %}">再購入オーバーボーナス</a>
+        {% endif %}
       </div>
     </div>
+    {% endif %}
 
+    {% if user_access|can_menu:"three_star_global_bonus" %}
     <div class="card-body">
       <div class="fw-bold mb-2">■ 特別ボーナス</div>
 
       <div class="list-group">
         <a class="list-group-item list-group-item-action {% if active_menu == 'three_star_global_bonus' %}active{% endif %}"
            href="{% url 'connect:three_star_global_bonus' %}">3スターダイヤグローバル配当(Q)</a>
-
-        <a class="list-group-item list-group-item-action {% if active_menu == 'three_star' %}active{% endif %}"
-           href="#">#クラウンダイヤグローバル配当(Y)</a>
       </div>
     </div>
+    {% endif %}
   </div>
 </nav>

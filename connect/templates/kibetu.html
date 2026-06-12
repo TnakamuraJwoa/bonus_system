@@ -10,11 +10,6 @@
 <div class="container-fluid mt-3">
   <div class="row g-1">
 
-    <div class="col-12 text-end">
-      {% if user.is_authenticated %}
-        <span class="small text-muted">👤 {{ user.username }}</span>
-      {% endif %}
-    </div>
 
     {% include "com/_sidebar.html" with active_menu="kibetu" %}
 

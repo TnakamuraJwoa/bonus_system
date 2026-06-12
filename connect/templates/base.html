@@ -1,4 +1,4 @@
-{% load static custom_filters %}
+{% load static custom_filters access_tags %}
 
 <!DOCTYPE html>
 <html lang="ja">
@@ -12,15 +12,13 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <link href="{% static 'css/base_style.css' %}" rel="stylesheet"/>
-    <link href="{% static 'css/theme.css' %}?v=3" rel="stylesheet"/>
-    <link href="{% static 'css/common.css' %}?v=9" rel="stylesheet"/>
-    <!-- Bootstrap CSS -->
+    <link href="{% static 'css/theme.css' %}?v=22" rel="stylesheet"/>
+    <link href="{% static 'css/common.css' %}?v=24" rel="stylesheet"/>
+    <!-- Bootstrap CSS (v4) -->
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
-    <link href="{% static 'vendor/bootstrap.min.css' %}" rel="stylesheet"/>
-    <!-- Bootstrap JS -->
-    <script src="{% static 'vendor/bootstrap.bundle.min.js' %}"></script>
-    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
+    <!-- Bootstrap JS: jQuery → Popper 1 → Bootstrap 4 の順 -->
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
     {% block head %} {% endblock %}
 </head>
@@ -32,29 +30,36 @@
             <span class="logo-box"></span>
             Bonus System
         </a>
+
+        {% if user.is_authenticated %}
+        <span class="navbar-user-badge">
+            👤 {{ user.username }}
+            {% if user_access.is_view_only %}<span class="navbar-user-role">（閲覧のみ）</span>{% endif %}
+        </span>
+        {% endif %}
+
         <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav"
                 aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav ml-auto"> <!-- ml-autoを追加 -->
+            <ul class="navbar-nav ml-auto">
                 {% if user.is_authenticated %}
-                <li class="nav-item">
-                    <span class="nav-link small text-muted py-2">
-                        👤 {{ user.username }}
-                        {% if user_access.is_view_only %}（閲覧のみ）{% endif %}
-                    </span>
+                {% if user_access|has_nav:"users" %}
+                <li class="nav-item{% nav_group_active 'users' as users_active %}{% if users_active %} nav-item--active{% endif %}">
+                    <a class="nav-link{% if users_active %} nav-link--active{% endif %}" href="{% url 'connect:users' %}">会員検索 </a>
                 </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="{% url 'connect:users' %}">会員検索 </a>
-                </li>
+                {% endif %}
 
-                <li class="nav-item">
-                    <a class="nav-link" href="{% url 'connect:orders' %}">注文管理 </a>
+                {% if user_access|has_nav:"orders" %}
+                <li class="nav-item{% nav_group_active 'orders' as orders_active %}{% if orders_active %} nav-item--active{% endif %}">
+                    <a class="nav-link{% if orders_active %} nav-link--active{% endif %}" href="{% url 'connect:orders' %}">注文管理 </a>
                 </li>
+                {% endif %}
 
-                <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle"
+                {% if user_access|has_nav:"bonus_search" %}
+                <li class="nav-item dropdown{% nav_group_active 'bonus_search' as bonus_search_active %}{% if bonus_search_active %} nav-item--active{% endif %}">
+                    <a class="nav-link dropdown-toggle{% if bonus_search_active %} nav-link--active{% endif %}"
                        href="#"
                        id="s_bonusDropdown"
                        role="button"
@@ -65,18 +70,20 @@
                     </a>
 
                     <div class="dropdown-menu">
-                        <a class="dropdown-item" href="{% paired_bonus_url request.resolver_match.url_name 'search' 'individual' %}">
+                        <a class="dropdown-item{% bonus_dropdown_active 'bonus_search' 'individual' as bs_ind %}{% if bs_ind %} active{% endif %}" href="{% paired_bonus_url request.resolver_match.url_name 'search' 'individual' %}">
                             個人実績
                         </a>
 
-                        <a class="dropdown-item" href="{% paired_bonus_url request.resolver_match.url_name 'search' 'total' %}">
+                        <a class="dropdown-item{% bonus_dropdown_active 'bonus_search' 'total' as bs_tot %}{% if bs_tot %} active{% endif %}" href="{% paired_bonus_url request.resolver_match.url_name 'search' 'total' %}">
                             合計実績
                         </a>
                     </div>
                 </li>
+                {% endif %}
 
-                <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle"
+                {% if user_access|has_nav:"bonus_calc" %}
+                <li class="nav-item dropdown{% nav_group_active 'bonus_calc' as bonus_calc_active %}{% if bonus_calc_active %} nav-item--active{% endif %}">
+                    <a class="nav-link dropdown-toggle{% if bonus_calc_active %} nav-link--active{% endif %}"
                        href="#"
                        id="bonusDropdown"
                        role="button"
@@ -87,45 +94,44 @@
                     </a>
 
                     <div class="dropdown-menu">
-                        <a class="dropdown-item" href="{% paired_bonus_url request.resolver_match.url_name 'calc' 'individual' %}">
+                        <a class="dropdown-item{% bonus_dropdown_active 'bonus_calc' 'individual' as bc_ind %}{% if bc_ind %} active{% endif %}" href="{% paired_bonus_url request.resolver_match.url_name 'calc' 'individual' %}">
                             個人実績
                         </a>
 
-                        <a class="dropdown-item" href="{% paired_bonus_url request.resolver_match.url_name 'calc' 'total' %}">
+                        <a class="dropdown-item{% bonus_dropdown_active 'bonus_calc' 'total' as bc_tot %}{% if bc_tot %} active{% endif %}" href="{% paired_bonus_url request.resolver_match.url_name 'calc' 'total' %}">
                             合計実績
                         </a>
                     </div>
                 </li>
+                {% endif %}
 
-                <li class="nav-item">
-                    <a class="nav-link" href="{% url 'connect:kibetu' %}">設定 </a>
+                {% if user_access|has_nav:"settings" %}
+                <li class="nav-item{% nav_group_active 'settings' as settings_active %}{% if settings_active %} nav-item--active{% endif %}">
+                    <a class="nav-link{% if settings_active %} nav-link--active{% endif %}" href="{% url 'connect:kibetu' %}">設定 </a>
                 </li>
+                {% endif %}
 
-<!--                <li class="nav-item {% block active_inquiry %}{% endblock%}">-->
-<!--                    <a class="nav-link" href="{% url 'connect:inquiry' %}">Info </a>-->
-<!--                </li>-->
                 <li class="nav-item">
-                    <a class="nav-link" href="{% url 'account_logout' %}">Log Out </a>
+                    <a class="nav-link nav-link--logout"
+                       href="{% url 'account_logout' %}"
+                       aria-label="ログアウト">
+                        <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                            <polyline points="16 17 21 12 16 7"/>
+                            <line x1="21" y1="12" x2="9" y2="12"/>
+                        </svg>
+                        <span>ログアウト</span>
+                    </a>
                 </li>
                 {% else %}
                 <li class="nav-item">
                     <a class="nav-link {% block active_home %}{% endblock%}" href="{% url 'account_login' %}">Log In </a>
                 </li>
                 {% endif %}
-
-<!--                                        {% if not user.is_authenticated %}-->
-<!--                                        <li class="nav-item">-->
-<!--                                            <a class="nav-link" href="#">LOGIN </a>-->
-<!--                                        </li>-->
-<!--                                        {% endif %}-->
-<!--                                        {% if user.is_authenticated %}-->
-<!--                                        <li class="nav-item">-->
-<!--                                            <a class="nav-link" href="#">LOG OUT </a>-->
-<!--                                        </li>-->
-<!--                                        {% endif %}-->
             </ul>
         </div>
     </nav>
+
                 <div class="container messages-container">
                     <div class="row">
                         <div class="w-100">
@@ -169,6 +175,72 @@ document.addEventListener("DOMContentLoaded", function(){
     var numHeaderPattern = /(件数|合計|金額|報酬|BV|ボーナス|ランク|rate|level|total|sum|bonus|bv|title_id|score|amount|flg|count|rank|basic_bv|matching_bv|income_bv|one_score|人数|レート|配当|差額|tree_level|match_level|pay_bonus|over_bonus|month_bonus|week_bonus|drive_bonus|match_count|active_count|sum_bv|bonus_rate|bonus_amount|期別|kibetu|over_bv|three_star|crown_|repurchase|title_diff|title_bonus|matching_bonus|basic_bonus|placement_rank|blue_daiya|グループID|ID)/i;
     var dateHeaderPattern = /(日付|date|日時|時刻|時間|支払|開始|終了|登録|更新|決済|created|updated|payment|deposit|order_at|st_date|end_date|購入日)/i;
 
+    function formatNumberWithCommas(text) {
+        text = text.trim();
+        if (!text || text === "-") {
+            return text;
+        }
+
+        var hasPercent = text.endsWith("%");
+        var normalized = text.replace(/,/g, "");
+        if (hasPercent) {
+            normalized = normalized.slice(0, -1);
+        }
+
+        if (!/^-?\d+(\.\d+)?$/.test(normalized)) {
+            return text;
+        }
+
+        var parts = normalized.split(".");
+        var intPart = parts[0];
+        var sign = "";
+
+        if (intPart.startsWith("-")) {
+            sign = "-";
+            intPart = intPart.slice(1);
+        }
+
+        intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        var result = sign + intPart;
+
+        if (parts.length > 1 && parts[1]) {
+            result += "." + parts[1];
+        }
+
+        if (hasPercent) {
+            result += "%";
+        }
+
+        return result;
+    }
+
+    function shouldSkipCommaFormat(text) {
+        var normalized = text.replace(/,/g, "").trim();
+        if (/^(19|20)\d{2}$/.test(normalized)) {
+            return true;
+        }
+        if (/^(19|20)\d{4}$/.test(normalized)) {
+            return true;
+        }
+        return false;
+    }
+
+    function formatNumericCell(cell) {
+        if (cell.querySelector("a, button, input, select, form")) {
+            return;
+        }
+
+        var value = cell.textContent.trim();
+        if (!isNumericValue(value) || isDateValue(value) || shouldSkipCommaFormat(value)) {
+            return;
+        }
+
+        var formatted = formatNumberWithCommas(value);
+        if (formatted !== value) {
+            cell.textContent = formatted;
+        }
+    }
+
     function isNumericValue(text) {
         text = text.trim();
         if (!text || text === "-") {
@@ -197,7 +269,7 @@ document.addEventListener("DOMContentLoaded", function(){
         return null;
     }
 
-    document.querySelectorAll(".table").forEach(function(table) {
+    document.querySelectorAll(".table:not(.order-detail-table)").forEach(function(table) {
         var headers = table.querySelectorAll("thead th");
         var columnClasses = [];
 
@@ -209,6 +281,9 @@ document.addEventListener("DOMContentLoaded", function(){
         table.querySelectorAll("tbody tr").forEach(function(row) {
             Array.from(row.children).forEach(function(cell, index) {
                 if (cell.tagName !== "TD") {
+                    return;
+                }
+                if (cell.hasAttribute("colspan") || cell.classList.contains("table-empty-cell")) {
                     return;
                 }
                 if (cell.classList.contains("text-start") || cell.classList.contains("text-left")) {
@@ -229,10 +304,43 @@ document.addEventListener("DOMContentLoaded", function(){
                 if (colClass) {
                     cell.classList.add(colClass);
                 }
+
+                if (cell.classList.contains("col-num")) {
+                    formatNumericCell(cell);
+                }
             });
         });
     });
 
+    document.querySelectorAll(".order-detail-table tbody td.order-detail-table__value").forEach(function(cell) {
+        formatNumericCell(cell);
+    });
+
+});
+</script>
+<script>
+$(function () {
+  $(document).on('click', '.filter-dropdown__toggle', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    var $dropdown = $(this).closest('.filter-dropdown');
+    var isOpen = $dropdown.hasClass('is-open');
+    $('.filter-dropdown.is-open').removeClass('is-open');
+    $('.filter-dropdown__toggle').attr('aria-expanded', 'false');
+    if (!isOpen) {
+      $dropdown.addClass('is-open');
+      $(this).attr('aria-expanded', 'true');
+    }
+  });
+
+  $(document).on('click', '.filter-dropdown__menu', function (e) {
+    e.stopPropagation();
+  });
+
+  $(document).on('click', function () {
+    $('.filter-dropdown.is-open').removeClass('is-open');
+    $('.filter-dropdown__toggle').attr('aria-expanded', 'false');
+  });
 });
 </script>
 {% block script %}{% endblock %}

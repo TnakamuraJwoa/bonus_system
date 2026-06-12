@@ -1,6 +1,11 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from django.contrib.auth import get_user_model
+from accounts.menu_registry import (
+    ALL_MENU_KEYS,
+    GROUP_MENU_KEYS,
+    NAV_GROUP_MAP,
+    menu_key_for_url_name,
+)
 
 PERM_CREATE = "can_create"
 PERM_UPDATE = "can_update"
@@ -44,6 +49,11 @@ PERMISSION_LABELS = {
     PERM_EXPORT: "Excel出力",
 }
 
+EXEMPT_MENU_URL_NAMES = {
+    "index",
+    "inquiry",
+}
+
 
 @dataclass(frozen=True)
 class UserAccess:
@@ -52,6 +62,8 @@ class UserAccess:
     can_delete: bool = False
     can_execute: bool = False
     can_export: bool = False
+    menu_permissions: tuple = field(default_factory=tuple)
+    all_menus_allowed: bool = True
 
     @property
     def is_view_only(self):
@@ -68,9 +80,26 @@ class UserAccess:
     def has(self, permission):
         return bool(getattr(self, permission, False))
 
+    def can_menu(self, menu_key):
+        if self.all_menus_allowed:
+            return True
+        return menu_key in self.menu_permissions
+
+    def has_nav(self, nav_key):
+        group = NAV_GROUP_MAP.get(nav_key)
+        if not group:
+            return self.can_menu(nav_key)
+        return self.any_menu_in_group(group)
+
+    def any_menu_in_group(self, group_id):
+        if self.all_menus_allowed:
+            return True
+        keys = GROUP_MENU_KEYS.get(group_id, ())
+        return any(key in self.menu_permissions for key in keys)
+
 
 def full_access():
-    return UserAccess(True, True, True, True, True)
+    return UserAccess(True, True, True, True, True, ALL_MENU_KEYS, True)
 
 
 def get_user_access(user):
@@ -86,17 +115,43 @@ def get_user_access(user):
             return full_access()
         return UserAccess()
 
+    raw_menus = profile.menu_permissions
+    if raw_menus is None:
+        return UserAccess(
+            can_create=profile.can_create,
+            can_update=profile.can_update,
+            can_delete=profile.can_delete,
+            can_execute=profile.can_execute,
+            can_export=profile.can_export,
+            menu_permissions=ALL_MENU_KEYS,
+            all_menus_allowed=True,
+        )
+
+    enabled = tuple(sorted(set(raw_menus)))
     return UserAccess(
         can_create=profile.can_create,
         can_update=profile.can_update,
         can_delete=profile.can_delete,
         can_execute=profile.can_execute,
         can_export=profile.can_export,
+        menu_permissions=enabled,
+        all_menus_allowed=False,
     )
 
 
 def user_has_permission(user, permission):
     return get_user_access(user).has(permission)
+
+
+def user_can_access_url(user, url_name):
+    if url_name in EXEMPT_MENU_URL_NAMES:
+        return True
+
+    menu_key = menu_key_for_url_name(url_name)
+    if menu_key is None:
+        return True
+
+    return get_user_access(user).can_menu(menu_key)
 
 
 def required_permission_for_request(request):
@@ -135,3 +190,7 @@ def required_permission_for_request(request):
 def permission_denied_message(permission):
     label = PERMISSION_LABELS.get(permission, "操作")
     return f"権限がありません（{label}）。"
+
+
+def menu_denied_message(menu_key):
+    return "権限がありません（この画面は閲覧できません）。"

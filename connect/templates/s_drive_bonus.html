@@ -3,24 +3,16 @@
 
 {% block head %}
     <link href="{% static 'css/common.css' %}" rel="stylesheet">
-
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 {% endblock %}
 
 {% block contents %}
-<div class="container-fluid mt-3" style="height: calc(100vh - 170px); overflow: hidden;">
+<div class="container-fluid mt-3 app-page-viewport">
   <div class="row g-1 h-100">
 
-    <div class="col-12 text-end">
-      {% if user.is_authenticated %}
-        <span class="small text-muted">👤 {{ user.username }}</span>
-      {% endif %}
-    </div>
 
     {% include "com/_sidebar_bonus_kensaku.html" with active_menu="drive_bonus" %}
 
-    <main class="col-12 col-md-9 col-lg-10 d-flex flex-column"
-          style="height: calc(100% - 24px); overflow: hidden;">
+    <main class="col-12 col-md-9 col-lg-10 app-page-main">
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
@@ -31,17 +23,19 @@
             <div>
               <label class="form-label mb-0 small text-muted">期別</label>
 
-              <div class="dropdown">
-                <button class="btn btn-outline-secondary dropdown-toggle"
+              <div class="filter-dropdown filter-dropdown--kibetu">
+                <button class="btn btn-outline-secondary filter-dropdown__toggle"
                         type="button"
-                        data-bs-toggle="dropdown"
-                        data-bs-auto-close="outside"
-                        style="min-width: 450px;">
-                  期別を選択
+                        aria-haspopup="true"
+                        aria-expanded="false">
+                  {% if selected_kibetu_list %}
+                    期別（{{ selected_kibetu_list|length }}件）
+                  {% else %}
+                    期別を選択
+                  {% endif %}
                 </button>
 
-                <div class="dropdown-menu p-3"
-                     style="max-height: 300px; overflow-y: auto; min-width: 330px;">
+                <div class="filter-dropdown__menu p-3">
 
                   {% for obj in object_list %}
                     <div class="form-check mb-2">
@@ -54,7 +48,7 @@
 
                       <label class="form-check-label"
                              for="kibetu_{{ forloop.counter }}">
-                        【{{ obj.kibetu }}】 {{ obj.st_date }} - {{ obj.end_date }}
+                        {{ obj.kibetu }}
                       </label>
                     </div>
                   {% endfor %}
@@ -189,20 +183,4 @@
     </main>
   </div>
 </div>
-{% endblock %}
-
-{% block script %}
-<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-
-<script>
-$(function() {
-    $('.js-kibetu-select').select2({
-        placeholder: '期別を選択してください',
-        allowClear: true,
-        closeOnSelect: false,
-        width: '100%'
-    });
-});
-</script>
 {% endblock %}

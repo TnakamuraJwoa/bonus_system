@@ -8,20 +8,13 @@
 
 {% block contents %}
 
-<div class="container-fluid mt-3">
-  <div class="row g-1">
+<div class="container-fluid mt-3 list-page-viewport">
+  <div class="row g-1 h-100">
 
-    <div class="col-12 text-end">
-      {% if user.is_authenticated %}
-        <span class="small text-muted">
-          👤 {{ user.username }}
-        </span>
-      {% endif %}
-    </div>
 
     {% include "com/_sidebar_orders.html" with active_menu="orders_distribution_bv" %}
 
-    <main class="col-12 col-md-9 col-lg-10">
+    <main class="col-12 col-md-9 col-lg-10 list-page-main">
 
       <div class="card shadow-sm mb-3">
 
@@ -144,23 +137,7 @@
 
           {% if rows %}
 
-            <div class="d-flex justify-content-between align-items-center mb-2">
-
-              <div class="fw-bold">
-                一覧
-              </div>
-
-              <div class="text-end">
-                <strong>
-                  総件数：{{ total_count }} 件
-                </strong>
-
-                <span class="text-muted small ms-2">
-                  （{{ page }} / {{ total_pages }}）
-                </span>
-              </div>
-
-            </div>
+            {% include "com/_list_summary.html" %}
 
             <div class="table-responsive"
                  style="overflow-x: auto;">
@@ -231,50 +208,7 @@
 
             </div>
 
-            <div class="d-flex justify-content-between align-items-center mt-3">
-
-              <div class="text-muted small">
-
-                {% if has_prev_hint %}
-                  ※「戻る」はブラウザの戻るでもOK
-                {% endif %}
-
-              </div>
-
-              <div class="d-flex">
-
-                {% if has_prev_hint %}
-
-                  <button class="btn btn-outline-secondary btn-sm me-2"
-                          type="button"
-                          onclick="history.back()">
-
-                    ← 戻る
-
-                  </button>
-
-                {% endif %}
-
-                {% if has_next %}
-
-                  <a class="btn btn-primary btn-sm"
-                     href="?{{ base_qs }}{% if base_qs %}&{% endif %}page={{ page|add:1 }}&after_id={{ next_after_id }}">
-
-                    次へ →
-
-                  </a>
-
-                {% else %}
-
-                  <button class="btn btn-secondary btn-sm" disabled>
-                    次へ →
-                  </button>
-
-                {% endif %}
-
-              </div>
-
-            </div>
+            {% include "com/_pagination.html" %}
 
           {% else %}
 

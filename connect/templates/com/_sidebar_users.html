@@ -1,15 +1,19 @@
-{# templates/com/_sidebar.html #}
+{% load access_tags %}
 <nav class="col-12 col-md-3 col-lg-2">
   <div class="card shadow-sm position-sticky" style="top: 1rem;">
     <div class="card-body">
       <div class="fw-bold mb-2">■ 会員一覧</div>
 
       <div class="list-group">
+        {% if user_access|can_menu:"users" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'users' %}active{% endif %}"
            href="{% url 'connect:users' %}">会員一覧</a>
+        {% endif %}
 
+        {% if user_access|can_menu:"title_user" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'title_user' %}active{% endif %}"
            href="{% url 'connect:title_user' %}">ピンタイトル一覧</a>
+        {% endif %}
       </div>
     </div>
 

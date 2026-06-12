@@ -4,6 +4,8 @@ from django import template
 from django.urls import reverse
 from django.utils.html import format_html
 
+from connect.models import MonthlyPeriod, PeriodMaster
+
 register = template.Library()
 
 
@@ -153,6 +155,36 @@ def selection_from_period(period, empty_message=""):
         "kibetu": kibetu,
         "date_text": date_text,
         "empty_message": None,
+    }
+
+
+@register.inclusion_tag("com/_bonus_calc_kibetu_input.html")
+def bonus_calc_kibetu_input(selected_kibetu="", period_type="weekly"):
+    if period_type == "monthly":
+        period_choices = (
+            MonthlyPeriod.objects.using("rds").all().order_by("-kibetu")
+        )
+        datalist_id = "bonus-calc-kibetu-monthly"
+    else:
+        period_choices = (
+            PeriodMaster.objects.using("rds").all().order_by("-kibetu")
+        )
+        datalist_id = "bonus-calc-kibetu-weekly"
+
+    return {
+        "selected_kibetu": selected_kibetu or "",
+        "period_choices": period_choices,
+        "period_type": period_type,
+        "datalist_id": datalist_id,
+    }
+
+
+@register.inclusion_tag("com/_bonus_calc_period_status.html", takes_context=True)
+def bonus_calc_period_status(context, empty_message="期別を指定してください"):
+    return {
+        "selected_kibetu": (context.get("selected_kibetu") or "").strip(),
+        "selected_period": context.get("selected_period"),
+        "empty_message": empty_message,
     }
 
 
