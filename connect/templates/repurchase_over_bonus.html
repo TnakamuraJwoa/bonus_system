@@ -48,7 +48,7 @@
               </a>
             </form>
 
-            {% if selected_period and rows %}
+            {% if user_access.can_execute and selected_period and rows %}
               <form method="post" class="mb-0"
                     onsubmit="return confirm('表示中の再購入オーバーボーナス結果を登録しますか？');">
                 {% csrf_token %}

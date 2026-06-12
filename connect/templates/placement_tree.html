@@ -27,6 +27,7 @@
             <span class="text-muted small">ランク = new_rank</span>
           </div>
 
+          {% if user_access.can_execute %}
           <div class="d-flex flex-wrap mb-3">
             <form method="post" class="mr-2 mb-2">
               {% csrf_token %}
@@ -38,6 +39,7 @@
               </button>
             </form>
 
+            {% if user_access.can_delete %}
             <form method="post" class="mb-2">
               {% csrf_token %}
               <input type="hidden" name="action" value="delete">
@@ -47,7 +49,9 @@
                 全削除
               </button>
             </form>
+            {% endif %}
           </div>
+          {% endif %}
 
           <form method="get" class="d-flex align-items-end mb-0 flex-wrap">
 

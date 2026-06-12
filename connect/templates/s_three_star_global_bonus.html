@@ -85,12 +85,14 @@
               リセット
             </a>
 
+            {% if user_access.can_export %}
             <button type="submit"
                     name="export"
                     value="excel"
                     class="btn btn-success">
               Excel出力
             </button>
+            {% endif %}
 
           </form>
 

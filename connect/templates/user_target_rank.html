@@ -79,6 +79,7 @@
             </a>
           </form>
 
+          {% if user_access.can_execute %}
           <!-- POST：全件登録 -->
           <form method="post" class="mb-0" id="registerForm"
                 onsubmit="return confirm('全件登録します。よろしいですか？');">
@@ -90,6 +91,7 @@
               全件登録
             </button>
           </form>
+          {% endif %}
 
           {% if selected_period %}
             {% jp_year_month_label selected_period.year selected_period.month as period_label %}

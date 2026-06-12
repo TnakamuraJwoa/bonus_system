@@ -40,6 +40,12 @@
             <ul class="navbar-nav ml-auto"> <!-- ml-autoを追加 -->
                 {% if user.is_authenticated %}
                 <li class="nav-item">
+                    <span class="nav-link small text-muted py-2">
+                        👤 {{ user.username }}
+                        {% if user_access.is_view_only %}（閲覧のみ）{% endif %}
+                    </span>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link" href="{% url 'connect:users' %}">会員検索 </a>
                 </li>
 

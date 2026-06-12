@@ -53,6 +53,7 @@
       </div>
 
       <!-- 追加フォーム -->
+      {% if user_access.can_create %}
       <div class="card shadow-sm mb-3">
         <div class="card-body">
           <h6 class="mb-3">新規追加</h6>
@@ -100,6 +101,7 @@
           </form>
         </div>
       </div>
+      {% endif %}
 
       <div class="card shadow-sm">
         <div class="card-body">
@@ -120,13 +122,16 @@
                     <th>開始日</th>
                     <th>終了日</th>
                     <th>支払日</th>
+                    {% if user_access.can_update or user_access.can_delete %}
                     <th style="width: 170px;">操作</th>
+                    {% endif %}
                   </tr>
                 </thead>
 
                 <tbody>
                   {% for r in rows %}
                     <tr>
+                      {% if user_access.can_update or user_access.can_delete %}
                       <form method="post">
                         {% csrf_token %}
                         <input type="hidden" name="kibetu" value="{{ r.kibetu }}">
@@ -157,13 +162,16 @@
                         </td>
 
                         <td>
+                          {% if user_access.can_update %}
                           <button type="submit"
                                   name="action"
                                   value="update"
                                   class="btn btn-warning btn-sm">
                             変更
                           </button>
+                          {% endif %}
 
+                          {% if user_access.can_delete %}
                           <button type="submit"
                                   name="action"
                                   value="delete"
@@ -171,8 +179,15 @@
                                   onclick="return confirm('{{ r.kibetu }} を削除しますか？');">
                             削除
                           </button>
+                          {% endif %}
                         </td>
                       </form>
+                      {% else %}
+                        <td>{{ r.kibetu }}</td>
+                        <td>{{ r.st_date|date:'Y-m-d' }}</td>
+                        <td>{{ r.end_date|date:'Y-m-d' }}</td>
+                        <td>{{ r.payment_date|date:'Y-m-d' }}</td>
+                      {% endif %}
                     </tr>
                   {% endfor %}
                 </tbody>

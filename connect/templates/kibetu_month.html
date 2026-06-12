@@ -60,6 +60,7 @@
       </div>
 
       <!-- 新規追加 -->
+      {% if user_access.can_create %}
       <div class="card shadow-sm mb-3">
         <div class="card-body">
 
@@ -115,6 +116,7 @@
 
         </div>
       </div>
+      {% endif %}
 
       <div class="card shadow-sm">
         <div class="card-body">
@@ -137,13 +139,16 @@
                     <th>年</th>
                     <th>月</th>
                     <th>支払日</th>
+                    {% if user_access.can_update or user_access.can_delete %}
                     <th style="width: 170px;">操作</th>
+                    {% endif %}
                   </tr>
                 </thead>
 
                 <tbody>
                   {% for r in rows %}
                     <tr>
+                      {% if user_access.can_update or user_access.can_delete %}
                       <form method="post">
                         {% csrf_token %}
 
@@ -180,13 +185,16 @@
                         </td>
 
                         <td>
+                          {% if user_access.can_update %}
                           <button type="submit"
                                   name="action"
                                   value="update"
                                   class="btn btn-warning btn-sm">
                             変更
                           </button>
+                          {% endif %}
 
+                          {% if user_access.can_delete %}
                           <button type="submit"
                                   name="action"
                                   value="delete"
@@ -194,9 +202,16 @@
                                   onclick="return confirm('{{ r.kibetu }} を削除しますか？');">
                             削除
                           </button>
+                          {% endif %}
                         </td>
 
                       </form>
+                      {% else %}
+                        <td>{{ r.kibetu }}</td>
+                        <td>{{ r.year }}</td>
+                        <td>{{ r.month }}</td>
+                        <td>{{ r.payment_date|date:'Y-m-d' }}</td>
+                      {% endif %}
                     </tr>
                   {% endfor %}
                 </tbody>

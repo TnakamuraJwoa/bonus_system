@@ -4,7 +4,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.hashers import make_password
 
-from .models import CustomUser
+from .models import CustomUser, UserAccessProfile
 
 
 class CustomUserResource(resources.ModelResource):
@@ -36,8 +36,44 @@ class CustomUserResource(resources.ModelResource):
                 row["password"] = make_password(password)
 
 
+class UserAccessProfileInline(admin.StackedInline):
+    model = UserAccessProfile
+    can_delete = False
+    extra = 0
+    fields = (
+        "can_create",
+        "can_update",
+        "can_delete",
+        "can_execute",
+        "can_export",
+    )
+    verbose_name = "操作権限"
+    verbose_name_plural = "操作権限（未チェック＝見るだけ）"
+
+
+@admin.register(UserAccessProfile)
+class UserAccessProfileAdmin(admin.ModelAdmin):
+    list_display = (
+        "user",
+        "can_create",
+        "can_update",
+        "can_delete",
+        "can_execute",
+        "can_export",
+    )
+    list_filter = (
+        "can_create",
+        "can_update",
+        "can_delete",
+        "can_execute",
+        "can_export",
+    )
+    search_fields = ("user__username",)
+
+
 class CustomUserAdmin(ImportExportModelAdmin, UserAdmin):
     resource_class = CustomUserResource
+    inlines = (UserAccessProfileInline,)
 
 
 admin.site.register(CustomUser, CustomUserAdmin)

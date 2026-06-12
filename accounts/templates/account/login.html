@@ -11,6 +11,11 @@
 <div class="login-page">
     <div class="login-card">
         <h1>Bonus System</h1>
+        {% if request.GET.timeout %}
+            <div class="alert alert-warning mb-3" role="alert">
+                1時間操作がなかったため、自動的にログアウトしました。再度ログインしてください。
+            </div>
+        {% endif %}
         <form method="post" action="{% url 'account_login' %}">
             {% csrf_token%}
             <div class="form-item">{{ form.login }}</div>

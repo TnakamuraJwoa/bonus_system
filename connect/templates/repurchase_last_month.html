@@ -52,6 +52,7 @@
               </button>
             </form>
 
+            {% if user_access.can_execute %}
             <form method="post" class="mb-0">
               {% csrf_token %}
               <input type="hidden" name="target_month" value="{{ selected_month }}">
@@ -61,6 +62,7 @@
                 登録
               </button>
             </form>
+            {% endif %}
 
           </div>
 

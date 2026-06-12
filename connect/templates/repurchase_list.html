@@ -187,10 +187,12 @@
               リセット
             </a>
 
+            {% if user_access.can_export %}
             <a href="{% url 'connect:repurchase_export' %}?{{ request.GET.urlencode }}"
                class="btn btn-success">
               Excel出力
             </a>
+            {% endif %}
 
           </form>
 
