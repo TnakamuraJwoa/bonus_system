@@ -1,0 +1,14 @@
+{# 選択中：期別（シアン）＋ 日付（グレー） #}
+{% if kibetu or date_text %}
+  <div class="selection-indicator mt-3">
+    <span class="selection-indicator__label mr-1">選択中：</span>
+    {% if kibetu %}
+      <span class="selection-indicator__badge selection-indicator__badge--kibetu badge badge-pill">{{ kibetu }}</span>
+    {% endif %}
+    {% if date_text %}
+      <span class="selection-indicator__badge selection-indicator__badge--date badge badge-pill">{{ date_text }}</span>
+    {% endif %}
+  </div>
+{% elif empty_message %}
+  <div class="text-muted small mt-3">{{ empty_message }}</div>
+{% endif %}

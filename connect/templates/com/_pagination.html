@@ -1,0 +1,41 @@
+{% if total_pages > 1 %}
+<nav aria-label="ページナビゲーション" class="pagination-wrap mt-3">
+  <ul class="pagination justify-content-end mb-0 flex-wrap">
+
+    <li class="page-item{% if not has_prev %} disabled{% endif %}">
+      {% if has_prev %}
+      <a class="page-link" href="?{% if base_qs %}{{ base_qs }}&{% endif %}page={{ prev_page }}" aria-label="前へ">‹</a>
+      {% else %}
+      <span class="page-link" aria-hidden="true">‹</span>
+      {% endif %}
+    </li>
+
+    {% for num in pagination_pages %}
+      {% if num %}
+        {% if num == page %}
+        <li class="page-item active" aria-current="page">
+          <span class="page-link">{{ num }}</span>
+        </li>
+        {% else %}
+        <li class="page-item">
+          <a class="page-link" href="?{% if base_qs %}{{ base_qs }}&{% endif %}page={{ num }}">{{ num }}</a>
+        </li>
+        {% endif %}
+      {% else %}
+        <li class="page-item disabled">
+          <span class="page-link">…</span>
+        </li>
+      {% endif %}
+    {% endfor %}
+
+    <li class="page-item{% if not has_next %} disabled{% endif %}">
+      {% if has_next %}
+      <a class="page-link" href="?{% if base_qs %}{{ base_qs }}&{% endif %}page={{ next_page }}" aria-label="次へ">›</a>
+      {% else %}
+      <span class="page-link" aria-hidden="true">›</span>
+      {% endif %}
+    </li>
+
+  </ul>
+</nav>
+{% endif %}

@@ -35,7 +35,12 @@ ACCOUNT_LOGOUT_REDIRECT_URL = 'account_login'
 # ログアウトリンクのクリック一発でログアウトする設定
 ACCOUNT_LOGOUT_ON_GET = True
 
-
+# 1時間操作がなければセッションを失効させる
+SESSION_IDLE_TIMEOUT = 60 * 60
+SESSION_COOKIE_AGE = SESSION_IDLE_TIMEOUT
+SESSION_SAVE_EVERY_REQUEST = True
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+LOGIN_URL = '/accounts/login/'
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -87,6 +92,9 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'connect.middleware.LoginRequiredMiddleware',
+    'connect.middleware.SessionIdleTimeoutMiddleware',
+    'connect.middleware.UserPermissionMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -104,6 +112,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'accounts.context_processors.user_access',
             ],
         },
     },

@@ -1,41 +1,60 @@
-{% extends 'base.html' %}
-{% load static %}
+﻿{% extends 'base.html' %}
+{% load static custom_filters %}
 
 {% block head %}
     <link href="{% static 'css/common.css' %}" rel="stylesheet">
 {% endblock %}
 
 {% block contents %}
-<div class="container-fluid mt-3" style="height: calc(100vh - 170px); overflow: hidden;">
+<div class="container-fluid mt-3 app-page-viewport">
   <div class="row g-1 h-100">
 
-    <div class="col-12 text-end">
-      {% if user.is_authenticated %}
-        <span class="small text-muted">👤 {{ user.username }}</span>
-      {% endif %}
-    </div>
 
     {% include "com/_sidebar_bonus_kensaku.html" with active_menu="drive_bonus" %}
 
-    <main class="col-12 col-md-9 col-lg-10 d-flex flex-column" style="height: calc(100% - 24px); overflow: hidden;">
+    <main class="col-12 col-md-9 col-lg-10 app-page-main">
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <h5 class="mb-3">【ボーナス検索 - ドライブボーナス】</h5>
+          <h5 class="page-title mb-3">【ボーナス検索 - ドライブボーナス】</h5>
 
-          <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+          <form method="get" class="d-flex gap-3 align-items-end mb-0 flex-wrap">
 
             <div>
               <label class="form-label mb-0 small text-muted">期別</label>
-              <select name="kibetu" class="form-select">
-                <option value="">指定なし</option>
-                {% for obj in object_list %}
-                  <option value="{{ obj.kibetu }}"
-                          {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
-                    【{{ obj.kibetu }}】 ({{ obj.st_date }} - {{ obj.end_date }})
-                  </option>
-                {% endfor %}
-              </select>
+
+              <div class="filter-dropdown filter-dropdown--kibetu">
+                <button class="btn btn-outline-secondary filter-dropdown__toggle"
+                        type="button"
+                        aria-haspopup="true"
+                        aria-expanded="false">
+                  {% if selected_kibetu_list %}
+                    期別（{{ selected_kibetu_list|length }}件）
+                  {% else %}
+                    期別を選択
+                  {% endif %}
+                </button>
+
+                <div class="filter-dropdown__menu p-3">
+
+                  {% for obj in object_list %}
+                    <div class="form-check mb-2">
+                      <input class="form-check-input"
+                             type="checkbox"
+                             name="kibetu"
+                             value="{{ obj.kibetu }}"
+                             id="kibetu_{{ forloop.counter }}"
+                             {% if obj.kibetu in selected_kibetu_list %}checked{% endif %}>
+
+                      <label class="form-check-label"
+                             for="kibetu_{{ forloop.counter }}">
+                        {{ obj.kibetu }}
+                      </label>
+                    </div>
+                  {% endfor %}
+
+                </div>
+              </div>
             </div>
 
             <div>
@@ -56,40 +75,41 @@
                      placeholder="例：JP00000000">
             </div>
 
+            <input type="hidden" name="sort" value="{{ sort }}">
+            <input type="hidden" name="direction" value="{{ direction }}">
+
             <button type="submit" class="btn btn-primary">表示</button>
 
-            <a class="btn btn-outline-secondary" href="{% url 'connect:s_drive_bonus' %}">
+            <a class="btn btn-outline-secondary"
+               href="{% url 'connect:s_drive_bonus' %}">
               リセット
             </a>
 
-            <button type="submit" name="export" value="excel" class="btn btn-success">
+            {% if user_access.can_export %}
+            <button type="submit"
+                    name="export"
+                    value="excel"
+                    class="btn btn-success">
               Excel出力
             </button>
+            {% endif %}
+
           </form>
 
-          <div class="text-muted small mt-3">
-            {% if selected_kibetu %}
-              <span class="badge bg-info text-dark">{{ selected_kibetu }}</span>
+          <div class="selection-indicator-group mt-3">
+            <span class="selection-indicator__label mr-1">選択中：</span>
+            {% if selected_kibetu_list %}
+              {% for kibetu in selected_kibetu_list %}
+                <span class="selection-indicator__badge selection-indicator__badge--kibetu badge badge-pill">{{ kibetu }}</span>
+              {% endfor %}
             {% else %}
-              <span class="badge bg-secondary">期別：指定なし</span>
+              <span class="selection-indicator__badge selection-indicator__badge--kibetu-none badge badge-pill">期別：指定なし</span>
             {% endif %}
-
-            {% if selected_period %}
-              <span class="badge bg-secondary">
-                {{ selected_period.st_date }} ～ {{ selected_period.end_date }}
-              </span>
-            {% endif %}
-
             {% if search_introducer_code %}
-              <span class="badge bg-success">
-                紹介者ID：{{ search_introducer_code }}
-              </span>
+              <span class="selection-indicator__badge selection-indicator__badge--introducer-code badge badge-pill">紹介者ID：{{ search_introducer_code }}</span>
             {% endif %}
-
             {% if search_jwoa_code %}
-              <span class="badge bg-primary">
-                会員ID：{{ search_jwoa_code }}
-              </span>
+              <span class="selection-indicator__badge selection-indicator__badge--member-code badge badge-pill">会員ID：{{ search_jwoa_code }}</span>
             {% endif %}
           </div>
 
@@ -100,24 +120,33 @@
         <div class="card-body d-flex flex-column" style="min-height: 0; overflow: hidden;">
 
           {% if rows %}
+
             <div class="d-flex justify-content-between align-items-center mb-2">
               <div class="fw-bold">一覧</div>
-              <div class="text-end"><strong>件数：{{ rows|length }} 件</strong></div>
+              <div class="text-end">
+                <strong>件数：{{ rows|length }} 件</strong>
+              </div>
             </div>
 
-            <div class="table-responsive flex-grow-1" style="min-height: 0; overflow-x: auto; overflow-y: auto;">
-              <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
-                <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+            <div class="table-responsive flex-grow-1"
+                 style="min-height: 0; overflow-x: auto; overflow-y: auto;">
+
+              <table class="table table-bordered table-sm align-middle mb-0"
+                     style="white-space: nowrap;">
+
+                <thead class="table-light"
+                       style="position: sticky; top: 0; z-index: 1;">
                   <tr>
-                    <th class="text-center">期別</th>
-                    <th class="text-center">紹介者タイトル</th>
-                    <th class="text-center">紹介者ID</th>
-                    <th class="text-center">会員ID</th>
-                    <th class="text-center">会員名</th>
-                    <th class="text-center">BV合計</th>
-                    <th class="text-center">報酬</th>
+                    {% sortable_th "kibetu" "期別" %}
+                    {% sortable_th "title_name" "紹介者タイトル" %}
+                    {% sortable_th "introducer_code" "紹介者ID" %}
+                    {% sortable_th "jwoa_code" "会員ID" %}
+                    {% sortable_th "jwoa_name" "会員名" %}
+                    {% sortable_th "sum_bv" "BV合計" %}
+                    {% sortable_th "sum_bonus_amount" "報酬" %}
                   </tr>
                 </thead>
+
                 <tbody>
                   {% for r in rows %}
                     <tr>
@@ -131,17 +160,21 @@
                     </tr>
                   {% endfor %}
                 </tbody>
+
               </table>
+
             </div>
 
           {% else %}
-            {% if selected_kibetu or search_introducer_code or search_jwoa_code %}
+
+            {% if selected_kibetu_list or search_introducer_code or search_jwoa_code %}
               <p class="mb-0">この条件のデータはありません。</p>
             {% else %}
               <p class="mb-0 text-muted">
                 期別、紹介者ID、会員IDのいずれかを入力して「表示」を押してください。
               </p>
             {% endif %}
+
           {% endif %}
 
         </div>

@@ -1,4 +1,4 @@
-{% extends 'base.html' %}
+﻿{% extends 'base.html' %}
 {% load static %}
 
 {% block contents %}
@@ -11,11 +11,6 @@
 <div class="container-fluid mt-3">
   <div class="row g-1">
 
-    <div class="col-12 text-end">
-      {% if user.is_authenticated %}
-        <span class="small text-muted">👤 {{ user.username }}</span>
-      {% endif %}
-    </div>
 
     <!-- Sidebar（そのまま） -->
     {% include "com/_sidebar.html" with active_menu="settings" %}
@@ -25,7 +20,7 @@
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <h5 class="mb-0">【設定】</h5>
+          <h5 class="page-title mb-0">【設定】</h5>
         </div>
       </div>
 

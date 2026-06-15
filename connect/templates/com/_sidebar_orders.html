@@ -1,37 +1,39 @@
-{# templates/com/_sidebar.html #}
+{% load access_tags %}
 <nav class="col-12 col-md-3 col-lg-2">
   <div class="card shadow-sm position-sticky" style="top: 1rem;">
+    {% if user_access|any_menu_in_group:"orders" %}
     <div class="card-body">
       <div class="fw-bold mb-2">■ NEXUS</div>
 
       <div class="list-group">
+        {% if user_access|can_menu:"orders" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'orders' %}active{% endif %}"
            href="{% url 'connect:orders' %}">注文一覧</a>
+        {% endif %}
 
+        {% if user_access|can_menu:"orders_distribution_bv" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'orders_distribution_bv' %}active{% endif %}"
            href="{% url 'connect:orders_distribution_bv' %}">BV振分情報</a>
+        {% endif %}
 
+        {% if user_access|can_menu:"api_users_bv" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'api_users_bv' %}active{% endif %}"
            href="{% url 'connect:api_users_bv' %}">会員BV特別反映情報</a>
-
+        {% endif %}
       </div>
     </div>
+    {% endif %}
 
+    {% if user_access|can_menu:"cooling_off" %}
     <div class="card-body">
       <div class="fw-bold mb-2">■ BONUS SYSTEM</div>
 
       <div class="list-group">
         <a class="list-group-item list-group-item-action {% if active_menu == 'cooling_off' %}active{% endif %}"
            href="{% url 'connect:cooling_off' %}">クーリングオフ</a>
-
-        <a class="list-group-item list-group-item-action {% if active_menu == 'bonus_payment_date' %}active{% endif %}"
-           href="#">#ボーナス支払日</a>
-
-        <a class="list-group-item list-group-item-action {% if active_menu == 'b_orders' %}active{% endif %}"
-           href="#">#B_注文一覧</a>
-
       </div>
     </div>
+    {% endif %}
 
   </div>
 </nav>

@@ -1,0 +1,22 @@
+<div class="bonus-calc-kibetu-field">
+  <label class="form-label mb-1 small text-muted">期別</label>
+  <input type="text"
+         name="kibetu"
+         class="form-control bonus-calc-kibetu-input"
+         list="{{ datalist_id }}"
+         value="{{ selected_kibetu|default:'' }}"
+         placeholder="期別を入力または選択"
+         autocomplete="off"
+         required>
+  <datalist id="{{ datalist_id }}">
+    {% for obj in period_choices %}
+      <option value="{{ obj.kibetu }}">
+        {% if period_type == "monthly" %}
+          {% if obj.payment_date %}{{ obj.kibetu }} ({{ obj.payment_date }}){% else %}{{ obj.kibetu }}{% endif %}
+        {% else %}
+          {% if obj.st_date %}{{ obj.kibetu }} ({{ obj.st_date }} - {{ obj.end_date }}){% else %}{{ obj.kibetu }}{% endif %}
+        {% endif %}
+      </option>
+    {% endfor %}
+  </datalist>
+</div>

@@ -1,57 +1,99 @@
-{% extends 'base.html' %}
-{% load static %}
+﻿{% extends 'base.html' %}
+{% load static custom_filters %}
 
 {% block head %}
     <link href="{% static 'css/common.css' %}" rel="stylesheet">
 {% endblock %}
 
 {% block contents %}
-<div class="container-fluid mt-3" style="height: calc(100vh - 170px); overflow: hidden;">
+<div class="container-fluid mt-3 app-page-viewport">
   <div class="row g-1 h-100">
 
-    <div class="col-12 text-end">
-      {% if user.is_authenticated %}
-        <span class="small text-muted">👤 {{ user.username }}</span>
-      {% endif %}
-    </div>
 
     {% include "com/_sidebar_bonus_kensaku.html" with active_menu="matching_bonus" %}
 
-    <main class="col-12 col-md-9 col-lg-10 d-flex flex-column" style="height: calc(100% - 24px); overflow: hidden;">
+    <main class="col-12 col-md-9 col-lg-10 app-page-main">
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <h5 class="mb-3">【ボーナス検索 - マッチングボーナス】</h5>
+          <h5 class="page-title mb-3">【ボーナス検索 - マッチングボーナス】</h5>
 
           <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+            <input type="hidden" name="sort" value="{{ sort|default:'' }}">
+            <input type="hidden" name="direction" value="{{ direction|default:'' }}">
             <div>
               <label class="form-label mb-0 small text-muted">期別</label>
-              <select name="kibetu" class="form-select">
-                {% for obj in object_list %}
-                  <option value="{{ obj.kibetu }}"
-                          {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
-                    【{{ obj.kibetu }}】 ({{ obj.st_date }} - {{ obj.end_date }})
-                  </option>
-                {% endfor %}
-              </select>
+              <div class="filter-dropdown filter-dropdown--kibetu">
+                <button class="btn btn-outline-secondary filter-dropdown__toggle"
+                        type="button"
+                        aria-haspopup="true"
+                        aria-expanded="false">
+                  {% if selected_kibetu_list %}
+                    期別（{{ selected_kibetu_list|length }}件）
+                  {% else %}
+                    期別を選択
+                  {% endif %}
+                </button>
+                <div class="filter-dropdown__menu p-3">
+                  {% for obj in object_list %}
+                    <div class="form-check mb-2">
+                      <input class="form-check-input"
+                             type="checkbox"
+                             name="kibetu"
+                             value="{{ obj.kibetu }}"
+                             id="matching_kibetu_{{ forloop.counter }}"
+                             {% if obj.kibetu in selected_kibetu_list %}checked{% endif %}>
+                      <label class="form-check-label"
+                             for="matching_kibetu_{{ forloop.counter }}">
+                        {{ obj.kibetu }}
+                      </label>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">紹介者コード</label>
+              <input type="text" name="introducer_code" class="form-control"
+                     value="{{ introducer_code }}" placeholder="例：JP00000000">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">紹介者名</label>
+              <input type="text" name="introducer_name" class="form-control"
+                     value="{{ introducer_name }}" placeholder="部分一致">
             </div>
 
             <button type="submit" class="btn btn-primary">表示</button>
-            <a class="btn btn-outline-secondary" href="{% url 'connect:drive_bonus' %}">リセット</a>
+            <a class="btn btn-outline-secondary" href="{% url 'connect:s_matching_bonus' %}">リセット</a>
+            {% if user_access.can_export %}
             <button type="submit" name="export" value="excel" class="btn btn-success">
               Excel出力
             </button>
+            {% endif %}
           </form>
 
-          {% if selected_period %}
-            <div class="text-muted small mt-3">
-              選択中：
-              <span class="badge bg-info text-dark">{{ selected_period.kibetu }}</span>
-              <span class="badge bg-secondary">{{ selected_period.st_date }} ～ {{ selected_period.end_date }}</span>
-            </div>
-          {% else %}
-            <div class="text-muted small mt-3">期別を選択してください</div>
+          <div class="selection-indicator-group mt-3">
+            <span class="selection-indicator__label mr-1">選択中：</span>
+            {% if selected_kibetu_list %}
+              {% for kibetu in selected_kibetu_list %}
+                <span class="selection-indicator__badge selection-indicator__badge--kibetu badge badge-pill">{{ kibetu }}</span>
+              {% endfor %}
+            {% else %}
+              <span class="selection-indicator__badge selection-indicator__badge--kibetu-none badge badge-pill">期別：指定なし</span>
+            {% endif %}
+          {% if introducer_code or introducer_name %}
+          <div class="selection-indicator">
+            {% if introducer_code %}
+              <span class="selection-indicator__badge selection-indicator__badge--introducer-code badge badge-pill">紹介者コード：{{ introducer_code }}</span>
+            {% endif %}
+            {% if introducer_name %}
+              <span class="selection-indicator__badge selection-indicator__badge--introducer-name badge badge-pill">紹介者名：{{ introducer_name }}</span>
+            {% endif %}
+          </div>
           {% endif %}
+          </div>
         </div>
       </div>
 
@@ -68,13 +110,13 @@
               <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                   <tr>
-                    <th>期別</th>
-                    <th>紹介者コード</th>
-                    <th>紹介者名</th>
-                    <th>直紹介アクティブ人数</th>
-                    <th>ベーシックBV</th>
-                    <th>マッチングBV</th>
-                    <th>作成日時</th>
+                    {% sortable_th "kibetu" "期別" %}
+                    {% sortable_th "introducer_code" "紹介者コード" %}
+                    {% sortable_th "introducer_name" "紹介者名" %}
+                    {% sortable_th "active_count" "直紹介アクティブ人数" %}
+                    {% sortable_th "basic_bv" "ベーシックBV" %}
+                    {% sortable_th "matching_bv" "マッチングBV" %}
+                    {% sortable_th "created_at" "作成日時" %}
                   </tr>
                 </thead>
                 <tbody>
@@ -94,10 +136,12 @@
             </div>
 
           {% else %}
-            {% if selected_kibetu %}
-              <p class="mb-0">この期間のデータはありません。</p>
+            {% if selected_kibetu_list or introducer_code or introducer_name %}
+              <p class="mb-0">この条件のデータはありません。</p>
             {% else %}
-              <p class="mb-0 text-muted">期別を選択して「選択」を押してください。</p>
+              <p class="mb-0 text-muted">
+                期別、紹介者コード、紹介者名のいずれかを入力して「表示」を押してください。
+              </p>
             {% endif %}
           {% endif %}
 

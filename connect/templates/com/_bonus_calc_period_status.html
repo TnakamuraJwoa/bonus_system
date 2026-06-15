@@ -1,0 +1,6 @@
+{% load custom_filters %}
+{% if selected_kibetu and not selected_period %}
+  <div class="text-warning small mt-3">期別「{{ selected_kibetu }}」は期別マスタに登録されていません。</div>
+{% else %}
+  {% selection_from_period selected_period empty_message=empty_message %}
+{% endif %}

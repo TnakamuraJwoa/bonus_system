@@ -1,27 +1,33 @@
-{# templates/com/_sidebar.html #}
+{% load access_tags %}
 <nav class="col-12 col-md-3 col-lg-2">
   <div class="card shadow-sm position-sticky" style="top: 1rem;">
+    {% if user_access|can_menu:"week_bonus" or user_access|can_menu:"month_bonus" %}
     <div class="card-body">
       <div class="fw-bold mb-2">【合計実績】</div>
 
       <div class="list-group">
+        {% if user_access|can_menu:"week_bonus" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'week_bonus' %}active{% endif %}"
            href="{% url 'connect:week_bonus' %}">week</a>
+        {% endif %}
 
+        {% if user_access|can_menu:"month_bonus" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'month_bonus' %}active{% endif %}"
            href="{% url 'connect:month_bonus' %}">month</a>
-
+        {% endif %}
       </div>
     </div>
+    {% endif %}
 
+    {% if user_access|can_menu:"bonus_histry" %}
     <div class="card-body">
       <div class="fw-bold mb-2">【登録履歴】</div>
 
       <div class="list-group">
         <a class="list-group-item list-group-item-action {% if active_menu == 'bonus_histry' %}active{% endif %}"
            href="{% url 'connect:bonus_histry' %}">個人実績の登録履歴</a>
-
       </div>
     </div>
+    {% endif %}
   </div>
 </nav>

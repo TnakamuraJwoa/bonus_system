@@ -1,53 +1,40 @@
-{% extends 'base.html' %}
-{% load static %}
+﻿{% extends 'base.html' %}
+{% load static custom_filters %}
 
 {% block head %}
     <link href="{% static 'css/common.css' %}" rel="stylesheet">
 {% endblock %}
 
 {% block contents %}
-<div class="container-fluid mt-3" style="height: calc(100vh - 170px); overflow: hidden;">
+<div class="container-fluid mt-3 app-page-viewport">
   <div class="row g-1 h-100">
 
-    <div class="col-12 text-end">
-      {% if user.is_authenticated %}
-        <span class="small text-muted">👤 {{ user.username }}</span>
-      {% endif %}
-    </div>
 
     {% include "com/_sidebar_bonus_keisan.html" with active_menu="repurchase_over_bonus" %}
 
-    <main class="col-12 col-md-9 col-lg-10 d-flex flex-column" style="height: calc(100% - 24px); overflow: hidden;">
+    <main class="col-12 col-md-9 col-lg-10 app-page-main">
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <h5 class="mb-3">【ボーナス計算 - 再購入オーバーボーナス】</h5>
+          <h5 class="page-title mb-3">【ボーナス計算 - 再購入オーバーボーナス】</h5>
 
           <div class="d-flex gap-2 align-items-end mb-0 flex-wrap">
 
             <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
-              <div>
-                <label class="form-label mb-0 small text-muted">期別</label>
-                <select name="kibetu" class="form-select">
-                  {% for obj in object_list %}
-                    <option value="{{ obj.kibetu }}"
-                            {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
-                      {{ obj.kibetu }} ({{ obj.payment_date }})
-                    </option>
-                  {% endfor %}
-                </select>
-              </div>
+
+              {% bonus_calc_kibetu_input selected_kibetu period_type="monthly" %}
 
               <button type="submit" class="btn btn-primary">表示</button>
 
-              <a class="btn btn-outline-secondary" href="{% url 'connect:repurchase_over_bonus' %}">
+              <a class="btn btn-outline-secondary"
+                 href="{% url 'connect:repurchase_over_bonus' %}">
                 リセット
               </a>
             </form>
 
-            {% if selected_period and rows %}
+            {% if user_access.can_execute and selected_period and rows %}
               <form method="post" class="mb-0"
-                    onsubmit="return confirm('表示中の再購入オーバーボーナス結果を登録しますか？すでに登録済みの場合は上書き更新されます。');">
+                    onsubmit="return confirm('表示中の再購入オーバーボーナス結果を登録しますか？');">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="repurchase_over_bonus">
                 <input type="hidden" name="kibetu" value="{{ selected_kibetu }}">
@@ -60,20 +47,7 @@
 
           </div>
 
-          {% if selected_period %}
-            <div class="text-muted small mt-3">
-              選択中：
-              <span class="badge bg-primary">
-                {{ selected_period.kibetu }}
-              </span>
-
-              <span class="badge bg-secondary">
-                支払日：{{ selected_period.payment_date }}
-              </span>
-            </div>
-          {% else %}
-            <div class="text-muted small mt-3">期別を選択してください</div>
-          {% endif %}
+          {% bonus_calc_period_status empty_message="期別を選択してください" %}
         </div>
       </div>
 
@@ -83,11 +57,17 @@
           {% if rows %}
             <div class="d-flex justify-content-between align-items-center mb-2">
               <div class="fw-bold">一覧</div>
-              <div class="text-end"><strong>件数：{{ rows|length }} 件</strong></div>
+              <div class="text-end">
+                <strong>件数：{{ rows|length }} 件</strong>
+              </div>
             </div>
 
-            <div class="table-responsive flex-grow-1" style="min-height: 0; overflow-x: auto; overflow-y: auto;">
-              <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
+            <div class="table-responsive flex-grow-1"
+                 style="min-height: 0; overflow-x: auto; overflow-y: auto;">
+
+              <table class="table table-bordered table-sm align-middle mb-0"
+                     style="white-space: nowrap;">
+
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                   <tr>
                     <th class="text-center">root_code</th>
@@ -98,7 +78,9 @@
                     <th class="text-center">down_name</th>
                     <th class="text-center">tree_level</th>
                     <th class="text-center">match_count</th>
+                    <th class="text-center">rate</th>
                     <th class="text-center">sum_bv</th>
+                    <th class="text-center">over_bonus</th>
                   </tr>
                 </thead>
 
@@ -113,20 +95,23 @@
                       <td>{{ r.down_name }}</td>
                       <td class="text-end">{{ r.tree_level }}</td>
                       <td class="text-end">{{ r.match_count }}</td>
-                      <td class="fw-bold text-primary text-end">
-                        {{ r.sum_bv }}
-                      </td>
+                      <td class="text-end">{{ r.rate }}</td>
+                      <td class="fw-bold text-primary text-end">{{ r.sum_bv }}</td>
+                      <td class="fw-bold text-danger text-end">{{ r.over_bonus }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>
+
               </table>
             </div>
 
           {% else %}
             {% if selected_kibetu %}
-              <p class="mb-0">この期間のデータはありません。</p>
+              <p class="mb-0">この条件のデータはありません。</p>
             {% else %}
-              <p class="mb-0 text-muted">期別を選択して「表示」を押してください。</p>
+              <p class="mb-0 text-muted">
+                期別を選択して「表示」を押してください。
+              </p>
             {% endif %}
           {% endif %}
 

@@ -232,13 +232,14 @@ def get_repurchase_over_bonus_insert_data(selected_kibetu, rows):
             down_name,
             tree_level,
             match_count,
+            rate,
             sum_bv,
-            created_at,
-            updated_at
-        ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'),
-            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo')
+            over_bonus
+        )
+        VALUES (
+            %s, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s,
+            %s, %s
         )
         ON DUPLICATE KEY UPDATE
             root_name = VALUES(root_name),
@@ -247,8 +248,10 @@ def get_repurchase_over_bonus_insert_data(selected_kibetu, rows):
             down_name = VALUES(down_name),
             tree_level = VALUES(tree_level),
             match_count = VALUES(match_count),
+            rate = VALUES(rate),
             sum_bv = VALUES(sum_bv),
-            updated_at = CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo')
+            over_bonus = VALUES(over_bonus),
+            updated_at = CURRENT_TIMESTAMP
     """
 
     insert_params = []
@@ -256,15 +259,17 @@ def get_repurchase_over_bonus_insert_data(selected_kibetu, rows):
     for r in rows:
         insert_params.append([
             selected_kibetu,
-            r.get("root_code") or "",
-            r.get("root_name") or "",
-            r.get("up_code") or "",
-            r.get("up_name") or "",
-            r.get("down_code") or "",
-            r.get("down_name") or "",
-            r.get("tree_level") or 0,
-            r.get("match_count") or 0,
-            r.get("sum_bv") or 0,
+            r.get("root_code"),
+            r.get("root_name"),
+            r.get("up_code"),
+            r.get("up_name"),
+            r.get("down_code"),
+            r.get("down_name"),
+            r.get("tree_level"),
+            r.get("match_count"),
+            r.get("rate"),
+            r.get("sum_bv"),
+            r.get("over_bonus"),
         ])
 
     return insert_sql, insert_params

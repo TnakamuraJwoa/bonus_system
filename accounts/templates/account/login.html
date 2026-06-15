@@ -4,33 +4,31 @@
 
 {% block head %}
     {% load static %}
-    <link href="{% static 'css/login.css' %}" rel="stylesheet">
+    <link href="{% static 'css/login.css' %}?v=3" rel="stylesheet">
 {% endblock %}
 
 {% block contents %}
-<div class="container my-mt">
-    <div class="row">
-        <div class="col-md-8 mx-auto">
-            <div class="form-wrapper">
-                <h1>Login</h1>
-                <form method="post" action="{% url 'account_login' %}">
-                    {% csrf_token%}
-                    <div class="form-item">{{ form.login }}</div>
-                    <div class="form-item">{{ form.password }}</div>
-                    <div class="form-text">ログインしたままにする {{ form.remember }}</div>
-                    <!-- 元のページにリダイレクト -->
-                    {% if redirect_field_value %}
-                        <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}" />
-                    {% endif %}
-                    <div class="button-panel">
-                        <input type="submit" class="button" title="Log In" value="Log In"></input>
-                    </div>
-                </form>
-                <div class="form-footer">
-<!--                    <p><a href="{% url 'account_signup' %}">アカウントを作成</a></p>-->
-<!--                    <p><a href="{% url 'account_reset_password' %}">パスワードを忘れましたか？</a></p>-->
-                </div>
+<div class="login-page">
+    <div class="login-card">
+        <h1>Bonus System</h1>
+        {% if request.GET.timeout %}
+            <div class="alert alert-warning mb-3" role="alert">
+                1時間操作がなかったため、自動的にログアウトしました。再度ログインしてください。
             </div>
+        {% endif %}
+        <form method="post" action="{% url 'account_login' %}">
+            {% csrf_token%}
+            <div class="form-item">{{ form.login }}</div>
+            <div class="form-item">{{ form.password }}</div>
+            <div class="form-text">ログインしたままにする {{ form.remember }}</div>
+            {% if redirect_field_value %}
+                <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}" />
+            {% endif %}
+            <div class="button-panel">
+                <input type="submit" class="button" title="Log In" value="ログイン">
+            </div>
+        </form>
+        <div class="form-footer">
         </div>
     </div>
 </div>

@@ -1,4 +1,4 @@
-{% extends 'base.html' %}
+﻿{% extends 'base.html' %}
 {% load humanize %}
 {% load static %}
 
@@ -7,23 +7,18 @@
 {% endblock %}
 
 {% block contents %}
-<div class="container-fluid mt-3">
-  <div class="row g-1">
+<div class="container-fluid mt-3 list-page-viewport">
+  <div class="row g-1 h-100">
 
-    <div class="col-12 text-end">
-      {% if user.is_authenticated %}
-        <span class="small text-muted">👤 {{ user.username }}</span>
-      {% endif %}
-    </div>
 
     {% include "com/_sidebar_orders.html" with active_menu="orders" %}
 
-    <main class="col-12 col-md-9 col-lg-10">
+    <main class="col-12 col-md-9 col-lg-10 list-page-main">
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
 
-          <h5 class="mb-3">【注文管理 - 注文一覧】</h5>
+          <h5 class="page-title mb-3">【注文管理 - 注文一覧】</h5>
 
           <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
 
@@ -46,102 +41,128 @@
             </div>
 
             <div>
-              <label class="form-label mb-0 small text-muted">
-                注文状況
-              </label>
-
-              <select name="q_order_status" class="form-select">
-
-                <option value="">全て</option>
-
-                <option value="201"
-                  {% if q_order_status == "201" %}selected{% endif %}>
-                  201：入金待ち
-                </option>
-
-                <option value="202"
-                  {% if q_order_status == "202" %}selected{% endif %}>
-                  202：入金確認済
-                </option>
-
-                <option value="203"
-                  {% if q_order_status == "203" %}selected{% endif %}>
-                  203：決済完了
-                </option>
-
-                <option value="204"
-                  {% if q_order_status == "204" %}selected{% endif %}>
-                  204：出荷依頼済
-                </option>
-
-                <option value="205"
-                  {% if q_order_status == "205" %}selected{% endif %}>
-                  205：出荷完了
-                </option>
-
-                <option value="206"
-                  {% if q_order_status == "206" %}selected{% endif %}>
-                  206：キャンセル
-                </option>
-
-                <option value="207"
-                  {% if q_order_status == "207" %}selected{% endif %}>
-                  207：返品処理中
-                </option>
-
-                <option value="208"
-                  {% if q_order_status == "208" %}selected{% endif %}>
-                  208：返品処理完了
-                </option>
-
-                <option value="209"
-                  {% if q_order_status == "209" %}selected{% endif %}>
-                  209：商品交換処理中
-                </option>
-
-                <option value="210"
-                  {% if q_order_status == "210" %}selected{% endif %}>
-                  210：再出荷依頼中
-                </option>
-
-                <option value="211"
-                  {% if q_order_status == "211" %}selected{% endif %}>
-                  211：再出荷完了
-                </option>
-
-              </select>
+              <label class="form-label mb-0 small text-muted">入金日（FROM）</label>
+              <input type="date" name="q_deposit_from" class="form-control"
+                     value="{{ q_deposit_from|default:'' }}">
             </div>
 
             <div>
-              <label class="form-label mb-0 small text-muted">
-                注文区分
-              </label>
+              <label class="form-label mb-0 small text-muted">入金日（TO）</label>
+              <input type="date" name="q_deposit_to" class="form-control"
+                     value="{{ q_deposit_to|default:'' }}">
+            </div>
 
-              <select name="q_order_type" class="form-select">
+            <div>
+              <label class="form-label mb-0 small text-muted">注文状況</label>
+              <div class="filter-dropdown">
+                <button class="btn btn-outline-secondary filter-dropdown__toggle"
+                        type="button"
+                        aria-haspopup="true"
+                        aria-expanded="false"
+                        style="min-width: 220px; text-align: left;">
+                  {% if q_order_statuses %}
+                    注文状況（{{ q_order_statuses|length }}件）
+                  {% else %}
+                    注文状況を選択
+                  {% endif %}
+                </button>
+                <div class="filter-dropdown__menu p-3">
+                  <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="q_order_status" value="201" id="os201"
+                           {% if "201" in q_order_statuses %}checked{% endif %}>
+                    <label class="form-check-label" for="os201">201：入金待ち</label>
+                  </div>
+                  <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="q_order_status" value="202" id="os202"
+                           {% if "202" in q_order_statuses %}checked{% endif %}>
+                    <label class="form-check-label" for="os202">202：入金確認済</label>
+                  </div>
+                  <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="q_order_status" value="203" id="os203"
+                           {% if "203" in q_order_statuses %}checked{% endif %}>
+                    <label class="form-check-label" for="os203">203：決済完了</label>
+                  </div>
+                  <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="q_order_status" value="204" id="os204"
+                           {% if "204" in q_order_statuses %}checked{% endif %}>
+                    <label class="form-check-label" for="os204">204：出荷依頼済</label>
+                  </div>
+                  <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="q_order_status" value="205" id="os205"
+                           {% if "205" in q_order_statuses %}checked{% endif %}>
+                    <label class="form-check-label" for="os205">205：出荷完了</label>
+                  </div>
+                  <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="q_order_status" value="206" id="os206"
+                           {% if "206" in q_order_statuses %}checked{% endif %}>
+                    <label class="form-check-label" for="os206">206：キャンセル</label>
+                  </div>
+                  <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="q_order_status" value="207" id="os207"
+                           {% if "207" in q_order_statuses %}checked{% endif %}>
+                    <label class="form-check-label" for="os207">207：返品処理中</label>
+                  </div>
+                  <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="q_order_status" value="208" id="os208"
+                           {% if "208" in q_order_statuses %}checked{% endif %}>
+                    <label class="form-check-label" for="os208">208：返品処理完了</label>
+                  </div>
+                  <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="q_order_status" value="209" id="os209"
+                           {% if "209" in q_order_statuses %}checked{% endif %}>
+                    <label class="form-check-label" for="os209">209：商品交換処理中</label>
+                  </div>
+                  <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="q_order_status" value="210" id="os210"
+                           {% if "210" in q_order_statuses %}checked{% endif %}>
+                    <label class="form-check-label" for="os210">210：再出荷依頼中</label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="q_order_status" value="211" id="os211"
+                           {% if "211" in q_order_statuses %}checked{% endif %}>
+                    <label class="form-check-label" for="os211">211：再出荷完了</label>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-                <option value="">全て</option>
-
-                <option value="101"
-                  {% if q_order_type == "101" %}selected{% endif %}>
-                  101：再購入品
-                </option>
-
-                <option value="102"
-                  {% if q_order_type == "102" %}selected{% endif %}>
-                  102：初回購入品
-                </option>
-
-                <option value="103"
-                  {% if q_order_type == "103" %}selected{% endif %}>
-                  103：ランクアップ購入品
-                </option>
-
-                <option value="105"
-                  {% if q_order_type == "105" %}selected{% endif %}>
-                  105：特別対応購入品
-                </option>
-
-              </select>
+            <div>
+              <label class="form-label mb-0 small text-muted">注文区分</label>
+              <div class="filter-dropdown">
+                <button class="btn btn-outline-secondary filter-dropdown__toggle"
+                        type="button"
+                        aria-haspopup="true"
+                        aria-expanded="false"
+                        style="min-width: 220px; text-align: left;">
+                  {% if q_order_types %}
+                    注文区分（{{ q_order_types|length }}件）
+                  {% else %}
+                    注文区分を選択
+                  {% endif %}
+                </button>
+                <div class="filter-dropdown__menu p-3">
+                  <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="q_order_type" value="101" id="ot101"
+                           {% if "101" in q_order_types %}checked{% endif %}>
+                    <label class="form-check-label" for="ot101">101：再購入品</label>
+                  </div>
+                  <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="q_order_type" value="102" id="ot102"
+                           {% if "102" in q_order_types %}checked{% endif %}>
+                    <label class="form-check-label" for="ot102">102：初回購入品</label>
+                  </div>
+                  <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="q_order_type" value="103" id="ot103"
+                           {% if "103" in q_order_types %}checked{% endif %}>
+                    <label class="form-check-label" for="ot103">103：ランクアップ購入品</label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="q_order_type" value="105" id="ot105"
+                           {% if "105" in q_order_types %}checked{% endif %}>
+                    <label class="form-check-label" for="ot105">105：特別対応購入品</label>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div style="width: 120px;">
@@ -209,15 +230,7 @@
 
           {% if rows %}
 
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <div class="fw-bold">一覧</div>
-              <div class="text-end">
-                <strong>総件数：{{ total_count }} 件</strong>
-                <span class="text-muted small ms-2">
-                  （{{ page }} / {{ total_pages }}）
-                </span>
-              </div>
-            </div>
+            {% include "com/_list_summary.html" %}
 
             <div class="table-responsive">
               <table class="table table-bordered table-sm align-middle mb-0"
@@ -317,7 +330,7 @@
                       {{ r.total_price|intcomma }}
                     </td>
                     <td class="text-end">{{ r.total_bv }}</td>
-                    <td>{{ r.order_at }}</td>
+                    <td>{{ r.deposit_at|default:"" }}</td>
                     <td>{{ r.created_at }}</td>
                     <td class="text-center">
                       <a href="{% url 'connect:order_detail' r.id %}"
@@ -332,34 +345,7 @@
               </table>
             </div>
 
-            <div class="d-flex justify-content-between align-items-center mt-3">
-              <div class="text-muted small">
-                {% if has_prev_hint %}
-                  ※「戻る」はブラウザの戻るでもOK
-                {% endif %}
-              </div>
-
-              <div class="d-flex">
-                {% if has_prev_hint %}
-                  <button class="btn btn-outline-secondary btn-sm me-2"
-                          type="button"
-                          onclick="history.back()">
-                    ← 戻る
-                  </button>
-                {% endif %}
-
-                {% if has_next %}
-                  <a class="btn btn-primary btn-sm"
-                     href="?{{ base_qs }}{% if base_qs %}&{% endif %}page={{ page|add:1 }}&after_id={{ next_after_id }}">
-                    次へ →
-                  </a>
-                {% else %}
-                  <button class="btn btn-secondary btn-sm" disabled>
-                    次へ →
-                  </button>
-                {% endif %}
-              </div>
-            </div>
+            {% include "com/_pagination.html" %}
 
           {% else %}
             <p class="mb-0 text-muted">該当データがありません。</p>
