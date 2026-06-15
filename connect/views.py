@@ -1255,6 +1255,49 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
                 for row in cursor.fetchall()
             ]
 
+    def _delete_registered_month(self, year, month):
+        sql = """
+            DELETE FROM bonus_db.purchase_info_list
+            WHERE register_year = %s
+              AND register_month = %s
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, [year, month])
+            return cursor.rowcount
+
+    def post(self, request, *args, **kwargs):
+        action = request.POST.get("action", "")
+        selected_month = (request.POST.get("target_month") or "").strip()
+
+        if action != "delete_registered_month":
+            messages.error(request, "不正な操作です。")
+            return redirect("connect:repurchase_list")
+
+        if not selected_month:
+            messages.error(request, "削除する登録年月を選択してください。")
+            return redirect("connect:repurchase_list")
+
+        try:
+            year, month = map(int, selected_month.split("-"))
+        except (ValueError, TypeError):
+            messages.error(request, "登録年月の形式が不正です。")
+            return redirect("connect:repurchase_list")
+
+        try:
+            with transaction.atomic(using="rds"):
+                deleted_count = self._delete_registered_month(year, month)
+        except Exception as e:
+            logger.exception("購入情報登録一覧の年月削除エラー")
+            messages.error(request, f"削除中にエラーが発生しました: {e}")
+            return redirect(f"{redirect('connect:repurchase_list').url}?target_month={selected_month}")
+
+        if deleted_count:
+            messages.success(request, f"{year}年{month}月 の購入情報を {deleted_count}件削除しました。")
+        else:
+            messages.warning(request, f"{year}年{month}月 の削除対象データはありません。")
+
+        return redirect("connect:repurchase_list")
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 

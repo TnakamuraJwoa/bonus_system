@@ -200,6 +200,21 @@
 
           </form>
 
+          {% if user_access.can_delete %}
+            <form method="post"
+                  class="mt-2"
+                  onsubmit="return confirm('{{ selected_period.year }}年{{ selected_period.month }}月 の購入情報をすべて削除しますか？この操作は元に戻せません。');">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="delete_registered_month">
+              <input type="hidden" name="target_month" value="{{ selected_month }}">
+              <button type="submit"
+                      class="btn btn-danger btn-sm"
+                      {% if not selected_period %}disabled{% endif %}>
+                選択年月のデータを削除
+              </button>
+            </form>
+          {% endif %}
+
           {% if selected_period or q_order_types %}
             <div class="selection-indicator-group mt-3">
               <span class="selection-indicator__label mr-1">選択中：</span>
