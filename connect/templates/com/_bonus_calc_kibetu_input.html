@@ -1,5 +1,21 @@
 <div class="bonus-calc-kibetu-field">
-  <label class="form-label mb-1 small text-muted">期別</label>
+  <div class="d-flex justify-content-between align-items-center mb-1">
+    <label class="form-label mb-0 small text-muted">期別</label>
+    {% if period_type == "weekly" %}
+      <div class="btn-group btn-group-sm" role="group" aria-label="期別候補の表示切替">
+        <button type="button"
+                onclick="this.closest('form').querySelector('input[name=kibetu_choice_mode]').value='recent'; this.closest('form').submit();"
+                class="btn {% if kibetu_choice_mode == 'recent' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+          直近半年
+        </button>
+        <button type="button"
+                onclick="this.closest('form').querySelector('input[name=kibetu_choice_mode]').value='all'; this.closest('form').submit();"
+                class="btn {% if kibetu_choice_mode == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+          全件
+        </button>
+      </div>
+    {% endif %}
+  </div>
   <input type="text"
          name="kibetu"
          class="form-control bonus-calc-kibetu-input"
@@ -8,6 +24,9 @@
          placeholder="期別を入力または選択"
          autocomplete="off"
          required>
+  {% if period_type == "weekly" %}
+    <input type="hidden" name="kibetu_choice_mode" value="{{ kibetu_choice_mode }}">
+  {% endif %}
   <datalist id="{{ datalist_id }}">
     {% for obj in period_choices %}
       <option value="{{ obj.kibetu }}">

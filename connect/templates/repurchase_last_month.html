@@ -22,24 +22,44 @@
 
           <div class="d-flex gap-2 align-items-end flex-wrap">
 
-            <form method="get" class="d-flex gap-2 align-items-end mb-0">
+            <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
               <div style="min-width: 220px;">
-              <select name="target_month" class="form-select">
-                <option value="">対象年月を選択</option>
+                <label class="form-label mb-1 small text-muted">直近1年から選択</label>
+                <select name="target_month_choice" class="form-select js-target-month-choice">
+                  <option value="">対象年月を選択</option>
+                  {% for obj in month_choices %}
+                    <option value="{{ obj.value }}"
+                            {% if obj.value == selected_month_choice %}selected{% endif %}>
+                      {% if obj.value in registered_months %}
+                        ★ {{ obj.year }}年{{ obj.month }}月
+                      {% else %}
+                        　{{ obj.year }}年{{ obj.month }}月
+                      {% endif %}
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
 
-                {% for obj in month_choices %}
-                  <option value="{{ obj.value }}"
-                    {% if obj.value == selected_month %}selected{% endif %}>
+              <div style="width: 140px;">
+                <label class="form-label mb-1 small text-muted">年</label>
+                <input type="text"
+                       name="target_year"
+                       class="form-control js-target-manual"
+                       value="{{ target_year|default:'' }}"
+                       inputmode="numeric"
+                       pattern="[0-9]{4}"
+                       placeholder="yyyy">
+              </div>
 
-                    {% if obj.value in registered_months %}
-                      ★ {{ obj.year }}年{{ obj.month }}月
-                    {% else %}
-                     　  {{ obj.year }}年{{ obj.month }}月
-                    {% endif %}
-
-                  </option>
-                {% endfor %}
-              </select>
+              <div style="width: 120px;">
+                <label class="form-label mb-1 small text-muted">月</label>
+                <input type="text"
+                       name="target_month"
+                       class="form-control js-target-manual"
+                       value="{{ target_month|default:'' }}"
+                       inputmode="numeric"
+                       pattern="[0-9]{1,2}"
+                       placeholder="mm">
               </div>
 
               <button type="submit" class="btn btn-primary">
@@ -50,7 +70,8 @@
             {% if user_access.can_execute %}
             <form method="post" class="mb-0">
               {% csrf_token %}
-              <input type="hidden" name="target_month" value="{{ selected_month }}">
+              <input type="hidden" name="target_year" value="{{ target_year }}">
+              <input type="hidden" name="target_month" value="{{ target_month }}">
               <button type="submit"
                       class="btn btn-success"
                       {% if not selected_month %}disabled{% endif %}>
@@ -129,4 +150,30 @@
     </main>
   </div>
 </div>
+{% endblock %}
+
+{% block script %}
+<script>
+(function () {
+  var choice = document.querySelector(".js-target-month-choice");
+  var manualFields = document.querySelectorAll(".js-target-manual");
+
+  if (choice) {
+    choice.addEventListener("change", function () {
+      if (!choice.value) return;
+      manualFields.forEach(function (field) {
+        field.value = "";
+      });
+    });
+  }
+
+  manualFields.forEach(function (field) {
+    field.addEventListener("input", function () {
+      if (choice) {
+        choice.value = "";
+      }
+    });
+  });
+})();
+</script>
 {% endblock %}

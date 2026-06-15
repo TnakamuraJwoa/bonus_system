@@ -72,6 +72,273 @@ def parse_input_date(value):
         ) from exc
 
 
+def get_week_purchase_check_months(selected_kibetu, period=None):
+    if period and getattr(period, "st_date", None) and getattr(period, "end_date", None):
+        st_date = period.st_date
+        end_date = period.end_date
+    else:
+        weekly_periods = list(
+            PeriodMaster.objects.using("rds")
+            .filter(kibetu__startswith=f"{selected_kibetu}W")
+            .exclude(st_date__isnull=True)
+            .exclude(end_date__isnull=True)
+            .order_by("st_date", "end_date")
+        )
+        if not weekly_periods:
+            return []
+
+        st_date = weekly_periods[0].st_date
+        end_date = max(p.end_date for p in weekly_periods)
+
+    target_dates = [
+        st_date - relativedelta(months=1),
+        st_date,
+        end_date,
+    ]
+
+    months = []
+    seen = set()
+    for target_date in target_dates:
+        year_month = (target_date.year, target_date.month)
+        if year_month not in seen:
+            seen.add(year_month)
+            months.append(year_month)
+
+    return months
+
+
+def has_purchase_info_for_month(register_year, register_month):
+    with connections["rds"].cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT 1
+            FROM bonus_db.purchase_info_list
+            WHERE register_year = %s
+              AND register_month = %s
+            LIMIT 1
+            """,
+            [register_year, register_month],
+        )
+        return cursor.fetchone() is not None
+
+
+def fetch_purchase_info_rows_for_month(
+    year,
+    month,
+    register_year=None,
+    register_month=None,
+):
+    register_year = register_year or year
+    register_month = register_month or month
+
+    start = datetime(year, month, 1)
+    end = start + relativedelta(months=1)
+    params = [
+        register_year,
+        register_month,
+        start,
+        end,
+        register_year,
+        register_month,
+        year,
+        month,
+    ]
+
+    with connections["rds"].cursor() as cursor:
+        cursor.execute(REPURCHASE_LAST_MONTH, params)
+        cols = [c[0] for c in cursor.description]
+        return [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+
+def insert_purchase_info_rows(rows):
+    insert_sql = """
+INSERT INTO bonus_db.purchase_info_list
+(
+    register_year,
+    register_month,
+    order_year,
+    order_month,
+    jwoa_code,
+    send_bv_name,
+    order_code,
+    total_bv,
+    bv,
+    order_type,
+    deposit_at,
+    order_at,
+    bonus_payment_date
+)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+"""
+
+    data = [
+        (
+            r["register_year"],
+            r["register_month"],
+            r["order_year"],
+            r["order_month"],
+            r["jwoa_code"],
+            r["send_bv_name"],
+            r["order_code"],
+            r["total_bv"],
+            r["bv"],
+            r["order_type"],
+            r["deposit_at"],
+            r["order_at"],
+            r["payment_date"],
+        )
+        for r in rows
+    ]
+
+    with connections["rds"].cursor() as cursor:
+        cursor.executemany(insert_sql, data)
+
+
+def auto_register_purchase_info_for_months(request, target_months):
+    no_source_months = []
+    registered_months = []
+
+    for year, month in target_months:
+        if has_purchase_info_for_month(year, month):
+            continue
+
+        rows = fetch_purchase_info_rows_for_month(year, month)
+        if not rows:
+            no_source_months.append((year, month))
+            continue
+
+        with transaction.atomic(using="rds"):
+            insert_purchase_info_rows(rows)
+        registered_months.append((year, month, len(rows)))
+
+    if registered_months:
+        registered_text = "、".join(
+            f"{year}年{month}月({count}件)"
+            for year, month, count in registered_months
+        )
+        messages.success(request, f"購入情報を自動登録しました: {registered_text}")
+
+    if no_source_months:
+        missing_text = "、".join(
+            f"{year}年{month}月"
+            for year, month in no_source_months
+        )
+        messages.error(
+            request,
+            f"購入情報の元データがないため登録できません: {missing_text}",
+        )
+        return False
+
+    return True
+
+
+def auto_register_purchase_info_for_kibetu_month(
+    request,
+    register_year,
+    register_month,
+):
+    if has_purchase_info_for_month(register_year, register_month):
+        return True
+
+    rows = fetch_purchase_info_rows_for_month(register_year, register_month)
+    if rows:
+        with transaction.atomic(using="rds"):
+            insert_purchase_info_rows(rows)
+
+        messages.success(
+            request,
+            (
+                "購入情報を自動登録しました: "
+                f"{register_year}年{register_month}月({len(rows)}件)"
+            ),
+        )
+        return True
+
+    messages.error(
+        request,
+        (
+            "購入情報の元データがないため登録できません: "
+            f"{register_year}年{register_month}月"
+        ),
+    )
+    return False
+
+
+def get_kibetu_register_year_month(selected_kibetu):
+    return int(selected_kibetu[0:4]), int(selected_kibetu[5:7])
+
+
+def ensure_kibetu_purchase_info(request, selected_kibetu, period=None):
+    try:
+        register_year, register_month = get_kibetu_register_year_month(
+            selected_kibetu
+        )
+    except (TypeError, ValueError):
+        messages.error(request, "期別から対象年月を判定できません。")
+        return False
+
+    return auto_register_purchase_info_for_kibetu_month(
+        request,
+        register_year,
+        register_month,
+    )
+
+
+def parse_target_month(value):
+    text = (value or "").strip()
+    if not text:
+        raise ValueError
+
+    if len(text) >= 7 and text[4].upper() == "C":
+        year = int(text[0:4])
+        month = int(text[5:7])
+    else:
+        year, month = map(int, text.split("-"))
+
+    if month < 1 or month > 12:
+        raise ValueError
+
+    return year, month
+
+
+def format_target_month(year, month):
+    return f"{year}-{month:02d}"
+
+
+def format_target_kibetu(year, month):
+    return f"{year}C{month:02d}"
+
+
+def get_target_year_month_from_params(params):
+    target_year = (params.get("target_year") or "").strip()
+    target_month = (params.get("target_month") or "").strip()
+
+    if target_year and target_month and "-" not in target_month:
+        year = int(target_year)
+        month = int(target_month)
+    else:
+        selected = (
+            params.get("target_month_choice")
+            or params.get("target_month")
+            or ""
+        ).strip()
+        year, month = parse_target_month(selected)
+
+    if month < 1 or month > 12:
+        raise ValueError
+
+    return year, month
+
+
+def ensure_week_purchase_info(request, selected_kibetu, period=None):
+    target_months = get_week_purchase_check_months(selected_kibetu, period)
+    if not target_months:
+        messages.error(request, "期別から週次の対象期間を判定できません。")
+        return False
+
+    return auto_register_purchase_info_for_months(request, target_months)
+
+
 class KeysetPaginationMixin:
 
     DEFAULT_PER_PAGE = 200
@@ -546,6 +813,9 @@ class DriveBonusView(generic.ListView):
             return ctx
 
         ctx["selected_period"] = period
+        if not ensure_week_purchase_info(self.request, selected_kibetu, period):
+            return ctx
+
         ctx["rows"] = self._get_drive_bonus_rows(selected_kibetu, period)
 
         return ctx
@@ -967,15 +1237,23 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
             return int(row[0]) if row else 0
 
     def _get_month_choices(self):
-        today = date.today().replace(day=1)
-        return [
-            {
-                "value": (today - relativedelta(months=i)).strftime("%Y-%m"),
-                "year": (today - relativedelta(months=i)).year,
-                "month": (today - relativedelta(months=i)).month,
-            }
-            for i in range(12)
-        ]
+        sql = """
+            SELECT DISTINCT
+                register_year,
+                register_month
+            FROM bonus_db.purchase_info_list
+            ORDER BY register_year DESC, register_month DESC
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql)
+            return [
+                {
+                    "value": format_target_month(row[0], row[1]),
+                    "year": row[0],
+                    "month": row[1],
+                }
+                for row in cursor.fetchall()
+            ]
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -1007,7 +1285,6 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
         page = max(1, page)
 
         ctx["month_choices"] = self._get_month_choices()
-        ctx["registered_months"] = self._get_registered_months()
 
         ctx["selected_month"] = selected_month
         ctx["q_code"] = q_code
@@ -2114,7 +2391,14 @@ class RepurchaseLastMonthView(generic.TemplateView):
         today = date.today().replace(day=1)
         return [
             {
-                "value": (today - relativedelta(months=i)).strftime("%Y-%m"),
+                "value": format_target_month(
+                    (today - relativedelta(months=i)).year,
+                    (today - relativedelta(months=i)).month,
+                ),
+                "kibetu": format_target_kibetu(
+                    (today - relativedelta(months=i)).year,
+                    (today - relativedelta(months=i)).month,
+                ),
                 "year": (today - relativedelta(months=i)).year,
                 "month": (today - relativedelta(months=i)).month,
             }
@@ -2208,32 +2492,45 @@ WHERE name = 'set_title'
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
-        selected = self.request.GET.get("target_month")
+        selected_choice = (self.request.GET.get("target_month_choice") or "").strip()
+        target_year = (self.request.GET.get("target_year") or "").strip()
+        target_month = (self.request.GET.get("target_month") or "").strip()
         ctx["month_choices"] = self._get_month_choices()
         ctx["registered_months"] = self._get_registered_months()
-        ctx["selected_month"] = selected
+        ctx["selected_month"] = ""
+        ctx["selected_month_choice"] = selected_choice
+        ctx["target_year"] = target_year
+        ctx["target_month"] = target_month
         ctx["rows"] = []
 
-        if selected:
+        if selected_choice or target_year or target_month:
             try:
-                y, m = map(int, selected.split("-"))
+                y, m = get_target_year_month_from_params(self.request.GET)
+                ctx["selected_month"] = format_target_month(y, m)
+                ctx["selected_month_choice"] = format_target_month(y, m)
+                ctx["target_year"] = y
+                ctx["target_month"] = m
                 ctx["rows"] = self._fetch_rows(y, m)
             except (ValueError, TypeError):
+                messages.error(self.request, "年月の形式が不正です。年と月を正しく指定してください。")
                 ctx["rows"] = []
 
         return ctx
 
     def post(self, request, *args, **kwargs):
-        selected = request.POST.get("target_month")
-
-        if not selected:
+        if not (
+            request.POST.get("target_month_choice")
+            or request.POST.get("target_year")
+            or request.POST.get("target_month")
+        ):
             messages.error(request, "年月未選択です。")
             return redirect("connect:repurchase_last_month")
 
         try:
-            y, m = map(int, selected.split("-"))
+            y, m = get_target_year_month_from_params(request.POST)
+            selected = format_target_month(y, m)
         except (ValueError, TypeError):
-            messages.error(request, "年月形式エラー")
+            messages.error(request, "年月の形式が不正です。年と月を正しく指定してください。")
             return redirect("connect:repurchase_last_month")
 
         rows = self._fetch_rows(y, m)
@@ -2241,7 +2538,7 @@ WHERE name = 'set_title'
         if not rows:
             messages.info(request, "対象データなし")
             return redirect(
-                f"{redirect('connect:repurchase_last_month').url}?target_month={selected}"
+                f"{redirect('connect:repurchase_last_month').url}?target_year={y}&target_month={m}"
             )
 
         try:
@@ -2254,12 +2551,12 @@ WHERE name = 'set_title'
             print(e)
             messages.error(request, f"エラー発生: {e}")
             return redirect(
-                f"{redirect('connect:repurchase_last_month').url}?target_month={selected}"
+                f"{redirect('connect:repurchase_last_month').url}?target_year={y}&target_month={m}"
             )
 
         messages.success(request, f"{len(rows)}件登録完了")
         return redirect(
-            f"{redirect('connect:repurchase_last_month').url}?target_month={selected}"
+            f"{redirect('connect:repurchase_last_month').url}?target_year={y}&target_month={m}"
         )
 
 
@@ -3618,6 +3915,8 @@ class TitleBonusView(generic.ListView):
             return ctx
 
         ctx["selected_period"] = period
+        if not ensure_kibetu_purchase_info(self.request, selected_kibetu, period):
+            return ctx
 
         ctx["rows"] = self._get_title_bonus_rows(
             selected_kibetu,
@@ -3930,6 +4229,8 @@ class TitleDiffBonusView(generic.ListView):
             return ctx
 
         ctx["selected_period"] = period
+        if not ensure_kibetu_purchase_info(self.request, selected_kibetu, period):
+            return ctx
 
         ctx["rows"] = self._get_title_diff_bonus_rows(
             selected_kibetu,
@@ -4233,6 +4534,8 @@ class RepurchaseOverBonusView(generic.ListView):
             return ctx
 
         ctx["selected_period"] = period
+        if not ensure_kibetu_purchase_info(self.request, selected_kibetu, period):
+            return ctx
 
         ctx["rows"] = self._get_repurchase_over_bonus_rows(
             selected_kibetu=selected_kibetu,
@@ -4751,6 +5054,8 @@ class ThreeStarGlobalBonusView(generic.ListView):
             return ctx
 
         ctx["selected_period"] = period
+        if not ensure_kibetu_purchase_info(self.request, selected_kibetu, period):
+            return ctx
 
         ctx["rows"] = self._get_three_star_global_bonus_rows(
             selected_kibetu=selected_kibetu,
@@ -5876,6 +6181,9 @@ class MonthBonusView(generic.ListView):
             return ctx
 
         ctx["selected_period"] = period
+        if not ensure_kibetu_purchase_info(self.request, selected_kibetu, period):
+            return ctx
+
         ctx["rows"] = self._get_month_bonus_rows(selected_kibetu)
 
         return ctx
