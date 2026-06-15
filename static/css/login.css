@@ -1,11 +1,18 @@
 /* Login page — matches app theme */
 
+#wrapper:has(.login-page) > footer.bg-black {
+    margin-top: 0;
+}
+
 .login-page {
-    min-height: calc(100vh - 120px);
+    flex: 1 0 auto;
+    width: 100%;
+    min-height: calc(100vh - var(--app-navbar-height, 56px) - var(--app-footer-height, 52px));
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 2rem 1rem;
+    margin: 0;
     background-color: #0f172a;
     background-image: url('../imgs/login_bg.png');
     background-size: cover;
