@@ -2427,8 +2427,9 @@ FROM (
 
 
 
-class RepurchaseLastMonthView(generic.TemplateView):
+class RepurchaseLastMonthView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "repurchase_last_month.html"
+    DEFAULT_PER_PAGE = 500
 
     def _get_month_choices(self):
         today = date.today().replace(day=1)
@@ -2457,14 +2458,37 @@ class RepurchaseLastMonthView(generic.TemplateView):
             cursor.execute(sql)
             return [row[0] for row in cursor.fetchall()]
 
-    def _fetch_rows(self, year, month):
+    def _build_query_params(self, year, month):
         start = datetime(year, month, 1)
         end = start + relativedelta(months=1)
+        return [year, month, start, end, year, month, year, month]
 
-        params = [year, month, start, end, year, month, year, month]
+    def _count_rows(self, year, month):
+        sql = f"""
+SELECT COUNT(*)
+FROM (
+{REPURCHASE_LAST_MONTH}
+) AS source_rows
+"""
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, self._build_query_params(year, month))
+            row = cursor.fetchone()
+            return int(row[0]) if row else 0
+
+    def _fetch_rows(self, year, month, limit=None, offset=0):
+        params = self._build_query_params(year, month)
+        sql = REPURCHASE_LAST_MONTH
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(REPURCHASE_LAST_MONTH, params)
+            if limit is not None:
+                sql = f"""
+{sql}
+ORDER BY payment_date ASC, order_code ASC, jwoa_code ASC
+LIMIT %s OFFSET %s
+"""
+                params.extend([limit, offset])
+
+            cursor.execute(sql, params)
             print(cursor._executed)
             cols = [c[0] for c in cursor.description]
             return [dict(zip(cols, r)) for r in cursor.fetchall()]
@@ -2545,6 +2569,7 @@ WHERE name = 'set_title'
         ctx["target_year"] = target_year
         ctx["target_month"] = target_month
         ctx["rows"] = []
+        ctx["per_page"] = self.get_per_page()
 
         if selected_choice or target_year or target_month:
             try:
@@ -2553,7 +2578,26 @@ WHERE name = 'set_title'
                 ctx["selected_month_choice"] = format_target_month(y, m)
                 ctx["target_year"] = y
                 ctx["target_month"] = m
-                ctx["rows"] = self._fetch_rows(y, m)
+                per_page = self.get_per_page()
+                total_count = self._count_rows(y, m)
+                total_pages = max(1, math.ceil(total_count / per_page))
+                page = self.get_page_number(total_pages)
+                offset = (page - 1) * per_page
+                rows = self._fetch_rows(y, m, limit=per_page, offset=offset)
+                base_params = {
+                    "target_year": y,
+                    "target_month": m,
+                    "per_page": per_page,
+                }
+                return self.set_page_context(
+                    ctx=ctx,
+                    rows=rows,
+                    per_page=per_page,
+                    total_count=total_count,
+                    total_pages=total_pages,
+                    page=page,
+                    base_params=base_params,
+                )
             except (ValueError, TypeError):
                 messages.error(self.request, "年月の形式が不正です。年と月を正しく指定してください。")
                 ctx["rows"] = []
@@ -2710,28 +2754,47 @@ class RepurchaseExportView(RepurchaseListView):
 
 
 
-class BonusPaymentDateView(generic.TemplateView):
+class BonusPaymentDateView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "bonus_payment_date.html"
 
-    def _fetch_rows(self, q_order_code: str = ""):
+    DEFAULT_PER_PAGE = 500
+    MAX_PER_PAGE = 500
+
+    def _build_where(self, q_order_code: str = ""):
+        where = ["1=1"]
+        params = []
+
+        if q_order_code:
+            where.append("order_code LIKE %s")
+            params.append(f"%{q_order_code}%")
+
+        return "WHERE " + " AND ".join(where), params
+
+    def _count_rows(self, q_order_code: str = ""):
+        where_sql, params = self._build_where(q_order_code=q_order_code)
+        sql = f"""
+SELECT COUNT(*)
+FROM bonus_db.bonus_payment_date
+{where_sql}
+"""
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            row = cursor.fetchone()
+            return int(row[0]) if row else 0
+
+    def _fetch_rows(self, q_order_code: str = "", limit=500, offset=0):
+        where_sql, params = self._build_where(q_order_code=q_order_code)
         sql = """
 SELECT
     order_code,
     bonus_payment_date,
     created_at
 FROM bonus_db.bonus_payment_date
-WHERE 1=1
-"""
-        params = []
-
-        if q_order_code:
-            sql += "  AND order_code LIKE %s\n"
-            params.append(f"%{q_order_code}%")
-
-        sql += """
+{where_sql}
 ORDER BY created_at DESC, order_code ASC
-LIMIT 2000
-"""
+LIMIT %s OFFSET %s
+""".format(where_sql=where_sql)
+        params.extend([limit, offset])
 
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql, params)
@@ -2744,9 +2807,32 @@ LIMIT 2000
         q_order_code = (self.request.GET.get("q_order_code") or "").strip()
 
         ctx["q_order_code"] = q_order_code
-        ctx["rows"] = self._fetch_rows(q_order_code=q_order_code)
 
-        return ctx
+        per_page = self.get_per_page()
+        total_count = self._count_rows(q_order_code=q_order_code)
+        total_pages = max(1, math.ceil(total_count / per_page))
+        page = self.get_page_number(total_pages)
+        offset = (page - 1) * per_page
+
+        rows = self._fetch_rows(
+            q_order_code=q_order_code,
+            limit=per_page,
+            offset=offset,
+        )
+
+        base_params = {}
+        if q_order_code:
+            base_params["q_order_code"] = q_order_code
+
+        return self.set_page_context(
+            ctx=ctx,
+            rows=rows,
+            per_page=per_page,
+            total_count=total_count,
+            total_pages=total_pages,
+            page=page,
+            base_params=base_params,
+        )
 
     def post(self, request, *args, **kwargs):
         action = (request.POST.get("action") or "").strip()
@@ -2755,6 +2841,14 @@ LIMIT 2000
 
         q_order_code = (request.POST.get("q_order_code") or "").strip()
         redirect_path = f"/bonus_payment_date/?q_order_code={q_order_code}"
+
+        try:
+            parsed_bonus_payment_date = parse_input_date(bonus_payment_date)
+        except ValueError as e:
+            messages.error(request, str(e))
+            return redirect(redirect_path)
+        payment_year = parsed_bonus_payment_date.year if parsed_bonus_payment_date else None
+        payment_month = parsed_bonus_payment_date.month if parsed_bonus_payment_date else None
 
         if action == "create":
             if not order_code:
@@ -2772,6 +2866,8 @@ LIMIT 2000
             UPDATE bonus_db.purchase_info_list
             SET
                 bonus_payment_date = %s,
+                register_year = COALESCE(%s, register_year),
+                register_month = COALESCE(%s, register_month),
                 updated_at = CURRENT_TIMESTAMP
             WHERE order_code = %s
             """
@@ -2779,8 +2875,16 @@ LIMIT 2000
             try:
                 with transaction.atomic(using="rds"):
                     with connections["rds"].cursor() as cursor:
-                        cursor.execute(insert_sql, [order_code, bonus_payment_date or None])
-                        cursor.execute(update_sql, [bonus_payment_date or None, order_code])
+                        cursor.execute(insert_sql, [order_code, parsed_bonus_payment_date])
+                        cursor.execute(
+                            update_sql,
+                            [
+                                parsed_bonus_payment_date,
+                                payment_year,
+                                payment_month,
+                                order_code,
+                            ],
+                        )
 
                 messages.success(request, "登録しました。")
             except Exception as e:
@@ -2803,6 +2907,8 @@ LIMIT 2000
             UPDATE bonus_db.purchase_info_list
             SET
                 bonus_payment_date = %s,
+                register_year = COALESCE(%s, register_year),
+                register_month = COALESCE(%s, register_month),
                 updated_at = CURRENT_TIMESTAMP
             WHERE order_code = %s
             """
@@ -2810,8 +2916,16 @@ LIMIT 2000
             try:
                 with transaction.atomic(using="rds"):
                     with connections["rds"].cursor() as cursor:
-                        cursor.execute(sql1, [bonus_payment_date or None, order_code])
-                        cursor.execute(sql2, [bonus_payment_date or None, order_code])
+                        cursor.execute(sql1, [parsed_bonus_payment_date, order_code])
+                        cursor.execute(
+                            sql2,
+                            [
+                                parsed_bonus_payment_date,
+                                payment_year,
+                                payment_month,
+                                order_code,
+                            ],
+                        )
 
                 messages.success(request, "更新しました。")
             except Exception as e:

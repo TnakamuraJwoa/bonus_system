@@ -1,317 +1,222 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block contents %}
-
 {% block head %}
-    <link href="{% static 'css/common.css' %}" rel="stylesheet">
-    <style>
-        .page-title {
-            font-weight: 700;
-            font-size: 1.35rem;
-            color: #1f2937;
-            margin-bottom: 0;
-        }
+<link href="{% static 'css/common.css' %}" rel="stylesheet">
+<style>
+  .bonus-payment-date-filter .form-control,
+  .bonus-payment-date-filter .btn {
+    min-height: 34px;
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+    font-size: 0.875rem;
+  }
 
-        .sub-label {
-            font-size: 0.8rem;
-            color: #6b7280;
-            margin-bottom: 0.35rem;
-            display: block;
-        }
+  .bonus-payment-date-filter .form-label {
+    line-height: 1.1;
+  }
 
-        .custom-card {
-            border: 1px solid #e5e7eb;
-            border-radius: 14px;
-            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
-        }
+  .bonus-payment-date-section {
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 0.7rem 0.8rem;
+    background: #fff;
+  }
 
-        .section-title {
-            font-size: 1rem;
-            font-weight: 700;
-            color: #111827;
-            margin-bottom: 1rem;
-        }
+  .bonus-payment-date-section--create {
+    border-left: 4px solid #10b981;
+  }
 
-        .summary-badge {
-            background: #f3f4f6;
-            color: #374151;
-            border-radius: 999px;
-            padding: 0.45rem 0.8rem;
-            font-size: 0.85rem;
-            font-weight: 600;
-        }
+  .bonus-payment-date-section--search {
+    border-left: 4px solid #4f46e5;
+  }
 
-        .table thead th {
-            background: #f8fafc;
-            color: #374151;
-            font-weight: 700;
-            border-bottom: 1px solid #d1d5db;
-            white-space: nowrap;
-            vertical-align: middle;
-        }
+  .bonus-payment-date-section__title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #475569;
+    margin-bottom: 0.35rem;
+  }
 
-        .table tbody td {
-            vertical-align: middle;
-        }
+  .bonus-payment-date-action-cell {
+    text-align: center;
+    vertical-align: middle !important;
+  }
 
-        .code-text {
-            font-weight: 600;
-            color: #111827;
-            letter-spacing: 0.2px;
-        }
+  .bonus-payment-date-top {
+    display: grid;
+    grid-template-columns: minmax(360px, 0.8fr) minmax(470px, 1.2fr);
+    gap: 0.75rem;
+    align-items: end;
+    width: 100%;
+  }
 
-        .date-input-inline {
-            width: 170px;
-            min-width: 170px;
-        }
+  .bonus-payment-date-update-form {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: nowrap;
+    min-width: 260px;
+  }
 
-        .inline-update-form {
-            display: flex;
-            flex-wrap: nowrap;
-            align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 0;
-        }
+  .bonus-payment-date-update-form .form-control {
+    width: 150px;
+    flex: 0 0 150px;
+  }
 
-        .action-cell {
-            white-space: nowrap;
-        }
-
-        .btn-soft-primary {
-            background: #2563eb;
-            border-color: #2563eb;
-            color: #fff;
-        }
-
-        .btn-soft-primary:hover {
-            background: #1d4ed8;
-            border-color: #1d4ed8;
-            color: #fff;
-        }
-
-        .btn-soft-success {
-            background: #059669;
-            border-color: #059669;
-            color: #fff;
-        }
-
-        .btn-soft-success:hover {
-            background: #047857;
-            border-color: #047857;
-            color: #fff;
-        }
-
-        .btn-soft-warning {
-            background: #f59e0b;
-            border-color: #f59e0b;
-            color: #fff;
-        }
-
-        .btn-soft-warning:hover {
-            background: #d97706;
-            border-color: #d97706;
-            color: #fff;
-        }
-
-        .btn-soft-danger {
-            background: #ef4444;
-            border-color: #ef4444;
-            color: #fff;
-        }
-
-        .btn-soft-danger:hover {
-            background: #dc2626;
-            border-color: #dc2626;
-            color: #fff;
-        }
-
-        .search-box,
-        .create-box {
-            background: #ffffff;
-            border: 1px solid #eef2f7;
-            border-radius: 12px;
-            padding: 1rem;
-            height: 100%;
-        }
-
-        .table-wrap {
-            border: 1px solid #e5e7eb;
-            border-radius: 12px;
-            overflow: hidden;
-        }
-
-        .empty-box {
-            border: 1px dashed #d1d5db;
-            border-radius: 12px;
-            padding: 2rem 1rem;
-            text-align: center;
-            color: #6b7280;
-            background: #fafafa;
-        }
-
-        .created-at {
-            color: #4b5563;
-            font-size: 0.95rem;
-            white-space: nowrap;
-        }
-
-        @media (max-width: 767.98px) {
-            .date-input-inline {
-                width: 140px;
-                min-width: 140px;
-            }
-
-            .inline-update-form {
-                gap: 0.4rem;
-            }
-        }
-    </style>
+  @media (max-width: 991.98px) {
+    .bonus-payment-date-top {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
 {% endblock %}
 
-<div class="container-fluid mt-3">
-    <div class="row g-3">
+{% block contents %}
+<div class="container-fluid mt-3 list-page-viewport">
+  <div class="row g-1 h-100">
 
-        {% include "com/_sidebar.html" with active_menu="bonus_payment_date" %}
+    {% include "com/_sidebar.html" with active_menu="bonus_payment_date" %}
 
-        <main class="col-12 col-md-9 col-lg-10">
-            <div class="custom-card bg-white p-3 p-md-4 mb-3">
-                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                    <h5 class="page-title">【設定 - 注文別ボーナス支払日】</h5>
-                    <span class="summary-badge">登録データ管理</span>
+    <main class="col-12 col-md-9 col-lg-10 list-page-main">
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <h5 class="page-title mb-2">【設定 - 注文別ボーナス支払日】</h5>
+
+          <div class="bonus-payment-date-filter bonus-payment-date-top">
+            <form method="get" class="bonus-payment-date-section bonus-payment-date-section--search mb-0">
+              <div class="bonus-payment-date-section__title">検索</div>
+              <div class="d-flex gap-2 align-items-end flex-wrap">
+                <div style="width: 190px;">
+                  <label class="form-label mb-1 small text-muted">注文番号</label>
+                  <input type="text"
+                         name="q_order_code"
+                         class="form-control"
+                         value="{{ q_order_code|default:'' }}"
+                         placeholder="">
                 </div>
-                <div class="row g-3">
-                    <div class="col-12 col-xl-5">
-                        <div class="search-box">
-                            <div class="section-title mb-3">検索</div>
 
-                            <form method="get">
-                                <label class="sub-label">注文番号</label>
-                                <div class="d-flex flex-wrap gap-2">
-                                    <input
-                                        type="text"
-                                        name="q_order_code"
-                                        class="form-control"
-                                        value="{{ q_order_code|default:'' }}"
-                                        placeholder="例: MF05621663365"
-                                    >
-                                    <button type="submit" class="btn btn-soft-primary">検索</button>
-                                    <a href="{% url 'connect:bonus_payment_date' %}" class="btn btn-outline-secondary">リセット</a>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
+                <button type="submit" class="btn btn-primary">検索</button>
 
-                    <div class="col-12 col-xl-7">
-                        <div class="create-box">
-                            <div class="section-title mb-3">新規登録</div>
+                <a href="{% url 'connect:bonus_payment_date' %}"
+                   class="btn btn-outline-secondary">
+                  リセット
+                </a>
+              </div>
+            </form>
 
-                            <form method="post">
-                                {% csrf_token %}
-                                <input type="hidden" name="action" value="create">
-                                <input type="hidden" name="q_order_code" value="{{ q_order_code|default:'' }}">
+            {% if user_access.can_create %}
+              <form method="post" class="bonus-payment-date-section bonus-payment-date-section--create mb-0">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="create">
+                <input type="hidden" name="q_order_code" value="{{ q_order_code|default:'' }}">
 
-                                <div class="row g-2 align-items-end">
-                                    <div class="col-12 col-md-6">
-                                        <label class="sub-label">注文番号</label>
-                                        <input
-                                            type="text"
-                                            name="order_code"
-                                            class="form-control"
-                                            placeholder="例: MF05621663365"
-                                            required
-                                        >
-                                    </div>
+                <div class="bonus-payment-date-section__title">新規登録</div>
+                <div class="d-flex gap-2 align-items-end flex-wrap">
+                  <div style="width: 190px;">
+                    <label class="form-label mb-1 small text-muted">注文番号</label>
+                    <input type="text"
+                           name="order_code"
+                           class="form-control"
+                           placeholder=""
+                           required>
+                  </div>
 
-                                    <div class="col-12 col-md-4">
-                                        <label class="sub-label">ボーナス支払日</label>
-                                        <input
-                                            type="text"
-                                            name="bonus_payment_date"
-                                            placeholder="例: 2025-12-01"
-                                            class="form-control"
-                                        >
-                                    </div>
+                  <div style="width: 180px;">
+                    <label class="form-label mb-1 small text-muted">支払日</label>
+                    <input type="text"
+                           name="bonus_payment_date"
+                           class="form-control"
+                           placeholder="YYYY-MM-DD">
+                  </div>
 
-                                    <div class="col-12 col-md-2 d-grid">
-                                        <button type="submit" class="btn btn-soft-success">登録</button>
-                                    </div>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
+                  <button type="submit" class="btn btn-success">登録</button>
                 </div>
+              </form>
+            {% endif %}
+          </div>
+
+        </div>
+      </div>
+
+      <div class="card shadow-sm flex-grow-1" style="min-height: 0;">
+        <div class="card-body d-flex flex-column" style="min-height: 0; overflow: hidden;">
+
+          {% if rows %}
+            {% include "com/_list_summary.html" %}
+
+            <div class="table-responsive flex-grow-1" style="min-height: 0; overflow: auto;">
+              <table class="table table-bordered table-sm align-middle mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th>注文番号</th>
+                    <th style="width: 260px;">ボーナス支払日</th>
+                    <th>作成日時</th>
+                    {% if user_access.can_update or user_access.can_delete %}
+                      <th class="bonus-payment-date-action-cell" style="width: 170px;">操作</th>
+                    {% endif %}
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {% for r in rows %}
+                    <tr>
+                      <td>{{ r.order_code }}</td>
+
+                      {% if user_access.can_update or user_access.can_delete %}
+                        <td class="bonus-payment-date-action-cell">
+                          {% if user_access.can_update %}
+                            <form method="post" class="bonus-payment-date-update-form mb-0">
+                              {% csrf_token %}
+                              <input type="hidden" name="action" value="update">
+                              <input type="hidden" name="order_code" value="{{ r.order_code }}">
+                              <input type="hidden" name="q_order_code" value="{{ q_order_code|default:'' }}">
+                              <input type="text"
+                                     name="bonus_payment_date"
+                                     class="form-control form-control-sm"
+                                     value="{% if r.bonus_payment_date %}{{ r.bonus_payment_date|date:'Y-m-d' }}{% endif %}"
+                                     placeholder="YYYY-MM-DD">
+                              <button type="submit" class="btn btn-warning btn-sm">更新</button>
+                            </form>
+                          {% else %}
+                            {{ r.bonus_payment_date|date:'Y-m-d' }}
+                          {% endif %}
+                        </td>
+
+                        <td>{{ r.created_at }}</td>
+
+                        <td class="bonus-payment-date-action-cell">
+                          {% if user_access.can_delete %}
+                            <form method="post" class="mb-0"
+                                  onsubmit="return confirm('{{ r.order_code }} を削除しますか？');">
+                              {% csrf_token %}
+                              <input type="hidden" name="action" value="delete">
+                              <input type="hidden" name="order_code" value="{{ r.order_code }}">
+                              <input type="hidden" name="q_order_code" value="{{ q_order_code|default:'' }}">
+                              <button type="submit" class="btn btn-danger btn-sm">削除</button>
+                            </form>
+                          {% endif %}
+                        </td>
+                      {% else %}
+                        <td>{{ r.bonus_payment_date|date:'Y-m-d' }}</td>
+                        <td>{{ r.created_at }}</td>
+                      {% endif %}
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
             </div>
 
-            <div class="custom-card bg-white p-3 p-md-4">
-                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                    <div class="section-title mb-0">一覧</div>
-                    <div class="summary-badge">件数：{{ rows|length }} 件</div>
-                </div>
+            {% include "com/_pagination.html" %}
+          {% else %}
+            <p class="mb-0 text-muted">該当データがありません。</p>
+          {% endif %}
 
-                {% if rows %}
-                    <div class="table-wrap">
-                        <div class="table-responsive">
-                            <table class="table align-middle mb-0">
-                                <thead>
-                                    <tr>
-                                        <th style="width: 20%;">注文番号</th>
-                                        <th style="width: 32%;">ボーナス支払日</th>
-                                        <th style="width: 24%;">作成日時</th>
-                                        <th style="width: 20%;">操作</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for r in rows %}
-                                        <tr>
-                                            <td>
-                                                <span class="code-text">{{ r.order_code }}</span>
-                                            </td>
+        </div>
+      </div>
 
-                                            <td>
-                                                <form method="post" class="inline-update-form">
-                                                    {% csrf_token %}
-                                                    <input type="hidden" name="action" value="update">
-                                                    <input type="hidden" name="order_code" value="{{ r.order_code }}">
-                                                    <input type="hidden" name="q_order_code" value="{{ q_order_code|default:'' }}">
-
-                                                    <input
-                                                        type="date"
-                                                        name="bonus_payment_date"
-                                                        class="form-control form-control-sm date-input-inline"
-                                                        value="{% if r.bonus_payment_date %}{{ r.bonus_payment_date|date:'Y-m-d' }}{% endif %}"
-                                                    >
-                                                    <button type="submit" class="btn btn-sm btn-soft-warning">更新</button>
-                                                </form>
-                                            </td>
-
-                                            <td class="created-at">
-                                                {{ r.created_at }}
-                                            </td>
-
-                                            <td class="action-cell">
-                                                <form method="post" class="mb-0" onsubmit="return confirm('削除しますか？');">
-                                                    {% csrf_token %}
-                                                    <input type="hidden" name="action" value="delete">
-                                                    <input type="hidden" name="order_code" value="{{ r.order_code }}">
-                                                    <input type="hidden" name="q_order_code" value="{{ q_order_code|default:'' }}">
-                                                    <button type="submit" class="btn btn-sm btn-soft-danger">削除</button>
-                                                </form>
-                                            </td>
-                                        </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                {% else %}
-                    <div class="empty-box">
-                        該当データがありません。
-                    </div>
-                {% endif %}
-            </div>
-        </main>
-    </div>
+    </main>
+  </div>
 </div>
-
 {% endblock %}

@@ -3,6 +3,16 @@
 
 {% block head %}
   <link href="{% static 'css/common.css' %}" rel="stylesheet">
+  <style>
+    .repurchase-preview-table-wrap {
+      overflow-x: auto;
+    }
+
+    .repurchase-preview-table {
+      white-space: nowrap;
+      min-width: max-content;
+    }
+  </style>
 {% endblock %}
 
 {% block contents %}
@@ -62,6 +72,16 @@
                        placeholder="mm">
               </div>
 
+              <div style="width: 110px;">
+                <label class="form-label mb-1 small text-muted">表示件数</label>
+                <select name="per_page" class="form-select">
+                  <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                  <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                  <option value="300" {% if per_page == 300 %}selected{% endif %}>300</option>
+                  <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+                </select>
+              </div>
+
               <button type="submit" class="btn btn-primary">
                 選択
               </button>
@@ -93,49 +113,64 @@
         <div class="card-body">
 
           {% if rows %}
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <div class="fw-bold">一覧</div>
-              <div class="text-end">
-                <strong>件数：{{ rows|length }} 件</strong>
-              </div>
-            </div>
+            {% include "com/_list_summary.html" %}
 
-            <div class="table-responsive">
-              <table class="table table-bordered table-sm align-middle mb-0">
+            <div class="table-responsive repurchase-preview-table-wrap">
+              <table class="table table-bordered table-sm align-middle mb-0 repurchase-preview-table">
                 <thead class="table-light">
                   <tr>
-                    <th>order_code</th>
-                    <th>jwoa_code</th>
-                    <th>send_bv_name</th>
-                    <th>order_type</th>
+                    <th>登録年</th>
+                    <th>登録月</th>
+                    <th>注文年</th>
+                    <th>注文月</th>
+                    <th>注文番号</th>
+                    <th>注文区分</th>
+                    <th>会員番号</th>
+                    <th>会員名</th>
                     <th>total_bv</th>
                     <th>bv</th>
-                    <th>deposit_at</th>
-                    <th>order_at</th>
-                    <th>payment_date</th>
-                    <th>order_year</th>
-                    <th>order_month</th>
+                    <th>BV反映日時</th>
+                    <th>注文日時</th>
+                    <th>ボーナス支払日</th>
                   </tr>
                 </thead>
                 <tbody>
                   {% for r in rows %}
                     <tr>
+                      <td>{{ r.register_year }}</td>
+                      <td>{{ r.register_month }}</td>
+                      <td>{{ r.order_year }}</td>
+                      <td>{{ r.order_month }}</td>
                       <td>{{ r.order_code }}</td>
+                      <td>
+                        {% if r.order_type == 101 %}
+                          再購入品
+                        {% elif r.order_type == 102 %}
+                          初回購入品
+                        {% elif r.order_type == 103 %}
+                          ランクアップ購入品
+                        {% elif r.order_type == 105 %}
+                          特別対応購入品
+                        {% elif r.order_type == 200 %}
+                          <span class="text-danger fw-bold">クーリングオフ</span>
+                        {% else %}
+                          {{ r.order_type }}
+                        {% endif %}
+                      </td>
                       <td>{{ r.jwoa_code }}</td>
                       <td>{{ r.send_bv_name }}</td>
-                      <td>{{ r.order_type }}</td>
                       <td>{{ r.total_bv }}</td>
                       <td>{{ r.bv }}</td>
                       <td>{{ r.deposit_at }}</td>
                       <td>{{ r.order_at }}</td>
                       <td>{{ r.payment_date }}</td>
-                      <td>{{ r.order_year }}</td>
-                      <td>{{ r.order_month }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>
               </table>
             </div>
+
+            {% include "com/_pagination.html" %}
           {% else %}
             {% if selected_month %}
               <p class="mb-0">この期間のデータはありません。</p>
