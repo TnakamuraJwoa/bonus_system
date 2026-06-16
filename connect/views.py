@@ -2,6 +2,8 @@ from django.shortcuts import render
 # Create your views here.
 from django.contrib.auth.views import LoginView
 from allauth.account.forms import LoginForm
+import csv
+import io
 import logging
 from decimal import Decimal, InvalidOperation
 from django.views import generic
@@ -2879,6 +2881,107 @@ LIMIT %s OFFSET %s
             cols = [c[0] for c in cursor.description]
             return [dict(zip(cols, r)) for r in cursor.fetchall()]
 
+    def _parse_uploaded_rows(self, uploaded_file):
+        filename = (uploaded_file.name or "").lower()
+
+        if filename.endswith((".xlsx", ".xlsm")):
+            workbook = openpyxl.load_workbook(uploaded_file, read_only=True, data_only=True)
+            sheet = workbook.active
+            source_rows = sheet.iter_rows(values_only=True)
+        else:
+            raw = uploaded_file.read()
+            try:
+                text = raw.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                text = raw.decode("cp932")
+            source_rows = csv.reader(io.StringIO(text))
+
+        rows = []
+        errors = []
+
+        for row_no, row in enumerate(source_rows, start=1):
+            values = list(row or [])
+            if not any(str(value or "").strip() for value in values):
+                continue
+
+            if len(values) < 2:
+                errors.append(f"{row_no}行目: 注文番号と支払日を指定してください。")
+                continue
+
+            order_code = str(values[0] or "").strip()
+            payment_value = values[1]
+
+            if row_no == 1 and (
+                "注文" in order_code or "order" in order_code.lower()
+            ):
+                continue
+
+            if not order_code:
+                errors.append(f"{row_no}行目: 注文番号が空です。")
+                continue
+
+            if isinstance(payment_value, datetime):
+                parsed_payment_date = payment_value.date()
+            elif isinstance(payment_value, date):
+                parsed_payment_date = payment_value
+            else:
+                try:
+                    parsed_payment_date = parse_input_date(payment_value)
+                except ValueError as exc:
+                    errors.append(f"{row_no}行目: {exc}")
+                    continue
+
+            if not parsed_payment_date:
+                errors.append(f"{row_no}行目: 支払日を指定してください。")
+                continue
+
+            rows.append(
+                {
+                    "order_code": order_code,
+                    "bonus_payment_date": parsed_payment_date,
+                    "payment_year": parsed_payment_date.year,
+                    "payment_month": parsed_payment_date.month,
+                }
+            )
+
+        return rows, errors
+
+    def _bulk_upsert_rows(self, rows):
+        upsert_payment_sql = """
+            INSERT INTO bonus_db.bonus_payment_date (
+                order_code,
+                bonus_payment_date
+            ) VALUES (%s, %s)
+            ON DUPLICATE KEY UPDATE
+                bonus_payment_date = VALUES(bonus_payment_date)
+        """
+        update_purchase_sql = """
+            UPDATE bonus_db.purchase_info_list
+            SET
+                bonus_payment_date = %s,
+                register_year = %s,
+                register_month = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE order_code = %s
+        """
+
+        with transaction.atomic(using="rds"):
+            with connections["rds"].cursor() as cursor:
+                for row in rows:
+                    cursor.execute(
+                        upsert_payment_sql,
+                        [row["order_code"], row["bonus_payment_date"]],
+                    )
+                    cursor.execute(
+                        update_purchase_sql,
+                        [
+                            row["bonus_payment_date"],
+                            row["payment_year"],
+                            row["payment_month"],
+                            row["order_code"],
+                        ],
+                    )
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
@@ -2970,6 +3073,36 @@ LIMIT %s OFFSET %s
 
             return redirect(redirect_path)
 
+        elif action == "bulk_create":
+            uploaded_file = request.FILES.get("payment_date_file")
+            if not uploaded_file:
+                messages.error(request, "一括登録ファイルを選択してください。")
+                return redirect(redirect_path)
+
+            try:
+                rows, errors = self._parse_uploaded_rows(uploaded_file)
+            except Exception as e:
+                messages.error(request, f"ファイルの読み込みに失敗しました: {e}")
+                return redirect(redirect_path)
+
+            if errors:
+                messages.error(request, " / ".join(errors[:5]))
+                if len(errors) > 5:
+                    messages.error(request, f"他 {len(errors) - 5} 件のエラーがあります。")
+                return redirect(redirect_path)
+
+            if not rows:
+                messages.error(request, "登録できるデータがありません。")
+                return redirect(redirect_path)
+
+            try:
+                self._bulk_upsert_rows(rows)
+                messages.success(request, f"{len(rows)}件を一括登録しました。")
+            except Exception as e:
+                messages.error(request, f"一括登録に失敗しました: {e}")
+
+            return redirect(redirect_path)
+
         elif action == "update":
             if not order_code:
                 messages.error(request, "注文番号が不正です。")
@@ -3032,6 +3165,24 @@ LIMIT %s OFFSET %s
 
         messages.error(request, "不正な操作です。")
         return redirect(redirect_path)
+
+
+class BonusPaymentDateTemplateView(generic.View):
+    def get(self, request, *args, **kwargs):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "注文別ボーナス支払日"
+        ws.append(["注文番号", "支払日"])
+        ws.append(["MF000000000000", "2026-01-05"])
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = (
+            'attachment; filename="bonus_payment_date_template.xlsx"'
+        )
+        wb.save(response)
+        return response
 
 
 class ActiveUsersView(generic.TemplateView):

@@ -96,7 +96,7 @@
               <label class="form-label mb-0 small text-muted">支払日FROM</label>
               <input type="date"
                      name="q_bonus_date_from"
-                     class="form-control"
+                     class="form-control js-date-paste-normalize"
                      value="{{ q_bonus_date_from|default:'' }}">
             </div>
 
@@ -104,7 +104,7 @@
               <label class="form-label mb-0 small text-muted">支払日TO</label>
               <input type="date"
                      name="q_bonus_date_to"
-                     class="form-control"
+                     class="form-control js-date-paste-normalize"
                      value="{{ q_bonus_date_to|default:'' }}">
             </div>
 
@@ -405,6 +405,58 @@
     if (!pendingForm) return;
     modal.modal("hide");
     pendingForm.submit();
+  });
+})();
+
+(function () {
+  function normalizeDateText(value) {
+    var text = (value || "").trim();
+    var match;
+
+    if (/^\d{8}$/.test(text)) {
+      match = [text, text.slice(0, 4), text.slice(4, 6), text.slice(6, 8)];
+    } else {
+      match = text.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+    }
+
+    if (!match) {
+      return "";
+    }
+
+    var year = Number(match[1]);
+    var month = Number(match[2]);
+    var day = Number(match[3]);
+    var date = new Date(year, month - 1, day);
+
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) {
+      return "";
+    }
+
+    return [
+      String(year).padStart(4, "0"),
+      String(month).padStart(2, "0"),
+      String(day).padStart(2, "0")
+    ].join("-");
+  }
+
+  document.querySelectorAll(".js-date-paste-normalize").forEach(function (input) {
+    input.addEventListener("paste", function (event) {
+      var pastedText = (event.clipboardData || window.clipboardData).getData("text");
+      var normalized = normalizeDateText(pastedText);
+
+      if (!normalized) {
+        return;
+      }
+
+      event.preventDefault();
+      input.value = normalized;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
   });
 })();
 </script>
