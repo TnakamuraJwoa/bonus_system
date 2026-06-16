@@ -29,7 +29,7 @@
               <input type="hidden" name="action" value="copy">
               <button type="submit"
                       class="btn btn-primary"
-                      onclick="return confirm('既存データを全削除して、v_user_placement_tree からコピー登録します。よろしいですか？');">
+                      data-confirm-submit="既存データを全削除して、v_user_placement_tree からコピー登録します。よろしいですか？">
                 コピー登録
               </button>
             </form>
@@ -40,7 +40,7 @@
               <input type="hidden" name="action" value="delete">
               <button type="submit"
                       class="btn btn-danger"
-                      onclick="return confirm('users_placement_tree_cache のデータを全削除します。よろしいですか？');">
+                      data-confirm-submit="users_placement_tree_cache のデータを全削除します。よろしいですか？">
                 全削除
               </button>
             </form>

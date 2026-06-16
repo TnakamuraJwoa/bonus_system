@@ -17,6 +17,21 @@
     line-height: 1.1;
   }
 
+  .repurchase-list-bv-form {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    flex-wrap: nowrap;
+  }
+
+  .repurchase-list-bv-form .form-control {
+    width: 70px;
+    min-height: 30px;
+    padding: 0.25rem 0.4rem;
+    font-size: 0.875rem;
+  }
+
 </style>
 {% endblock %}
 
@@ -204,7 +219,7 @@
           {% if user_access.can_delete %}
             <form method="post"
                   class="mt-2"
-                  onsubmit="return confirm('{{ selected_period.year }}年{{ selected_period.month }}月 の購入情報をすべて削除しますか？この操作は元に戻せません。');">
+                  data-confirm="{{ selected_period.year }}年{{ selected_period.month }}月 の購入情報をすべて削除しますか？この操作は元に戻せません。">
               {% csrf_token %}
               <input type="hidden" name="action" value="delete_registered_month">
               <input type="hidden" name="target_month" value="{{ selected_month }}">
@@ -288,7 +303,28 @@
                       <td>{{ r.jwoa_code }}</td>
                       <td>{{ r.send_bv_name }}</td>
                       <td>{{ r.total_bv }}</td>
-                      <td>{{ r.bv }}</td>
+                      <td>
+                        {% if user_access.can_update %}
+                          <form method="post"
+                                class="repurchase-list-bv-form js-bv-update-form mb-0"
+                                data-order-code="{{ r.order_code }}"
+                                data-current-bv="{{ r.bv }}">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="update_bv">
+                            <input type="hidden" name="row_id" value="{{ r.id }}">
+                            <input type="hidden" name="next_query" value="{{ request.GET.urlencode }}">
+                            <input type="text"
+                                   name="bv"
+                                   class="form-control form-control-sm text-end"
+                                   value="{{ r.bv }}"
+                                   inputmode="decimal"
+                                   required>
+                            <button type="submit" class="btn btn-warning btn-sm">更新</button>
+                          </form>
+                        {% else %}
+                          {{ r.bv }}
+                        {% endif %}
+                      </td>
                       <td>{{ r.deposit_at }}</td>
                       <td>{{ r.order_at }}</td>
                       <td>{{ r.bonus_payment_date }}</td>
@@ -316,4 +352,60 @@
   </div>
 </div>
 
+<div class="modal fade" id="bvUpdateConfirmModal" tabindex="-1" role="dialog" aria-labelledby="bvUpdateConfirmModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="bvUpdateConfirmModalLabel">BV更新確認</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">以下の内容でBVを更新します。</p>
+        <div class="border rounded p-3 bg-light">
+          <div class="mb-1">注文番号：<strong id="bvUpdateOrderCode"></strong></div>
+          <div class="mb-1">現在のBV：<strong id="bvUpdateCurrentValue"></strong></div>
+          <div>更新後のBV：<strong id="bvUpdateNewValue"></strong></div>
+        </div>
+        <p class="text-muted small mb-0 mt-2">同じ注文番号の total_bv も再計算されます。</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
+        <button type="button" class="btn btn-warning" id="bvUpdateConfirmButton">更新する</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block script %}
+<script>
+(function () {
+  var pendingForm = null;
+  var modal = $("#bvUpdateConfirmModal");
+
+  document.querySelectorAll(".js-bv-update-form").forEach(function (form) {
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+
+      var bvInput = form.querySelector('input[name="bv"]');
+      pendingForm = form;
+
+      document.getElementById("bvUpdateOrderCode").textContent = form.dataset.orderCode || "";
+      document.getElementById("bvUpdateCurrentValue").textContent = form.dataset.currentBv || "";
+      document.getElementById("bvUpdateNewValue").textContent = bvInput ? bvInput.value : "";
+
+      modal.modal("show");
+    });
+  });
+
+  document.getElementById("bvUpdateConfirmButton").addEventListener("click", function () {
+    if (!pendingForm) return;
+    modal.modal("hide");
+    pendingForm.submit();
+  });
+})();
+</script>
 {% endblock %}

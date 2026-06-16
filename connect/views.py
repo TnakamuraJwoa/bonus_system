@@ -3,6 +3,7 @@ from django.shortcuts import render
 from django.contrib.auth.views import LoginView
 from allauth.account.forms import LoginForm
 import logging
+from decimal import Decimal, InvalidOperation
 from django.views import generic
 from django.contrib import messages
 from .forms import InquiryForm
@@ -1176,6 +1177,7 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
 
         sql = f"""
             SELECT
+                id,
                 order_code,
                 order_type,
                 jwoa_code,
@@ -1265,9 +1267,85 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
             cursor.execute(sql, [year, month])
             return cursor.rowcount
 
+    def _update_bv(self, row_id, bv):
+        select_sql = """
+            SELECT order_code
+            FROM bonus_db.purchase_info_list
+            WHERE id = %s
+            FOR UPDATE
+        """
+        update_bv_sql = """
+            UPDATE bonus_db.purchase_info_list
+            SET
+                bv = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+        """
+        update_total_bv_sql = """
+            UPDATE bonus_db.purchase_info_list p
+            JOIN (
+                SELECT
+                    order_code,
+                    SUM(bv) AS total_bv
+                FROM bonus_db.purchase_info_list
+                WHERE order_code = %s
+                GROUP BY order_code
+            ) total
+              ON p.order_code = total.order_code
+            SET
+                p.total_bv = total.total_bv,
+                p.updated_at = CURRENT_TIMESTAMP
+            WHERE p.order_code = %s
+        """
+
+        with transaction.atomic(using="rds"):
+            with connections["rds"].cursor() as cursor:
+                cursor.execute(select_sql, [row_id])
+                row = cursor.fetchone()
+                if not row:
+                    return 0
+
+                order_code = row[0]
+                cursor.execute(update_bv_sql, [bv, row_id])
+                updated_count = cursor.rowcount
+                cursor.execute(update_total_bv_sql, [order_code, order_code])
+                return updated_count
+
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "")
         selected_month = (request.POST.get("target_month") or "").strip()
+        next_query = (request.POST.get("next_query") or "").strip()
+        list_url = redirect("connect:repurchase_list").url
+        next_url = f"{list_url}?{next_query}" if next_query else list_url
+
+        if action == "update_bv":
+            row_id = (request.POST.get("row_id") or "").strip()
+            bv_value = (request.POST.get("bv") or "").strip()
+
+            if not row_id:
+                messages.error(request, "更新対象が不正です。")
+                return redirect(next_url)
+
+            try:
+                row_id = int(row_id)
+                bv = Decimal(bv_value)
+            except (ValueError, InvalidOperation):
+                messages.error(request, "BVは数値で入力してください。")
+                return redirect(next_url)
+
+            try:
+                updated_count = self._update_bv(row_id, bv)
+            except Exception as e:
+                logger.exception("購入情報登録一覧のBV更新エラー")
+                messages.error(request, f"BV更新中にエラーが発生しました: {e}")
+                return redirect(next_url)
+
+            if updated_count:
+                messages.success(request, "BVを更新しました。")
+            else:
+                messages.warning(request, "更新対象データがありません。")
+
+            return redirect(next_url)
 
         if action != "delete_registered_month":
             messages.error(request, "不正な操作です。")

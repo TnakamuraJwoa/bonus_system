@@ -33,8 +33,9 @@
             </form>
 
             {% if user_access.can_execute and selected_period and rows %}
-              <form method="post" class="mb-0"
-                    onsubmit="return confirm('表示中の再購入オーバーボーナス結果を登録しますか？');">
+              <form method="post"
+                    class="mb-0"
+                    data-confirm="表示中の再購入オーバーボーナス結果を登録しますか？">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="repurchase_over_bonus">
                 <input type="hidden" name="kibetu" value="{{ selected_kibetu }}">

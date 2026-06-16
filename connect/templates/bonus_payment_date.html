@@ -188,8 +188,9 @@
 
                         <td class="bonus-payment-date-action-cell">
                           {% if user_access.can_delete %}
-                            <form method="post" class="mb-0"
-                                  onsubmit="return confirm('{{ r.order_code }} を削除しますか？');">
+                            <form method="post"
+                                  class="mb-0"
+                                  data-confirm="{{ r.order_code }} を削除しますか？">
                               {% csrf_token %}
                               <input type="hidden" name="action" value="delete">
                               <input type="hidden" name="order_code" value="{{ r.order_code }}">

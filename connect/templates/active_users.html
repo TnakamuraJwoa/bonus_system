@@ -417,7 +417,9 @@
                                             </td>
 
                                             <td class="action-cell">
-                                                <form method="post" class="mb-0" onsubmit="return confirm('削除しますか？');">
+                                                <form method="post"
+                                                      class="mb-0"
+                                                      data-confirm="削除しますか？">
                                                     {% csrf_token %}
                                                     <input type="hidden" name="action" value="delete">
                                                     <input type="hidden" name="id" value="{{ r.id }}">

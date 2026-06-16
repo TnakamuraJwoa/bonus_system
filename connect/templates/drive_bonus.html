@@ -31,8 +31,9 @@
             </form>
 
             {% if user_access.can_execute and selected_period and rows %}
-              <form method="post" class="mb-0"
-                    onsubmit="return confirm('表示中のドライブボーナス結果を登録しますか？すでに登録済みの場合は上書き更新されます。');">
+              <form method="post"
+                    class="mb-0"
+                    data-confirm="表示中のドライブボーナス結果を登録しますか？すでに登録済みの場合は上書き更新されます。">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="register_drive_bonus">
                 <input type="hidden" name="kibetu" value="{{ selected_kibetu }}">

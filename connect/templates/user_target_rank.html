@@ -76,8 +76,10 @@
 
           {% if user_access.can_execute %}
           <!-- POST：全件登録 -->
-          <form method="post" class="mb-0" id="registerForm"
-                onsubmit="return confirm('全件登録します。よろしいですか？');">
+          <form method="post"
+                class="mb-0"
+                id="registerForm"
+                data-confirm="全件登録します。よろしいですか？">
             {% csrf_token %}
             <input type="hidden" name="prev_month" value="{{ selected_prev_month }}">
             <button type="submit"
