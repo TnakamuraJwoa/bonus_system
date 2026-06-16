@@ -74,6 +74,9 @@ class UserAccessProfileInline(admin.StackedInline):
     verbose_name = "操作権限"
     verbose_name_plural = "操作権限（画面・操作を細かく設定）"
 
+    class Media:
+        css = {"all": ("css/admin_user_access.css",)}
+
 
 @admin.register(UserAccessProfile)
 class UserAccessProfileAdmin(admin.ModelAdmin):
@@ -98,6 +101,9 @@ class UserAccessProfileAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {"fields": ("user",)}),
     ) + USER_ACCESS_FIELDSETS
+
+    class Media:
+        css = {"all": ("css/admin_user_access.css",)}
 
     @admin.display(description="閲覧画面")
     def menu_permissions_summary(self, obj):

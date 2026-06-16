@@ -166,6 +166,27 @@
     letter-spacing: 0.02em;
 }
 
+.login-card__admin-badge {
+    display: block;
+    width: max-content;
+    margin: 0 auto 0.75rem;
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    background: #0f172a;
+    color: #f8fafc;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+}
+
+.login-card__admin-note {
+    margin: -1rem 0 1.4rem;
+    color: #475569;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-align: center;
+}
+
 .login-card form {
     padding: 0;
 }
@@ -240,6 +261,11 @@
 
 .login-card .form-footer a:hover {
     color: #4f46e5;
+}
+
+.login-card__sub-link {
+    font-weight: 600;
+    letter-spacing: 0.02em;
 }
 
 @keyframes login-bg-breathe {
