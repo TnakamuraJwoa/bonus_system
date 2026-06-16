@@ -1,0 +1,78 @@
+<div class="d-flex align-items-center gap-2 mb-3">
+  <h5 class="page-title mb-0">{{ title }}</h5>
+  <button
+    type="button"
+    class="btn btn-sm btn-outline-info rounded-circle bonus-help-button"
+    data-toggle="modal"
+    data-target="#bonusHelpModal_{{ help_key }}"
+    aria-label="{{ help_title }}の説明を表示"
+    title="説明を表示"
+    style="width: 1.65rem; height: 1.65rem; padding: 0; line-height: 1;"
+  >
+    ?
+  </button>
+</div>
+
+<div
+  class="modal fade bonus-help-modal"
+  id="bonusHelpModal_{{ help_key }}"
+  tabindex="-1"
+  role="dialog"
+  aria-labelledby="bonusHelpModalLabel_{{ help_key }}"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="bonusHelpModalLabel_{{ help_key }}">{{ help_title }}の説明</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        {% if help_key == "title_bonus" %}
+          <ul class="mb-0">
+            <li>当月、3スターダイヤ以上。</li>
+            <li>前月、当月、アクティブ。</li>
+            <li>新規登録月は、前月、当月アクティブ扱い。</li>
+            <li>直紹介した傘下組織内のポジションで、当月3スターダイヤ以上の実績達成者がいること。</li>
+            <li>タイトル判定のところでも、再購入は50BVまで。</li>
+            <li>ダブルクラウンはクラウンダイヤと同じ%。</li>
+            <li>傘下組織とは上位者のこと。</li>
+          </ul>
+        {% elif help_key == "drive_bonus" %}
+          <p class="mb-0">ドライブボーナスは、週次の対象期間で組織実績や条件を確認し、対象者のボーナス額を算出します。</p>
+        {% elif help_key == "basic_bonus" %}
+          <p class="mb-0">ベーシックボーナスは、週次の対象期間で基本条件を満たした実績をもとにボーナス額を算出します。</p>
+        {% elif help_key == "matching_bonus" %}
+          <p class="mb-0">マッチングボーナスは、週次の対象期間で紹介・組織の条件を確認し、対象者のマッチング報酬を算出します。</p>
+        {% elif help_key == "week_bonus" %}
+          <p class="mb-0">週ボーナスは、週次の対象期間で集計した実績をもとに、週単位のボーナスを算出します。</p>
+        {% elif help_key == "title_diff_bonus" %}
+          <p class="mb-0">タイトル差額ボーナスは、対象者と下位者のタイトル差や実績を確認し、差額分のボーナスを算出します。</p>
+        {% elif help_key == "repurchase_over_bonus" %}
+          <p class="mb-0">再購入オーバーボーナスは、再購入実績と対象条件を確認し、条件を超過した分のボーナスを算出します。</p>
+        {% elif help_key == "three_star_global_bonus" %}
+          <p class="mb-0">3スターダイヤグローバル配当は、対象タイトルや配当条件を確認し、グローバル配当額を算出します。</p>
+        {% elif help_key == "month_bonus" %}
+          <p class="mb-0">月ボーナスは、指定した期別の月次実績をもとに、月単位のボーナスを算出します。</p>
+        {% else %}
+          <p class="mb-0">この画面で計算するボーナスの概要を表示します。</p>
+        {% endif %}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">閉じる</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  document.querySelectorAll(".bonus-help-modal").forEach(function(modal) {
+    if (modal.parentElement !== document.body) {
+      document.body.appendChild(modal);
+    }
+  });
+});
+</script>

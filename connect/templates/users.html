@@ -3,6 +3,42 @@
 
 {% block head %}
   <link href="{% static 'css/common.css' %}" rel="stylesheet">
+  <style>
+    .users-filter-status {
+      color: #334155 !important;
+      font-weight: 600;
+    }
+
+    .users-filter-status .badge {
+      display: inline-flex;
+      align-items: center;
+      margin: 0.12rem 0.15rem;
+      padding: 0.35rem 0.55rem;
+      border-radius: 999px;
+      color: #fff !important;
+      background: #475569 !important;
+      font-weight: 600;
+      line-height: 1.1;
+    }
+
+    .users-filter-status .badge.text-dark {
+      color: #0f172a !important;
+    }
+
+    .users-table {
+      min-width: 1700px;
+    }
+
+    .users-table .col-member-name {
+      min-width: 350px;
+      width: 350px;
+      white-space: nowrap;
+    }
+
+    .users-search-name {
+      width: 260px;
+    }
+  </style>
 {% endblock %}
 
 {% block contents %}
@@ -30,7 +66,7 @@
                      placeholder="例: JP05198407">
             </div>
 
-            <div>
+            <div class="users-search-name">
               <label class="form-label mb-0 small text-muted">会員名</label>
               <input type="text"
                      name="q_name"
@@ -103,7 +139,7 @@
           </form>
 
           {% if q_jpid or q_name or q_introducer or q_placement or q_status or q_rank %}
-            <div class="text-muted small mt-3">
+            <div class="users-filter-status small mt-3">
               絞り込み中：
 
               {% if q_jpid %}
@@ -131,7 +167,7 @@
               {% endif %}
             </div>
           {% else %}
-            <div class="text-muted small mt-3">
+            <div class="users-filter-status small mt-3">
               全件表示中
             </div>
           {% endif %}
@@ -147,7 +183,7 @@
             {% include "com/_list_summary.html" %}
 
             <div class="table-responsive">
-              <table class="table table-bordered table-sm align-middle mb-0"
+              <table class="table table-bordered table-sm align-middle mb-0 users-table"
                      style="white-space: nowrap;">
 
                 <thead class="table-light">
@@ -155,7 +191,7 @@
                     <th class="text-center">ID</th>
                     <th class="text-center">グループID</th>
                     <th class="text-center">会員ID</th>
-                    <th class="text-center">会員名</th>
+                    <th class="text-center col-member-name">会員名</th>
                     <th class="text-center">上位者ID</th>
                     <th class="text-center">紹介者ID</th>
                     <th class="text-center">ランク</th>
@@ -176,7 +212,7 @@
                     <td class="text-end">{{ r.id }}</td>
                     <td>{{ r.group_code }}</td>
                     <td>{{ r.jmoa_code }}</td>
-                    <td>{{ r.send_bv_name }}</td>
+                    <td class="col-member-name">{{ r.send_bv_name }}</td>
                     <td>{{ r.introducer_code }}</td>
                     <td>{{ r.placement_code }}</td>
 
