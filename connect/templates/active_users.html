@@ -1,8 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block contents %}
-
 {% block head %}
     <link href="{% static 'css/common.css' %}" rel="stylesheet">
     <style>
@@ -26,11 +24,18 @@
             box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
         }
 
+        .active-users-top {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.75rem;
+            align-items: stretch;
+        }
+
         .section-title {
-            font-size: 1rem;
+            font-size: 0.8rem;
             font-weight: 700;
-            color: #111827;
-            margin-bottom: 1rem;
+            color: #475569;
+            margin-bottom: 0.35rem;
         }
 
         .summary-badge {
@@ -127,11 +132,135 @@
         .search-box,
         .create-box {
             background: #ffffff;
-            border: 1px solid #eef2f7;
-            border-radius: 12px;
-            padding: 1rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 0.65rem 0.75rem;
             height: 100%;
         }
+
+        .create-box {
+            border-left: 4px solid #4f46e5;
+        }
+
+        .search-box {
+            border-left: 4px solid #10b981;
+        }
+
+        .active-users-inline-form {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            gap: 0.5rem;
+        }
+
+        .active-users-field--code {
+            width: min(220px, 38%);
+        }
+
+        .active-users-field--year {
+            width: 110px;
+        }
+
+        .active-users-field--month {
+            width: 100px;
+        }
+
+        .active-users-filter .form-control,
+        .active-users-filter .btn {
+            min-height: 34px;
+            padding-top: 0.35rem;
+            padding-bottom: 0.35rem;
+            font-size: 0.875rem;
+        }
+
+        .active-users-filter .sub-label {
+            margin-bottom: 0.2rem;
+            line-height: 1.1;
+        }
+
+        .active-users-list-card {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            margin-bottom: 0;
+        }
+
+        .active-users-list-card .list-summary,
+        .active-users-list-card .pagination-wrap {
+            flex-shrink: 0;
+        }
+
+        .active-users-list-card .table-wrap {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .active-users-list-card .table-responsive {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow: auto;
+        }
+
+        .active-users-table th,
+        .active-users-table td {
+            padding-top: 0.35rem !important;
+            padding-bottom: 0.35rem !important;
+        }
+
+        .active-users-table {
+            table-layout: fixed;
+            min-width: 900px;
+        }
+
+        .active-users-table th,
+        .active-users-table td {
+            text-align: center !important;
+            border-right: 1px solid #dbe3ee;
+        }
+
+        .active-users-table.table tbody td,
+        .active-users-table.table tbody td.col-num,
+        .active-users-table.table tbody td.col-date,
+        .active-users-table.table tbody td.text-end {
+            text-align: center !important;
+        }
+
+        .active-users-table .col-update,
+        .active-users-table .col-action {
+            text-align: center !important;
+        }
+
+        .active-users-table th:last-child,
+        .active-users-table td:last-child {
+            border-right: 0;
+        }
+
+        .active-users-table .col-code {
+            width: 140px;
+        }
+
+        .active-users-table .col-name {
+            width: 260px;
+        }
+
+        .active-users-table .col-created-at {
+            width: 180px;
+        }
+
+        .active-users-table .col-display-month {
+            width: 120px;
+        }
+
+        .active-users-table .col-update,
+        .active-users-table .col-action {
+            width: 80px;
+        }
+
 
         .table-wrap {
             border: 1px solid #e5e7eb;
@@ -147,15 +276,30 @@
             color: #6b7280;
             background: #fafafa;
         }
+
+        @media (max-width: 1199.98px) {
+            .active-users-top {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 575.98px) {
+            .active-users-field--code,
+            .active-users-field--year,
+            .active-users-field--month {
+                width: 100%;
+            }
+        }
     </style>
 {% endblock %}
 
-<div class="container-fluid mt-3">
-    <div class="row g-3">
+{% block contents %}
+<div class="container-fluid mt-3 list-page-viewport">
+    <div class="row g-1 h-100">
 
         {% include "com/_sidebar.html" with active_menu="active_users" %}
 
-        <main class="col-12 col-md-9 col-lg-10">
+        <main class="col-12 col-md-9 col-lg-10 list-page-main">
 
             <div class="custom-card bg-white p-3 p-md-4 mb-3">
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
@@ -163,62 +307,10 @@
                     <span class="summary-badge">登録データ管理</span>
                 </div>
 
-                <div class="row g-3">
-                    <div class="col-12 col-xl-5">
-                        <div class="search-box">
-                            <div class="section-title mb-3">検索</div>
-
-                            <form method="get">
-                                <div class="row g-2 align-items-end">
-                                    <div class="col-12">
-                                        <label class="sub-label">会員コード</label>
-                                        <input
-                                            type="text"
-                                            name="q_jwoa_code"
-                                            class="form-control"
-                                            value="{{ q_jwoa_code|default:'' }}"
-                                            placeholder="例: JP04167973"
-                                        >
-                                    </div>
-
-                                    <div class="col-6">
-                                        <label class="sub-label">年</label>
-                                        <input
-                                            type="number"
-                                            name="q_year"
-                                            class="form-control"
-                                            value="{{ q_year|default:'' }}"
-                                            placeholder="例: 2026"
-                                            min="1900"
-                                            max="2100"
-                                        >
-                                    </div>
-
-                                    <div class="col-6">
-                                        <label class="sub-label">月</label>
-                                        <input
-                                            type="number"
-                                            name="q_month"
-                                            class="form-control"
-                                            value="{{ q_month|default:'' }}"
-                                            placeholder="1〜12"
-                                            min="1"
-                                            max="12"
-                                        >
-                                    </div>
-
-                                    <div class="col-12 d-flex flex-wrap gap-2">
-                                        <button type="submit" class="btn btn-soft-primary">検索</button>
-                                        <a href="{% url 'connect:active_users' %}" class="btn btn-outline-secondary">リセット</a>
-                                    </div>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-
-                    <div class="col-12 col-xl-7">
+                <div class="active-users-top active-users-filter">
+                    <div>
                         <div class="create-box">
-                            <div class="section-title mb-3">新規登録</div>
+                            <div class="section-title">新規登録</div>
 
                             <form method="post">
                                 {% csrf_token %}
@@ -227,8 +319,8 @@
                                 <input type="hidden" name="q_year" value="{{ q_year|default:'' }}">
                                 <input type="hidden" name="q_month" value="{{ q_month|default:'' }}">
 
-                                <div class="row g-2 align-items-end">
-                                    <div class="col-12 col-md-5">
+                                <div class="active-users-inline-form">
+                                    <div class="active-users-field--code">
                                         <label class="sub-label">会員コード</label>
                                         <input
                                             type="text"
@@ -239,7 +331,7 @@
                                         >
                                     </div>
 
-                                    <div class="col-6 col-md-3">
+                                    <div class="active-users-field--year">
                                         <label class="sub-label">年</label>
                                         <input
                                             type="number"
@@ -252,7 +344,7 @@
                                         >
                                     </div>
 
-                                    <div class="col-6 col-md-2">
+                                    <div class="active-users-field--month">
                                         <label class="sub-label">月</label>
                                         <input
                                             type="number"
@@ -265,9 +357,57 @@
                                         >
                                     </div>
 
-                                    <div class="col-12 col-md-2 d-grid">
-                                        <button type="submit" class="btn btn-soft-success">登録</button>
+                                    <button type="submit" class="btn btn-soft-success">登録</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="search-box">
+                            <div class="section-title">検索</div>
+
+                            <form method="get">
+                                <div class="active-users-inline-form">
+                                    <div class="active-users-field--code">
+                                        <label class="sub-label">会員コード</label>
+                                        <input
+                                            type="text"
+                                            name="q_jwoa_code"
+                                            class="form-control"
+                                            value="{{ q_jwoa_code|default:'' }}"
+                                            placeholder="例: JP04167973"
+                                        >
                                     </div>
+
+                                    <div class="active-users-field--year">
+                                        <label class="sub-label">年</label>
+                                        <input
+                                            type="number"
+                                            name="q_year"
+                                            class="form-control"
+                                            value="{{ q_year|default:'' }}"
+                                            placeholder="例: 2026"
+                                            min="1900"
+                                            max="2100"
+                                        >
+                                    </div>
+
+                                    <div class="active-users-field--month">
+                                        <label class="sub-label">月</label>
+                                        <input
+                                            type="number"
+                                            name="q_month"
+                                            class="form-control"
+                                            value="{{ q_month|default:'' }}"
+                                            placeholder="1〜12"
+                                            min="1"
+                                            max="12"
+                                        >
+                                    </div>
+
+                                    <button type="submit" class="btn btn-soft-primary">検索</button>
+                                    <a href="{% url 'connect:active_users' %}" class="btn btn-outline-secondary">リセット</a>
                                 </div>
                             </form>
                         </div>
@@ -275,52 +415,49 @@
                 </div>
             </div>
 
-            <div class="custom-card bg-white p-3 p-md-4">
-                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                    <div class="section-title mb-0">一覧</div>
-                    <div class="summary-badge">件数：{{ rows|length }} 件</div>
-                </div>
-
+            <div class="custom-card bg-white p-3 p-md-4 flex-grow-1 active-users-list-card">
                 {% if rows %}
+                    {% include "com/_list_summary.html" with list_title="一覧" %}
+
                     <div class="table-wrap">
                         <div class="table-responsive">
-                            <table class="table align-middle mb-0">
+                            <table class="table align-middle mb-0 active-users-table">
                                 <thead>
                                     <tr>
-                                        <th>会員コード</th>
-                                        <th>会員名</th>
-                                        <th>作成日時</th>
-                                        <th>表示用年月</th>
-                                        <th>更新</th>
-                                        <th>操作</th>
+                                        <th class="col-code">会員コード</th>
+                                        <th class="col-name">会員名</th>
+                                        <th class="col-created-at">作成日時</th>
+                                        <th class="col-display-month">アクティブ年月</th>
+                                        <th class="col-update">更新</th>
+                                        <th class="col-action">操作</th>
                                     </tr>
                                 </thead>
 
                                 <tbody>
                                     {% for r in rows %}
                                         <tr>
-                                            <td>
+                                            <td class="col-code">
                                                 <span class="code-text">{{ r.jwoa_code }}</span>
                                             </td>
 
-                                            <td>
+                                            <td class="col-name">
                                                 <span class="name-text">{{ r.send_bv_name|default:"" }}</span>
                                             </td>
 
-                                            <td class="created-at">
+                                            <td class="col-created-at created-at">
                                                 {{ r.created_at|date:"Y-m-d H:i:s" }}
                                             </td>
 
-                                            <td>
+                                            <td class="col-display-month">
                                                 {{ r.year }}/{{ r.month }}
                                             </td>
 
-                                            <td>
+                                            <td class="col-update">
                                                 <button
                                                     type="button"
                                                     class="btn btn-sm btn-soft-warning"
-                                                    data-bs-toggle="modal"
-                                                    data-bs-target="#updateModal{{ r.id }}"
+                                                    data-toggle="modal"
+                                                    data-target="#updateModal{{ r.id }}"
                                                 >
                                                     更新
                                                 </button>
@@ -347,7 +484,9 @@
                                                                     <h5 class="modal-title" id="updateModalLabel{{ r.id }}">
                                                                         アクティブ会員 更新
                                                                     </h5>
-                                                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+                                                                    <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+                                                                        <span aria-hidden="true">&times;</span>
+                                                                    </button>
                                                                 </div>
 
                                                                 <div class="modal-body">
@@ -402,7 +541,7 @@
                                                                 </div>
 
                                                                 <div class="modal-footer">
-                                                                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                                                                    <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">
                                                                         キャンセル
                                                                     </button>
                                                                     <button type="submit" class="btn btn-soft-warning">
@@ -416,7 +555,7 @@
                                                 </div>
                                             </td>
 
-                                            <td class="action-cell">
+                                            <td class="col-action action-cell">
                                                 <form method="post"
                                                       class="mb-0"
                                                       data-confirm="削除しますか？">
@@ -438,6 +577,8 @@
                             </table>
                         </div>
                     </div>
+
+                    {% include "com/_pagination.html" %}
                 {% else %}
                     <div class="empty-box">
                         該当データがありません。

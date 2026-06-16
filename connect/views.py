@@ -3185,21 +3185,12 @@ class BonusPaymentDateTemplateView(generic.View):
         return response
 
 
-class ActiveUsersView(generic.TemplateView):
+class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "active_users.html"
+    DEFAULT_PER_PAGE = 500
+    MAX_PER_PAGE = 500
 
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-
-        q_jwoa_code = self.request.GET.get("q_jwoa_code", "").strip()
-        q_year = self.request.GET.get("q_year", "").strip()
-        q_month = self.request.GET.get("q_month", "").strip()
-
-        ctx["q_jwoa_code"] = q_jwoa_code
-        ctx["q_year"] = q_year
-        ctx["q_month"] = q_month
-        ctx["rows"] = []
-
+    def _build_where(self, q_jwoa_code="", q_year="", q_month=""):
         where_clauses = []
         params = []
 
@@ -3215,9 +3206,31 @@ class ActiveUsersView(generic.TemplateView):
             where_clauses.append("a.month = %s")
             params.append(int(q_month))
 
-        where_sql = ""
-        if where_clauses:
-            where_sql = "WHERE " + " AND ".join(where_clauses)
+        where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+        return where_sql, params
+
+    def _count_rows(self, q_jwoa_code="", q_year="", q_month=""):
+        where_sql, params = self._build_where(
+            q_jwoa_code=q_jwoa_code,
+            q_year=q_year,
+            q_month=q_month,
+        )
+        sql = f"""
+            SELECT COUNT(*)
+            FROM active_users a
+            {where_sql}
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            row = cursor.fetchone()
+            return int(row[0]) if row else 0
+
+    def _fetch_rows(self, q_jwoa_code="", q_year="", q_month="", limit=500, offset=0):
+        where_sql, params = self._build_where(
+            q_jwoa_code=q_jwoa_code,
+            q_year=q_year,
+            q_month=q_month,
+        )
 
         sql = f"""
             SELECT
@@ -3232,12 +3245,64 @@ class ActiveUsersView(generic.TemplateView):
                 ON a.jwoa_code = u.jmoa_code
             {where_sql}
             ORDER BY a.jwoa_code, a.year DESC, a.month DESC
+            LIMIT %s OFFSET %s
         """
+        params.extend([limit, offset])
 
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql, params)
             columns = [col[0] for col in cursor.description]
-            ctx["rows"] = [dict(zip(columns, row)) for row in cursor.fetchall()]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        q_jwoa_code = self.request.GET.get("q_jwoa_code", "").strip()
+        q_year = self.request.GET.get("q_year", "").strip()
+        q_month = self.request.GET.get("q_month", "").strip()
+
+        ctx["q_jwoa_code"] = q_jwoa_code
+        ctx["q_year"] = q_year
+        ctx["q_month"] = q_month
+
+        try:
+            total_count = self._count_rows(q_jwoa_code, q_year, q_month)
+        except ValueError:
+            messages.error(self.request, "年・月は数値で入力してください。")
+            total_count = 0
+
+        per_page = self.get_per_page()
+        total_pages = max(1, math.ceil(total_count / per_page))
+        page = self.get_page_number(total_pages)
+        offset = (page - 1) * per_page
+
+        rows = []
+        if total_count:
+            rows = self._fetch_rows(
+                q_jwoa_code=q_jwoa_code,
+                q_year=q_year,
+                q_month=q_month,
+                limit=per_page,
+                offset=offset,
+            )
+
+        base_params = {}
+        if q_jwoa_code:
+            base_params["q_jwoa_code"] = q_jwoa_code
+        if q_year:
+            base_params["q_year"] = q_year
+        if q_month:
+            base_params["q_month"] = q_month
+
+        ctx = self.set_page_context(
+            ctx=ctx,
+            rows=rows,
+            per_page=per_page,
+            total_count=total_count,
+            total_pages=total_pages,
+            page=page,
+            base_params=base_params,
+        )
 
         return ctx
 
