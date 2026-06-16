@@ -2,11 +2,13 @@
 .form-row.field-menu_group_orders .related-widget-wrapper,
 .form-row.field-menu_group_bonus_search .related-widget-wrapper,
 .form-row.field-menu_group_bonus_calc .related-widget-wrapper,
+.form-row.field-menu_group_business_search .related-widget-wrapper,
 .form-row.field-menu_group_settings .related-widget-wrapper,
 .field-menu_group_users .related-widget-wrapper,
 .field-menu_group_orders .related-widget-wrapper,
 .field-menu_group_bonus_search .related-widget-wrapper,
 .field-menu_group_bonus_calc .related-widget-wrapper,
+.field-menu_group_business_search .related-widget-wrapper,
 .field-menu_group_settings .related-widget-wrapper {
   float: none;
   width: 100%;
@@ -16,11 +18,13 @@
 .form-row.field-menu_group_orders ul,
 .form-row.field-menu_group_bonus_search ul,
 .form-row.field-menu_group_bonus_calc ul,
+.form-row.field-menu_group_business_search ul,
 .form-row.field-menu_group_settings ul,
 .field-menu_group_users ul,
 .field-menu_group_orders ul,
 .field-menu_group_bonus_search ul,
 .field-menu_group_bonus_calc ul,
+.field-menu_group_business_search ul,
 .field-menu_group_settings ul {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, max-content));
@@ -33,11 +37,13 @@
 .form-row.field-menu_group_orders li,
 .form-row.field-menu_group_bonus_search li,
 .form-row.field-menu_group_bonus_calc li,
+.form-row.field-menu_group_business_search li,
 .form-row.field-menu_group_settings li,
 .field-menu_group_users li,
 .field-menu_group_orders li,
 .field-menu_group_bonus_search li,
 .field-menu_group_bonus_calc li,
+.field-menu_group_business_search li,
 .field-menu_group_settings li {
   display: flex;
   align-items: center;
@@ -49,11 +55,13 @@
 .form-row.field-menu_group_orders label,
 .form-row.field-menu_group_bonus_search label,
 .form-row.field-menu_group_bonus_calc label,
+.form-row.field-menu_group_business_search label,
 .form-row.field-menu_group_settings label,
 .field-menu_group_users label,
 .field-menu_group_orders label,
 .field-menu_group_bonus_search label,
 .field-menu_group_bonus_calc label,
+.field-menu_group_business_search label,
 .field-menu_group_settings label {
   display: inline-flex;
   align-items: center;

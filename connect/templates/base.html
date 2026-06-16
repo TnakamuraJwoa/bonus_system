@@ -45,6 +45,7 @@
         <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav ml-auto">
                 {% if user.is_authenticated %}
+
                 {% if user_access|has_nav:"users" %}
                 <li class="nav-item{% nav_group_active 'users' as users_active %}{% if users_active %} nav-item--active{% endif %}">
                     <a class="nav-link{% if users_active %} nav-link--active{% endif %}" href="{% url 'connect:users' %}">会員検索 </a>
@@ -102,6 +103,16 @@
                             合計実績
                         </a>
                     </div>
+                </li>
+                {% endif %}
+
+                {% if user_access|has_nav:"business_search" %}
+                {% nav_group_active 'business_search' as business_search_active %}
+                <li class="nav-item{% if business_search_active %} nav-item--active{% endif %}">
+                    <a class="nav-link{% if business_search_active %} nav-link--active{% endif %}"
+                       href="{% if user_access|can_menu:'business_personal_week_performance' %}{% url 'connect:business_personal_week_performance' %}{% elif user_access|can_menu:'business_team_week_performance' %}{% url 'connect:business_team_week_performance' %}{% elif user_access|can_menu:'business_personal_performance' %}{% url 'connect:business_personal_performance' %}{% else %}{% url 'connect:business_team_performance' %}{% endif %}">
+                        業務検索
+                    </a>
                 </li>
                 {% endif %}
 

@@ -21,6 +21,7 @@ MENU_GROUPS = (
     ("orders", "注文"),
     ("bonus_search", "ボーナス検索"),
     ("bonus_calc", "ボーナス計算"),
+    ("business_search", "業務検索"),
     ("settings", "設定・マスタ"),
 )
 
@@ -99,6 +100,31 @@ MENU_FEATURES = (
     MenuFeature("week_bonus", "週間ボーナス（計算）", "bonus_calc", ("week_bonus",)),
     MenuFeature("month_bonus", "月間ボーナス（計算）", "bonus_calc", ("month_bonus",)),
     MenuFeature("bonus_histry", "個人実績の登録履歴", "bonus_calc", ("bonus_histry",)),
+    # --- 業務検索 ---
+    MenuFeature(
+        "business_personal_performance",
+        "月別 個人業績",
+        "business_search",
+        ("business_personal_performance",),
+    ),
+    MenuFeature(
+        "business_team_performance",
+        "月別 チーム業績",
+        "business_search",
+        ("business_team_performance",),
+    ),
+    MenuFeature(
+        "business_personal_week_performance",
+        "週別 個人業績",
+        "business_search",
+        ("business_personal_week_performance",),
+    ),
+    MenuFeature(
+        "business_team_week_performance",
+        "週別 チーム業績",
+        "business_search",
+        ("business_team_week_performance",),
+    ),
     # --- 設定・マスタ ---
     MenuFeature("kibetu", "期別（週）", "settings", ("kibetu",)),
     MenuFeature("kibetu_month", "期別（月）", "settings", ("kibetu_month",)),
@@ -132,6 +158,7 @@ NAV_GROUP_MAP = {
     "orders": "orders",
     "bonus_search": "bonus_search",
     "bonus_calc": "bonus_calc",
+    "business_search": "business_search",
     "settings": "settings",
 }
 

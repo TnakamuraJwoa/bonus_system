@@ -49,6 +49,7 @@ USER_ACCESS_FIELDSETS = (
     ("注文", {"fields": ("menu_group_orders",)}),
     ("ボーナス検索", {"fields": ("menu_group_bonus_search",)}),
     ("ボーナス計算", {"fields": ("menu_group_bonus_calc",)}),
+    ("業務検索", {"fields": ("menu_group_business_search",)}),
     ("設定・マスタ", {"fields": ("menu_group_settings",)}),
     (
         "操作権限",

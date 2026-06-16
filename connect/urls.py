@@ -24,6 +24,30 @@ urlpatterns = [
 
     path('users/', views.UsersView.as_view(), name = "users"),
     path('title_user/', views.TitleUserView.as_view(), name = "title_user"),
+    path(
+        "business_personal_performance/",
+        views.BusinessPersonalMonthPerformanceView.as_view(),
+        name="business_personal_performance",
+    ),
+    path(
+        "business_team_performance/",
+        views.BusinessTeamPerformanceView.as_view(),
+        name="business_team_performance",
+    ),
+    path(
+        "business_personal_week_performance/",
+        views.BusinessPersonalWeekPerformanceView.as_view(),
+        name="business_personal_week_performance",
+    ),
+    path(
+        "business_team_week_performance/",
+        views.BusinessTeamPerformanceView.as_view(
+            period_label="週別",
+            active_menu="business_team_week_performance",
+            reset_url_name="connect:business_team_week_performance",
+        ),
+        name="business_team_week_performance",
+    ),
 
     path('orders/', views.OrdersView.as_view(), name = "orders"),
     path("orders/<int:pk>/", views.OrderDetailView.as_view(), name="order_detail"),

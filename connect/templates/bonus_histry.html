@@ -45,6 +45,7 @@
                     <th class="text-center" style="width:170px;">期別</th>
                     <th class="text-center">ドライブボーナス</th>
                     <th class="text-center">ベーシックボーナス</th>
+                    <th class="text-center">マッチングボーナス</th>
                     <th class="text-center">タイトルボーナス</th>
                   </tr>
                 </thead>
@@ -55,6 +56,7 @@
                       <td class="text-center">{{ r.kibetu }}</td>
                       <td class="text-center">{{ r.drive_bonus|default:"" }}</td>
                       <td class="text-center">{{ r.basic_bonus|default:"" }}</td>
+                      <td class="text-center">{{ r.matching_bonus|default:"" }}</td>
                       <td class="text-center">{{ r.title_bonus|default:"" }}</td>
                     </tr>
                   {% endfor %}

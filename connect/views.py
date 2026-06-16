@@ -5169,6 +5169,434 @@ class S_RepurchaseOverBonusView(generic.ListView):
 
 
 
+class BusinessPersonalPerformanceView(KeysetPaginationMixin, generic.TemplateView):
+    template_name = "business_personal_performance.html"
+    period_label = "月別"
+    active_menu = "business_personal_performance"
+    reset_url_name = "connect:business_personal_performance"
+
+    def _build_where(self, q_jmoa_code="", q_name=""):
+        where = []
+        params = []
+
+        if q_jmoa_code:
+            where.append("u.jmoa_code LIKE %s")
+            params.append(f"%{q_jmoa_code}%")
+
+        if q_name:
+            where.append("(u.send_bv_name LIKE %s OR u.name LIKE %s)")
+            params.append(f"%{q_name}%")
+            params.append(f"%{q_name}%")
+
+        where_sql = "WHERE " + " AND ".join(where) if where else ""
+        return where_sql, params
+
+    def _fetch_total_count(self, q_jmoa_code="", q_name=""):
+        where_sql, params = self._build_where(q_jmoa_code=q_jmoa_code, q_name=q_name)
+        sql = f"""
+            SELECT COUNT(*)
+            FROM nexus_production.users u
+            {where_sql}
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            row = cursor.fetchone()
+        return int(row[0]) if row else 0
+
+    def _fetch_rows(self, q_jmoa_code="", q_name="", limit=200, offset=0):
+        where_sql, params = self._build_where(q_jmoa_code=q_jmoa_code, q_name=q_name)
+        sql = f"""
+            SELECT
+                u.jmoa_code,
+                u.send_bv_name,
+                u.rank,
+                u.status_code,
+                COUNT(o.id) AS order_count,
+                COALESCE(SUM(o.total_bv), 0) AS total_bv,
+                COALESCE(SUM(o.total_price), 0) AS total_price,
+                MAX(o.order_at) AS last_order_at
+            FROM nexus_production.users u
+            LEFT JOIN nexus_production.orders o
+                ON o.jwoa_code = u.jmoa_code
+            {where_sql}
+            GROUP BY
+                u.jmoa_code,
+                u.send_bv_name,
+                u.rank,
+                u.status_code
+            ORDER BY u.jmoa_code
+            LIMIT %s OFFSET %s
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params + [limit, offset])
+            cols = [c[0] for c in cursor.description]
+            return [dict(zip(cols, row)) for row in cursor.fetchall()]
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        q_jmoa_code = (self.request.GET.get("q_jmoa_code") or "").strip()
+        q_name = (self.request.GET.get("q_name") or "").strip()
+
+        per_page = self.get_per_page()
+        total_count = self._fetch_total_count(q_jmoa_code=q_jmoa_code, q_name=q_name)
+        total_pages = max(1, math.ceil(total_count / per_page))
+        page = self.get_page_number(total_pages)
+        offset = (page - 1) * per_page
+
+        rows = self._fetch_rows(
+            q_jmoa_code=q_jmoa_code,
+            q_name=q_name,
+            limit=per_page,
+            offset=offset,
+        )
+
+        ctx["q_jmoa_code"] = q_jmoa_code
+        ctx["q_name"] = q_name
+        ctx["period_label"] = self.period_label
+        ctx["active_menu"] = self.active_menu
+        ctx["reset_url_name"] = self.reset_url_name
+        return self.set_page_context(
+            ctx=ctx,
+            rows=rows,
+            per_page=per_page,
+            total_count=total_count,
+            total_pages=total_pages,
+            page=page,
+            base_params={
+                "q_jmoa_code": q_jmoa_code,
+                "q_name": q_name,
+                "per_page": per_page,
+            },
+        )
+
+
+class BusinessPersonalMonthPerformanceView(KeysetPaginationMixin, generic.TemplateView):
+    template_name = "business_personal_month_performance.html"
+
+    def _build_where(self, q_kibetu="", q_jwoa_code=""):
+        where = []
+        params = []
+
+        if q_kibetu:
+            where.append("kibetu = %s")
+            params.append(q_kibetu)
+
+        if q_jwoa_code:
+            where.append("jwoa_code LIKE %s")
+            params.append(f"%{q_jwoa_code}%")
+
+        where_sql = "WHERE " + " AND ".join(where) if where else ""
+        return where_sql, params
+
+    def _fetch_total_count(self, q_kibetu="", q_jwoa_code=""):
+        where_sql, params = self._build_where(
+            q_kibetu=q_kibetu,
+            q_jwoa_code=q_jwoa_code,
+        )
+        sql = f"""
+            SELECT COUNT(*)
+            FROM bonus_db.B_month_bonus_result
+            {where_sql}
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            row = cursor.fetchone()
+        return int(row[0]) if row else 0
+
+    def _fetch_rows(self, q_kibetu="", q_jwoa_code="", limit=200, offset=0):
+        where_sql, params = self._build_where(
+            q_kibetu=q_kibetu,
+            q_jwoa_code=q_jwoa_code,
+        )
+        sql = f"""
+            SELECT
+                id,
+                kibetu,
+                jwoa_code,
+                jwoa_name,
+                title_bonus,
+                repurchase_over_bonus,
+                title_diff_bonus,
+                three_star_diamond_global_bonus,
+                crown_three_star_diamond_global_bonus,
+                month_bonus,
+                created_at,
+                updated_at
+            FROM bonus_db.B_month_bonus_result
+            {where_sql}
+            ORDER BY kibetu DESC, jwoa_code
+            LIMIT %s OFFSET %s
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params + [limit, offset])
+            cols = [c[0] for c in cursor.description]
+            return [dict(zip(cols, row)) for row in cursor.fetchall()]
+
+    def _fetch_kibetu_options(self):
+        sql = """
+            SELECT DISTINCT kibetu
+            FROM bonus_db.B_month_bonus_result
+            WHERE kibetu NOT LIKE %s
+            ORDER BY kibetu DESC
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, ["%W%"])
+            return [row[0] for row in cursor.fetchall() if row[0]]
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        q_kibetu = (self.request.GET.get("q_kibetu") or "").strip()
+        q_jwoa_code = (self.request.GET.get("q_jwoa_code") or "").strip()
+
+        per_page = self.get_per_page()
+        total_count = self._fetch_total_count(
+            q_kibetu=q_kibetu,
+            q_jwoa_code=q_jwoa_code,
+        )
+        total_pages = max(1, math.ceil(total_count / per_page))
+        page = self.get_page_number(total_pages)
+        offset = (page - 1) * per_page
+
+        rows = self._fetch_rows(
+            q_kibetu=q_kibetu,
+            q_jwoa_code=q_jwoa_code,
+            limit=per_page,
+            offset=offset,
+        )
+
+        ctx["q_kibetu"] = q_kibetu
+        ctx["q_jwoa_code"] = q_jwoa_code
+        ctx["kibetu_options"] = self._fetch_kibetu_options()
+        ctx["active_menu"] = "business_personal_performance"
+        return self.set_page_context(
+            ctx=ctx,
+            rows=rows,
+            per_page=per_page,
+            total_count=total_count,
+            total_pages=total_pages,
+            page=page,
+            base_params={
+                "q_kibetu": q_kibetu,
+                "q_jwoa_code": q_jwoa_code,
+                "per_page": per_page,
+            },
+        )
+
+
+class BusinessPersonalWeekPerformanceView(KeysetPaginationMixin, generic.TemplateView):
+    template_name = "business_personal_week_performance.html"
+
+    def _build_where(self, q_kibetu="", q_jwoa_code=""):
+        where = []
+        params = []
+
+        if q_kibetu:
+            where.append("kibetu = %s")
+            params.append(q_kibetu)
+
+        if q_jwoa_code:
+            where.append("jwoa_code LIKE %s")
+            params.append(f"%{q_jwoa_code}%")
+
+        where_sql = "WHERE " + " AND ".join(where) if where else ""
+        return where_sql, params
+
+    def _fetch_total_count(self, q_kibetu="", q_jwoa_code=""):
+        where_sql, params = self._build_where(
+            q_kibetu=q_kibetu,
+            q_jwoa_code=q_jwoa_code,
+        )
+        sql = f"""
+            SELECT COUNT(*)
+            FROM bonus_db.B_week_bonus_result
+            {where_sql}
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            row = cursor.fetchone()
+        return int(row[0]) if row else 0
+
+    def _fetch_rows(self, q_kibetu="", q_jwoa_code="", limit=200, offset=0):
+        where_sql, params = self._build_where(
+            q_kibetu=q_kibetu,
+            q_jwoa_code=q_jwoa_code,
+        )
+        sql = f"""
+            SELECT
+                id,
+                kibetu,
+                jwoa_code,
+                jwoa_name,
+                drive_bonus,
+                basic_bonus,
+                matching_bonus,
+                week_bonus,
+                created_at,
+                updated_at
+            FROM bonus_db.B_week_bonus_result
+            {where_sql}
+            ORDER BY kibetu DESC, jwoa_code
+            LIMIT %s OFFSET %s
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params + [limit, offset])
+            cols = [c[0] for c in cursor.description]
+            return [dict(zip(cols, row)) for row in cursor.fetchall()]
+
+    def _fetch_kibetu_options(self):
+        sql = """
+            SELECT DISTINCT kibetu
+            FROM bonus_db.B_week_bonus_result
+            WHERE kibetu LIKE %s
+            ORDER BY kibetu DESC
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, ["%W%"])
+            return [row[0] for row in cursor.fetchall() if row[0]]
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        q_kibetu = (self.request.GET.get("q_kibetu") or "").strip()
+        q_jwoa_code = (self.request.GET.get("q_jwoa_code") or "").strip()
+
+        per_page = self.get_per_page()
+        total_count = self._fetch_total_count(
+            q_kibetu=q_kibetu,
+            q_jwoa_code=q_jwoa_code,
+        )
+        total_pages = max(1, math.ceil(total_count / per_page))
+        page = self.get_page_number(total_pages)
+        offset = (page - 1) * per_page
+
+        rows = self._fetch_rows(
+            q_kibetu=q_kibetu,
+            q_jwoa_code=q_jwoa_code,
+            limit=per_page,
+            offset=offset,
+        )
+
+        ctx["q_kibetu"] = q_kibetu
+        ctx["q_jwoa_code"] = q_jwoa_code
+        ctx["kibetu_options"] = self._fetch_kibetu_options()
+        ctx["active_menu"] = "business_personal_week_performance"
+        return self.set_page_context(
+            ctx=ctx,
+            rows=rows,
+            per_page=per_page,
+            total_count=total_count,
+            total_pages=total_pages,
+            page=page,
+            base_params={
+                "q_kibetu": q_kibetu,
+                "q_jwoa_code": q_jwoa_code,
+                "per_page": per_page,
+            },
+        )
+
+
+class BusinessTeamPerformanceView(KeysetPaginationMixin, generic.TemplateView):
+    template_name = "business_team_performance.html"
+    period_label = "月別"
+    active_menu = "business_team_performance"
+    reset_url_name = "connect:business_team_performance"
+
+    def _build_where(self, q_jmoa_code="", q_name=""):
+        where = []
+        params = []
+
+        if q_jmoa_code:
+            where.append("u.jmoa_code LIKE %s")
+            params.append(f"%{q_jmoa_code}%")
+
+        if q_name:
+            where.append("(u.send_bv_name LIKE %s OR u.name LIKE %s)")
+            params.append(f"%{q_name}%")
+            params.append(f"%{q_name}%")
+
+        where_sql = "WHERE " + " AND ".join(where) if where else ""
+        return where_sql, params
+
+    def _fetch_total_count(self, q_jmoa_code="", q_name=""):
+        where_sql, params = self._build_where(q_jmoa_code=q_jmoa_code, q_name=q_name)
+        sql = f"""
+            SELECT COUNT(*)
+            FROM nexus_production.users u
+            {where_sql}
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            row = cursor.fetchone()
+        return int(row[0]) if row else 0
+
+    def _fetch_rows(self, q_jmoa_code="", q_name="", limit=200, offset=0):
+        where_sql, params = self._build_where(q_jmoa_code=q_jmoa_code, q_name=q_name)
+        sql = f"""
+            SELECT
+                u.jmoa_code,
+                u.send_bv_name,
+                u.rank,
+                u.status_code,
+                COUNT(DISTINCT d.id) AS direct_member_count,
+                COUNT(o.id) AS team_order_count,
+                COALESCE(SUM(o.total_bv), 0) AS team_total_bv,
+                COALESCE(SUM(o.total_price), 0) AS team_total_price
+            FROM nexus_production.users u
+            LEFT JOIN nexus_production.users d
+                ON d.placement_code = u.jmoa_code
+            LEFT JOIN nexus_production.orders o
+                ON o.jwoa_code = d.jmoa_code
+            {where_sql}
+            GROUP BY
+                u.jmoa_code,
+                u.send_bv_name,
+                u.rank,
+                u.status_code
+            ORDER BY u.jmoa_code
+            LIMIT %s OFFSET %s
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params + [limit, offset])
+            cols = [c[0] for c in cursor.description]
+            return [dict(zip(cols, row)) for row in cursor.fetchall()]
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        q_jmoa_code = (self.request.GET.get("q_jmoa_code") or "").strip()
+        q_name = (self.request.GET.get("q_name") or "").strip()
+
+        per_page = self.get_per_page()
+        total_count = self._fetch_total_count(q_jmoa_code=q_jmoa_code, q_name=q_name)
+        total_pages = max(1, math.ceil(total_count / per_page))
+        page = self.get_page_number(total_pages)
+        offset = (page - 1) * per_page
+
+        rows = self._fetch_rows(
+            q_jmoa_code=q_jmoa_code,
+            q_name=q_name,
+            limit=per_page,
+            offset=offset,
+        )
+
+        ctx["q_jmoa_code"] = q_jmoa_code
+        ctx["q_name"] = q_name
+        ctx["period_label"] = self.period_label
+        ctx["active_menu"] = self.active_menu
+        ctx["reset_url_name"] = self.reset_url_name
+        return self.set_page_context(
+            ctx=ctx,
+            rows=rows,
+            per_page=per_page,
+            total_count=total_count,
+            total_pages=total_pages,
+            page=page,
+            base_params={
+                "q_jmoa_code": q_jmoa_code,
+                "q_name": q_name,
+                "per_page": per_page,
+            },
+        )
+
+
 class UsersView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "users.html"
 
@@ -6225,6 +6653,11 @@ class WeekBonusView(generic.ListView):
     template_name = "week_bonus.html"
     context_object_name = "object_list"
     model = PeriodMaster
+    PRE_REGISTER_OPTIONS = (
+        ("drive", "ドライブボーナス"),
+        ("basic", "ベーシックボーナス"),
+        ("matching", "マッチングボーナス"),
+    )
 
     def get_queryset(self):
         return PeriodMaster.objects.using("rds").all()
@@ -6344,7 +6777,10 @@ class WeekBonusView(generic.ListView):
         ctx = super().get_context_data(**kwargs)
 
         selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
+        pre_register_targets = self._get_pre_register_targets()
         ctx["selected_kibetu"] = selected_kibetu
+        ctx["pre_register_targets"] = pre_register_targets
+        ctx["pre_register_options"] = self.PRE_REGISTER_OPTIONS
         ctx["rows"] = []
         ctx["selected_period"] = None
 
@@ -6356,9 +6792,243 @@ class WeekBonusView(generic.ListView):
             return ctx
 
         ctx["selected_period"] = period
+        if not self._pre_register_selected_bonuses(
+            selected_kibetu,
+            period,
+            pre_register_targets,
+        ):
+            return ctx
+
         ctx["rows"] = self._get_week_bonus_rows(selected_kibetu, period)
 
         return ctx
+
+    def _get_pre_register_targets(self):
+        if "kibetu" not in self.request.GET:
+            return [key for key, _label in self.PRE_REGISTER_OPTIONS]
+        return [
+            value
+            for value in self.request.GET.getlist("pre_register")
+            if value in {key for key, _label in self.PRE_REGISTER_OPTIONS}
+        ]
+
+    def _pre_register_selected_bonuses(self, selected_kibetu, period, targets):
+        if not targets:
+            return True
+
+        registered_labels = []
+        warning_labels = []
+
+        try:
+            if "drive" in targets:
+                count = self._register_drive_bonus(selected_kibetu, period)
+                if count:
+                    registered_labels.append("ドライブ")
+                else:
+                    warning_labels.append("ドライブ")
+
+            if "basic" in targets:
+                count = self._register_basic_bonus(selected_kibetu, period)
+                if count:
+                    registered_labels.append("ベーシック")
+                else:
+                    warning_labels.append("ベーシック")
+
+            if "matching" in targets:
+                count = self._register_matching_bonus(selected_kibetu, period)
+                if count:
+                    registered_labels.append("マッチング")
+                else:
+                    warning_labels.append("マッチング")
+
+        except Exception as e:
+            logger.exception("週ボーナス表示前の事前登録エラー")
+            messages.error(self.request, f"事前登録中にエラーが発生しました: {e}")
+            return False
+
+        if registered_labels:
+            messages.success(
+                self.request,
+                f"同じ期別の{'・'.join(registered_labels)}ボーナスを事前登録しました。",
+            )
+
+        if warning_labels:
+            messages.warning(
+                self.request,
+                f"{'・'.join(warning_labels)}ボーナスは登録対象データがありませんでした。",
+            )
+
+        return True
+
+    def _insert_auto_register_history(self, cursor, bonus_name, selected_kibetu, count):
+        cursor.execute(
+            """
+                INSERT INTO bonus_db.bonus_register_history (
+                    bonus_name,
+                    kibetu,
+                    registered_at,
+                    registered_by,
+                    comment_text
+                )
+                VALUES (
+                    %s,
+                    %s,
+                    CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'),
+                    %s,
+                    %s
+                )
+            """,
+            [
+                bonus_name,
+                selected_kibetu,
+                self.request.user.username,
+                f"週ボーナス表示前の自動登録: {count}件登録",
+            ],
+        )
+
+    def _register_drive_bonus(self, selected_kibetu, period):
+        if not ensure_week_purchase_info(self.request, selected_kibetu, period):
+            return 0
+
+        rows = DriveBonusView()._get_drive_bonus_rows(selected_kibetu, period)
+        if not rows:
+            return 0
+
+        insert_sql = """
+            INSERT INTO bonus_db.B_drive_bonus_result (
+                kibetu,
+                title_name,
+                introducer_code,
+                jwoa_code,
+                jwoa_name,
+                sum_bv,
+                sum_bonus_amount,
+                created_at
+            ) VALUES (
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                NOW()
+            )
+            ON DUPLICATE KEY UPDATE
+                title_name = VALUES(title_name),
+                introducer_code = VALUES(introducer_code),
+                jwoa_name = VALUES(jwoa_name),
+                sum_bv = VALUES(sum_bv),
+                sum_bonus_amount = VALUES(sum_bonus_amount),
+                created_at = NOW()
+        """
+        insert_params = [
+            [
+                selected_kibetu,
+                r.get("title_name") or "",
+                r.get("introducer_code") or "",
+                r.get("jwoa_code") or "",
+                r.get("jwoa_name") or "",
+                r.get("sum_bv") or 0,
+                r.get("sum_bonus_amount") or 0,
+            ]
+            for r in rows
+        ]
+
+        with transaction.atomic(using="rds"):
+            with connections["rds"].cursor() as cursor:
+                cursor.executemany(insert_sql, insert_params)
+                self._insert_auto_register_history(
+                    cursor,
+                    "drive_bonus",
+                    selected_kibetu,
+                    len(rows),
+                )
+
+        return len(rows)
+
+    def _register_basic_bonus(self, selected_kibetu, period):
+        basic_view = BasicBonusView()
+        basic_bonus_rows = basic_view._get_basic_bonus_rows(selected_kibetu, period)
+        basic_bv_line_rows = basic_view._get_basic_bv_line_rows(selected_kibetu, period)
+        if not basic_bonus_rows:
+            return 0
+
+        insert_sql, insert_params = register_sql.get_basic_bonus_insert_data(
+            selected_kibetu,
+            basic_bonus_rows,
+        )
+        basic_bv_line_insert_sql, basic_bv_line_insert_params = (
+            register_sql.get_basic_bv_line_insert_data(
+                selected_kibetu,
+                basic_bv_line_rows,
+            )
+        )
+
+        with transaction.atomic(using="rds"):
+            with connections["rds"].cursor() as cursor:
+                cursor.executemany(insert_sql, insert_params)
+                if basic_bv_line_insert_params:
+                    cursor.executemany(
+                        basic_bv_line_insert_sql,
+                        basic_bv_line_insert_params,
+                    )
+                self._insert_auto_register_history(
+                    cursor,
+                    "basic_bonus",
+                    selected_kibetu,
+                    len(basic_bonus_rows),
+                )
+
+        return len(basic_bonus_rows)
+
+    def _register_matching_bonus(self, selected_kibetu, period):
+        rows = MatchingBonusView()._get_basic_bonus_rows(selected_kibetu, period)
+        if not rows:
+            return 0
+
+        insert_sql = """
+            INSERT INTO bonus_db.B_matching_bonus_result (
+                kibetu,
+                introducer_code,
+                introducer_name,
+                active_count,
+                basic_bv,
+                matching_bv,
+                created_at
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, NOW()
+            )
+            ON DUPLICATE KEY UPDATE
+                introducer_name = VALUES(introducer_name),
+                active_count    = VALUES(active_count),
+                basic_bv        = VALUES(basic_bv),
+                matching_bv     = VALUES(matching_bv),
+                created_at      = NOW()
+        """
+        insert_params = [
+            [
+                selected_kibetu,
+                r.get("introducer_code") or "",
+                r.get("jwoa_name") or "",
+                r.get("active_count") or 0,
+                r.get("sum_bonus_amount") or 0,
+                r.get("matching_bonus_amount") or 0,
+            ]
+            for r in rows
+        ]
+
+        with transaction.atomic(using="rds"):
+            with connections["rds"].cursor() as cursor:
+                cursor.executemany(insert_sql, insert_params)
+                self._insert_auto_register_history(
+                    cursor,
+                    "matching_bonus",
+                    selected_kibetu,
+                    len(rows),
+                )
+
+        return len(rows)
 
     def _get_week_bonus_rows(self, selected_kibetu, period):
         params = [
@@ -6814,6 +7484,13 @@ class BonusHistryView(generic.TemplateView):
 
                 MAX(
                     CASE
+                        WHEN h.bonus_name = 'matching_bonus'
+                        THEN DATE(h.registered_at)
+                    END
+                ) AS matching_bonus,
+
+                MAX(
+                    CASE
                         WHEN h.bonus_name = 'title_bonus'
                         THEN DATE(h.registered_at)
                     END
@@ -6833,6 +7510,7 @@ class BonusHistryView(generic.TemplateView):
                     WHERE bonus_name IN (
                         'drive_bonus',
                         'basic_bonus',
+                        'matching_bonus',
                         'title_bonus'
                     )
                     GROUP BY kibetu, bonus_name
