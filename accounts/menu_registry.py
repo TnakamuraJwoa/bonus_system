@@ -37,6 +37,9 @@ MENU_FEATURES = (
         ("orders_distribution_bv",),
     ),
     MenuFeature("api_users_bv", "会員BV特別反映情報", "orders", ("api_users_bv",)),
+    MenuFeature("repurchase_last_month", "購入情報登録", "orders", ("repurchase_last_month",)),
+    MenuFeature("repurchase_list", "購入情報一覧", "orders", ("repurchase_list",)),
+    MenuFeature("bonus_payment_date", "注文別ボーナス支払日", "orders", ("bonus_payment_date",)),
     MenuFeature("cooling_off", "クーリングオフ", "orders", ("cooling_off",)),
     # --- ボーナス検索（個人） ---
     MenuFeature("s_drive_bonus", "ドライブボーナス（検索）", "bonus_search", ("s_drive_bonus",)),
@@ -105,9 +108,6 @@ MENU_FEATURES = (
     MenuFeature("active_users", "アクティブ会員登録", "settings", ("active_users",)),
     MenuFeature("title_registration", "タイトルユーザー登録", "settings", ("title_registration",)),
     MenuFeature("placement_tree", "上位者ツリー", "settings", ("placement_tree",)),
-    MenuFeature("bonus_payment_date", "注文別ボーナス支払日", "settings", ("bonus_payment_date",)),
-    MenuFeature("repurchase_last_month", "購入情報登録", "settings", ("repurchase_last_month",)),
-    MenuFeature("repurchase_list", "購入情報一覧", "settings", ("repurchase_list",)),
 )
 
 MENU_BY_KEY = {feature.key: feature for feature in MENU_FEATURES}

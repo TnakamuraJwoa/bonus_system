@@ -3,6 +3,42 @@
 
 {% block head %}
 <link href="{% static 'css/common.css' %}" rel="stylesheet">
+<style>
+    .cooling-off-top {
+        display: grid;
+        grid-template-columns: minmax(480px, 1.2fr) minmax(360px, 0.8fr);
+        gap: 0.75rem;
+        align-items: stretch;
+    }
+
+    .cooling-off-section {
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 0.65rem 0.75rem;
+        background: #fff;
+    }
+
+    .cooling-off-section--create {
+        border-left: 4px solid #4f46e5;
+    }
+
+    .cooling-off-section--search {
+        border-left: 4px solid #10b981;
+    }
+
+    .cooling-off-section__title {
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: #475569;
+        margin-bottom: 0.35rem;
+    }
+
+    @media (max-width: 991.98px) {
+        .cooling-off-top {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
 {% endblock %}
 
 {% block contents %}
@@ -19,63 +55,64 @@
 
                     <h5 class="page-title mb-3">【注文管理 - クーリングオフ】</h5>
 
-                    <form method="post">
-                        {% csrf_token %}
-
-                        {% if edit_row %}
-                            <input type="hidden" name="action" value="update">
-                            <input type="hidden" name="id" value="{{ edit_row.id }}">
-                        {% else %}
+                    <div class="cooling-off-top">
+                        <form method="post" class="cooling-off-section cooling-off-section--create mb-0">
+                            {% csrf_token %}
                             <input type="hidden" name="action" value="create">
-                        {% endif %}
+                            <input type="hidden" name="next_query" value="{{ request.GET.urlencode }}">
 
-                        <div class="row g-2 align-items-end">
-                            <div class="col-md-3">
-                                <label class="form-label mb-1 small text-muted">注文番号</label>
-                                <input type="text"
-                                       name="order_code"
-                                       class="form-control"
-                                       value="{{ edit_row.order_code|default:'' }}"
-                                       required>
+                            <div class="cooling-off-section__title">登録</div>
+                            <div class="d-flex gap-2 align-items-end flex-wrap">
+                                <div style="width: 230px;">
+                                    <label class="form-label mb-1 small text-muted">注文番号</label>
+                                    <input type="text"
+                                           name="order_code"
+                                           class="form-control"
+                                           required>
+                                </div>
+
+                                <div style="width: 130px;">
+                                    <label class="form-label mb-1 small text-muted">状態</label>
+                                    <select name="active_flag" class="form-control">
+                                        <option value="1" selected>有効</option>
+                                        <option value="0">無効</option>
+                                    </select>
+                                </div>
+
+                                <div style="width: 260px;">
+                                    <label class="form-label mb-1 small text-muted">備考</label>
+                                    <input type="text" name="remarks" class="form-control">
+                                </div>
+
+                                <button type="submit" class="btn btn-primary">登録</button>
                             </div>
+                        </form>
 
-                            <div class="col-md-2">
-                                <label class="form-label mb-1 small text-muted">状態</label>
-                                <select name="active_flag" class="form-control">
-                                    <option value="1" {% if not edit_row or edit_row.active_flag == 1 %}selected{% endif %}>
-                                        有効
-                                    </option>
-                                    <option value="0" {% if edit_row.active_flag == 0 %}selected{% endif %}>
-                                        無効
-                                    </option>
-                                </select>
+                        <form method="get" class="cooling-off-section cooling-off-section--search mb-0">
+                            <div class="cooling-off-section__title">検索</div>
+                            <div class="d-flex gap-2 align-items-end flex-wrap">
+                                <div style="width: 210px;">
+                                    <label class="form-label mb-1 small text-muted">注文番号</label>
+                                    <input type="text"
+                                           name="q_order_code"
+                                           class="form-control"
+                                           value="{{ q_order_code|default:'' }}">
+                                </div>
+
+                                <div style="width: 120px;">
+                                    <label class="form-label mb-1 small text-muted">状態</label>
+                                    <select name="q_active_flag" class="form-control">
+                                        <option value="" {% if not q_active_flag %}selected{% endif %}>全件</option>
+                                        <option value="1" {% if q_active_flag == "1" %}selected{% endif %}>有効</option>
+                                        <option value="0" {% if q_active_flag == "0" %}selected{% endif %}>無効</option>
+                                    </select>
+                                </div>
+
+                                <button type="submit" class="btn btn-success">検索</button>
+                                <a href="{% url 'connect:cooling_off' %}" class="btn btn-outline-secondary">リセット</a>
                             </div>
-
-                            <div class="col-md-5">
-                                <label class="form-label mb-1 small text-muted">備考</label>
-                                <textarea name="remarks"
-                                          rows="1"
-                                          class="form-control">{{ edit_row.remarks|default:'' }}</textarea>
-                            </div>
-
-                            <div class="col-md-2">
-                                {% if edit_row %}
-                                    <button type="submit" class="btn btn-warning">
-                                        更新
-                                    </button>
-
-                                    <a href="{% url 'connect:cooling_off' %}"
-                                       class="btn btn-secondary ml-2">
-                                        戻る
-                                    </a>
-                                {% else %}
-                                    <button type="submit" class="btn btn-primary">
-                                        登録
-                                    </button>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </form>
+                        </form>
+                    </div>
 
                 </div>
             </div>
@@ -223,16 +260,19 @@
                                             詳細
                                         </a>
 
-                                        <a href="?edit_id={{ row.id }}"
-                                           class="btn btn-sm btn-warning">
+                                        <button type="button"
+                                           class="btn btn-sm btn-warning"
+                                           data-toggle="modal"
+                                           data-target="#coolingOffEditModal{{ row.id }}">
                                             編集
-                                        </a>
+                                        </button>
 
                                         <form method="post" style="display:inline;">
                                             {% csrf_token %}
 
                                             <input type="hidden" name="action" value="delete">
                                             <input type="hidden" name="id" value="{{ row.id }}">
+                                            <input type="hidden" name="next_query" value="{{ request.GET.urlencode }}">
 
                                             <button type="submit"
                                                     class="btn btn-sm btn-danger"
@@ -257,6 +297,59 @@
 
                 </div>
             </div>
+
+            {% for row in rows %}
+            <div class="modal fade" id="coolingOffEditModal{{ row.id }}" tabindex="-1" role="dialog" aria-labelledby="coolingOffEditModalLabel{{ row.id }}" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered" role="document">
+                    <div class="modal-content">
+                        <form method="post" class="mb-0">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="update">
+                            <input type="hidden" name="id" value="{{ row.id }}">
+                            <input type="hidden" name="next_query" value="{{ request.GET.urlencode }}">
+
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="coolingOffEditModalLabel{{ row.id }}">クーリングオフ編集</h5>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                            </div>
+
+                            <div class="modal-body">
+                                <div class="form-group">
+                                    <label class="form-label small text-muted">注文番号</label>
+                                    <input type="text"
+                                           name="order_code"
+                                           class="form-control"
+                                           value="{{ row.order_code }}"
+                                           required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label small text-muted">状態</label>
+                                    <select name="active_flag" class="form-control">
+                                        <option value="1" {% if row.active_flag == 1 %}selected{% endif %}>有効</option>
+                                        <option value="0" {% if row.active_flag == 0 %}selected{% endif %}>無効</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group mb-0">
+                                    <label class="form-label small text-muted">備考</label>
+                                    <textarea name="remarks"
+                                              rows="3"
+                                              class="form-control">{{ row.remarks|default:'' }}</textarea>
+                                </div>
+                            </div>
+
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
+                                <button type="submit" class="btn btn-warning">更新</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
 
         </main>
 

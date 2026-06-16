@@ -6800,15 +6800,14 @@ class CoolingOffView(generic.TemplateView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
-        edit_id = self.request.GET.get("edit_id")
         detail_order_code = self.request.GET.get("detail_order_code")
+        q_order_code = (self.request.GET.get("q_order_code") or "").strip()
+        q_active_flag = (self.request.GET.get("q_active_flag") or "").strip()
 
-        ctx["rows"] = self._get_rows()
-        ctx["edit_row"] = None
+        ctx["rows"] = self._get_rows(q_order_code=q_order_code, q_active_flag=q_active_flag)
         ctx["detail_order"] = None
-
-        if edit_id:
-            ctx["edit_row"] = self._get_edit_row(edit_id)
+        ctx["q_order_code"] = q_order_code
+        ctx["q_active_flag"] = q_active_flag
 
         if detail_order_code:
             ctx["detail_order"] = self._get_order_detail(detail_order_code)
@@ -6817,6 +6816,8 @@ class CoolingOffView(generic.TemplateView):
 
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action")
+        next_query = (request.POST.get("next_query") or "").strip()
+        redirect_url = "connect:cooling_off"
 
         if action == "create":
             self._create(request)
@@ -6827,9 +6828,23 @@ class CoolingOffView(generic.TemplateView):
         elif action == "delete":
             self._delete(request)
 
-        return redirect("connect:cooling_off")
+        if next_query:
+            return redirect(f"{redirect('connect:cooling_off').url}?{next_query}")
+        return redirect(redirect_url)
 
-    def _get_rows(self):
+    def _get_rows(self, q_order_code="", q_active_flag=""):
+        where = []
+        params = []
+
+        if q_order_code:
+            where.append("c.order_code LIKE %s")
+            params.append(f"%{q_order_code}%")
+
+        if q_active_flag in ("0", "1"):
+            where.append("c.active_flag = %s")
+            params.append(int(q_active_flag))
+
+        where_sql = f"WHERE {' AND '.join(where)}" if where else ""
         sql = """
             SELECT
                 c.id,
@@ -6843,11 +6858,12 @@ class CoolingOffView(generic.TemplateView):
             FROM bonus_db.cooling_off c
             LEFT JOIN bonus_db.orders o
                 ON c.order_code = o.order_code
+            {where_sql}
             ORDER BY c.created_at DESC
-        """
+        """.format(where_sql=where_sql)
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql)
+            cursor.execute(sql, params)
             cols = [c[0] for c in cursor.description]
             return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
@@ -6899,7 +6915,42 @@ class CoolingOffView(generic.TemplateView):
             cols = [c[0] for c in cursor.description]
             return dict(zip(cols, row))
 
+    def _set_purchase_info_cooling_off(self, cursor, order_code):
+        sql = """
+            UPDATE bonus_db.purchase_info_list
+            SET
+                order_type = 200,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE order_code = %s
+        """
+        cursor.execute(sql, [order_code])
+
+    def _restore_purchase_info_order_type(self, cursor, order_code):
+        sql = """
+            UPDATE bonus_db.purchase_info_list p
+            JOIN bonus_db.orders o
+              ON p.order_code = o.order_code
+            SET
+                p.order_type = o.order_type,
+                p.updated_at = CURRENT_TIMESTAMP
+            WHERE p.order_code = %s
+        """
+        cursor.execute(sql, [order_code])
+
+    def _get_cooling_off_order_code(self, cursor, row_id):
+        sql = """
+            SELECT order_code
+            FROM bonus_db.cooling_off
+            WHERE id = %s
+            FOR UPDATE
+        """
+        cursor.execute(sql, [row_id])
+        row = cursor.fetchone()
+        return row[0] if row else ""
+
     def _create(self, request):
+        order_code = (request.POST.get("order_code") or "").strip()
+        active_flag = int(request.POST.get("active_flag", 1))
         sql = """
             INSERT INTO bonus_db.cooling_off (
                 order_code,
@@ -6915,18 +6966,24 @@ class CoolingOffView(generic.TemplateView):
             )
         """
 
-        with connections["rds"].cursor() as cursor:
-            cursor.execute(
-                sql,
-                [
-                    request.POST.get("order_code"),
-                    request.POST.get("active_flag", 1),
-                    request.POST.get("remarks"),
-                    request.user.username,
-                ]
-            )
+        with transaction.atomic(using="rds"):
+            with connections["rds"].cursor() as cursor:
+                cursor.execute(
+                    sql,
+                    [
+                        order_code,
+                        active_flag,
+                        request.POST.get("remarks"),
+                        request.user.username,
+                    ]
+                )
+                if active_flag == 1:
+                    self._set_purchase_info_cooling_off(cursor, order_code)
 
     def _update(self, request):
+        order_code = (request.POST.get("order_code") or "").strip()
+        active_flag = int(request.POST.get("active_flag", 1))
+        row_id = request.POST.get("id")
         sql = """
             UPDATE bonus_db.cooling_off
             SET
@@ -6937,17 +6994,28 @@ class CoolingOffView(generic.TemplateView):
             WHERE id = %s
         """
 
-        with connections["rds"].cursor() as cursor:
-            cursor.execute(
-                sql,
-                [
-                    request.POST.get("order_code"),
-                    request.POST.get("active_flag", 1),
-                    request.POST.get("remarks"),
-                    request.user.username,
-                    request.POST.get("id"),
-                ]
-            )
+        with transaction.atomic(using="rds"):
+            with connections["rds"].cursor() as cursor:
+                old_order_code = self._get_cooling_off_order_code(cursor, row_id)
+
+                cursor.execute(
+                    sql,
+                    [
+                        order_code,
+                        active_flag,
+                        request.POST.get("remarks"),
+                        request.user.username,
+                        row_id,
+                    ]
+                )
+
+                if old_order_code and old_order_code != order_code:
+                    self._restore_purchase_info_order_type(cursor, old_order_code)
+
+                if active_flag == 1:
+                    self._set_purchase_info_cooling_off(cursor, order_code)
+                else:
+                    self._restore_purchase_info_order_type(cursor, order_code)
 
     def _delete(self, request):
         sql = """
@@ -6956,5 +7024,10 @@ class CoolingOffView(generic.TemplateView):
             WHERE id = %s
         """
 
-        with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, [request.POST.get("id")])
+        with transaction.atomic(using="rds"):
+            with connections["rds"].cursor() as cursor:
+                row_id = request.POST.get("id")
+                order_code = self._get_cooling_off_order_code(cursor, row_id)
+                cursor.execute(sql, [row_id])
+                if order_code:
+                    self._restore_purchase_info_order_type(cursor, order_code)

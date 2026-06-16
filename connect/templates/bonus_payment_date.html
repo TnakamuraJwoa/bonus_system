@@ -118,13 +118,13 @@
 <div class="container-fluid mt-3 list-page-viewport">
   <div class="row g-1 h-100">
 
-    {% include "com/_sidebar.html" with active_menu="bonus_payment_date" %}
+    {% include "com/_sidebar_orders.html" with active_menu="bonus_payment_date" %}
 
     <main class="col-12 col-md-9 col-lg-10 list-page-main">
 
       <div class="card shadow-sm mb-2">
         <div class="card-body py-2">
-          <h5 class="page-title mb-2">【設定 - 注文別ボーナス支払日】</h5>
+          <h5 class="page-title mb-2">【注文管理 - ボーナス支払日(登録・更新)】</h5>
 
           <div class="bonus-payment-date-filter bonus-payment-date-top">
             <form method="get" class="bonus-payment-date-section bonus-payment-date-section--search mb-0">
@@ -179,7 +179,8 @@
 
               <form method="post"
                     enctype="multipart/form-data"
-                    class="bonus-payment-date-section bonus-payment-date-section--create mb-0">
+                    class="bonus-payment-date-section bonus-payment-date-section--create mb-0"
+                    data-confirm="選択したファイルで一括登録しますか？既に同じ注文番号がある場合は支払日を更新します。">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="bulk_create">
                 <input type="hidden" name="q_order_code" value="{{ q_order_code|default:'' }}">
