@@ -9,7 +9,7 @@ from decimal import Decimal, InvalidOperation
 from django.views import generic
 from django.contrib import messages
 from .forms import InquiryForm
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.shortcuts import render
 from datetime import date
 from datetime import datetime, time, timedelta
@@ -73,6 +73,31 @@ def parse_input_date(value):
         raise ValueError(
             f'"{text}" は無効な日付形式です。YYYY-MM-DD または YYYY/MM/DD 形式にしてください。'
         ) from exc
+
+
+def parse_optional_input_date(value):
+    text = (value or "").strip()
+    if not text:
+        return None
+    return parse_input_date(text)
+
+
+def _build_kibetu_filter_redirect(request, url_name):
+    params = {}
+    filter_kibetu = (
+        request.POST.get("filter_kibetu") or request.GET.get("kibetu") or ""
+    ).strip()
+    filter_q_kibetu = (
+        request.POST.get("filter_q_kibetu") or request.GET.get("q_kibetu") or ""
+    ).strip()
+    if filter_kibetu:
+        params["kibetu"] = filter_kibetu
+    if filter_q_kibetu:
+        params["q_kibetu"] = filter_q_kibetu
+    url = reverse(url_name)
+    if params:
+        url += "?" + urlencode(params)
+    return url
 
 
 def get_week_purchase_check_months(selected_kibetu, period=None):
@@ -900,6 +925,9 @@ class KibetuView(generic.ListView):
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action")
 
+        if action == "bulk_update":
+            return self._bulk_update(request)
+
         kibetu = (request.POST.get("kibetu") or "").strip()
         st_date = request.POST.get("st_date") or None
         end_date = request.POST.get("end_date") or None
@@ -907,7 +935,15 @@ class KibetuView(generic.ListView):
 
         if not kibetu:
             messages.error(request, "期別を入力してください。")
-            return redirect("connect:kibetu")
+            return redirect(_build_kibetu_filter_redirect(request, "connect:kibetu"))
+
+        try:
+            completion_date = parse_optional_input_date(
+                request.POST.get("completion_date")
+            )
+        except ValueError as e:
+            messages.error(request, str(e))
+            return redirect(_build_kibetu_filter_redirect(request, "connect:kibetu"))
 
         try:
             with transaction.atomic(using="rds"):
@@ -918,6 +954,7 @@ class KibetuView(generic.ListView):
                         st_date=st_date,
                         end_date=end_date,
                         payment_date=payment_date,
+                        completion_date=completion_date,
                     )
                     messages.success(request, f"{kibetu} を追加しました。")
 
@@ -926,6 +963,7 @@ class KibetuView(generic.ListView):
                     obj.st_date = st_date
                     obj.end_date = end_date
                     obj.payment_date = payment_date
+                    obj.completion_date = completion_date
                     obj.save(using="rds")
                     messages.success(request, f"{kibetu} を変更しました。")
 
@@ -943,7 +981,69 @@ class KibetuView(generic.ListView):
         except Exception as e:
             messages.error(request, f"エラーが発生しました: {e}")
 
-        return redirect("connect:kibetu")
+        return redirect(_build_kibetu_filter_redirect(request, "connect:kibetu"))
+
+    def _bulk_update(self, request):
+        kibetus = request.POST.getlist("bulk_kibetu")
+        st_dates = request.POST.getlist("bulk_st_date")
+        end_dates = request.POST.getlist("bulk_end_date")
+        payment_dates = request.POST.getlist("bulk_payment_date")
+        completion_dates = request.POST.getlist("bulk_completion_date")
+        row_lengths = {
+            len(kibetus),
+            len(st_dates),
+            len(end_dates),
+            len(payment_dates),
+            len(completion_dates),
+        }
+
+        if not kibetus or len(row_lengths) != 1:
+            messages.error(request, "一括変更するデータがありません。")
+            return redirect(_build_kibetu_filter_redirect(request, "connect:kibetu"))
+
+        updated_count = 0
+        errors = []
+
+        try:
+            with transaction.atomic(using="rds"):
+                for idx, kibetu in enumerate(kibetus):
+                    kibetu = (kibetu or "").strip()
+                    if not kibetu:
+                        continue
+
+                    try:
+                        completion_date = parse_optional_input_date(
+                            completion_dates[idx]
+                        )
+                    except ValueError as e:
+                        errors.append(f"{kibetu}: {e}")
+                        continue
+
+                    try:
+                        obj = PeriodMaster.objects.using("rds").get(kibetu=kibetu)
+                    except PeriodMaster.DoesNotExist:
+                        errors.append(f"{kibetu}: 存在しません。")
+                        continue
+
+                    obj.st_date = (st_dates[idx] or "").strip() or None
+                    obj.end_date = (end_dates[idx] or "").strip() or None
+                    obj.payment_date = (payment_dates[idx] or "").strip() or None
+                    obj.completion_date = completion_date
+                    obj.save(using="rds")
+                    updated_count += 1
+
+        except Exception as e:
+            messages.error(request, f"エラーが発生しました: {e}")
+            return redirect(_build_kibetu_filter_redirect(request, "connect:kibetu"))
+
+        if errors:
+            messages.error(request, " / ".join(errors))
+        if updated_count:
+            messages.success(request, f"{updated_count} 件を変更しました。")
+        elif not errors:
+            messages.info(request, "変更対象がありませんでした。")
+
+        return redirect(_build_kibetu_filter_redirect(request, "connect:kibetu"))
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -1000,6 +1100,9 @@ class KibetuMonthView(generic.ListView):
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action")
 
+        if action == "bulk_update":
+            return self._bulk_update(request)
+
         kibetu = (request.POST.get("kibetu") or "").strip()
         year = request.POST.get("year") or ""
         month = request.POST.get("month") or ""
@@ -1014,7 +1117,7 @@ class KibetuMonthView(generic.ListView):
 
         def render_create_form_on_error():
             if action != "create":
-                return redirect("connect:kibetu_month")
+                return redirect(_build_kibetu_filter_redirect(request, "connect:kibetu_month"))
             self.object_list = self.get_queryset()
             context = self.get_context_data()
             context["create_form"] = create_form
@@ -1030,7 +1133,7 @@ class KibetuMonthView(generic.ListView):
             messages.error(request, str(e))
             if action == "create":
                 return render_create_form_on_error()
-            return redirect("connect:kibetu_month")
+            return redirect(_build_kibetu_filter_redirect(request, "connect:kibetu_month"))
 
         try:
             with transaction.atomic(using="rds"):
@@ -1069,7 +1172,66 @@ class KibetuMonthView(generic.ListView):
             messages.error(request, f"エラーが発生しました: {e}")
             return render_create_form_on_error()
 
-        return redirect("connect:kibetu_month")
+        return redirect(_build_kibetu_filter_redirect(request, "connect:kibetu_month"))
+
+    def _bulk_update(self, request):
+        kibetus = request.POST.getlist("bulk_kibetu")
+        years = request.POST.getlist("bulk_year")
+        months = request.POST.getlist("bulk_month")
+        payment_dates = request.POST.getlist("bulk_payment_date")
+        row_lengths = {
+            len(kibetus),
+            len(years),
+            len(months),
+            len(payment_dates),
+        }
+
+        if not kibetus or len(row_lengths) != 1:
+            messages.error(request, "一括変更するデータがありません。")
+            return redirect(_build_kibetu_filter_redirect(request, "connect:kibetu_month"))
+
+        updated_count = 0
+        errors = []
+
+        try:
+            with transaction.atomic(using="rds"):
+                for idx, kibetu in enumerate(kibetus):
+                    kibetu = (kibetu or "").strip()
+                    if not kibetu:
+                        continue
+
+                    try:
+                        parsed_payment_date = parse_input_date(payment_dates[idx])
+                    except ValueError as e:
+                        errors.append(f"{kibetu}: {e}")
+                        continue
+
+                    try:
+                        obj = MonthlyPeriod.objects.using("rds").get(kibetu=kibetu)
+                    except MonthlyPeriod.DoesNotExist:
+                        errors.append(f"{kibetu}: 存在しません。")
+                        continue
+
+                    year = (years[idx] or "").strip()
+                    month = (months[idx] or "").strip()
+                    obj.year = year or None
+                    obj.month = month or None
+                    obj.payment_date = parsed_payment_date
+                    obj.save(using="rds")
+                    updated_count += 1
+
+        except Exception as e:
+            messages.error(request, f"エラーが発生しました: {e}")
+            return redirect(_build_kibetu_filter_redirect(request, "connect:kibetu_month"))
+
+        if errors:
+            messages.error(request, " / ".join(errors))
+        if updated_count:
+            messages.success(request, f"{updated_count} 件を変更しました。")
+        elif not errors:
+            messages.info(request, "変更対象がありませんでした。")
+
+        return redirect(_build_kibetu_filter_redirect(request, "connect:kibetu_month"))
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -7173,9 +7335,20 @@ class MonthBonusView(generic.ListView):
     template_name = "month_bonus.html"
     context_object_name = "object_list"
     model = MonthlyPeriod
+    PRE_REGISTER_OPTIONS = (
+        ("title", "タイトルボーナス"),
+        ("title_diff", "タイトル差額ボーナス"),
+        ("repurchase_over", "再購入オーバーボーナス"),
+        ("three_star", "3スターダイヤグローバル配当"),
+    )
 
     def get_queryset(self):
         return MonthlyPeriod.objects.using("rds").all()
+
+    def get(self, request, *args, **kwargs):
+        self.object_list = self.get_queryset()
+        context = self.get_context_data()
+        return self.render_to_response(context)
 
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "")
@@ -7289,7 +7462,10 @@ class MonthBonusView(generic.ListView):
         ctx = super().get_context_data(**kwargs)
 
         selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
+        pre_register_targets = self._get_pre_register_targets()
         ctx["selected_kibetu"] = selected_kibetu
+        ctx["pre_register_targets"] = pre_register_targets
+        ctx["pre_register_options"] = self.PRE_REGISTER_OPTIONS
         ctx["rows"] = []
         ctx["selected_period"] = None
 
@@ -7305,12 +7481,208 @@ class MonthBonusView(generic.ListView):
         if not ensure_kibetu_purchase_info(self.request, selected_kibetu, period):
             return ctx
 
+        if not self._pre_register_selected_bonuses(
+            selected_kibetu,
+            period,
+            pre_register_targets,
+        ):
+            return ctx
+
         ctx["rows"] = self._get_month_bonus_rows(selected_kibetu)
 
         return ctx
 
+    def _get_pre_register_targets(self):
+        if "kibetu" not in self.request.GET:
+            return [key for key, _label in self.PRE_REGISTER_OPTIONS]
+        return [
+            value
+            for value in self.request.GET.getlist("pre_register")
+            if value in {key for key, _label in self.PRE_REGISTER_OPTIONS}
+        ]
+
+    def _pre_register_selected_bonuses(self, selected_kibetu, period, targets):
+        if not targets:
+            return True
+
+        registered_labels = []
+        warning_labels = []
+
+        try:
+            if "title" in targets:
+                count = self._register_title_bonus(selected_kibetu, period)
+                if count:
+                    registered_labels.append("タイトル")
+                else:
+                    warning_labels.append("タイトル")
+
+            if "title_diff" in targets:
+                count = self._register_title_diff_bonus(selected_kibetu, period)
+                if count:
+                    registered_labels.append("タイトル差額")
+                else:
+                    warning_labels.append("タイトル差額")
+
+            if "repurchase_over" in targets:
+                count = self._register_repurchase_over_bonus(selected_kibetu, period)
+                if count:
+                    registered_labels.append("再購入オーバー")
+                else:
+                    warning_labels.append("再購入オーバー")
+
+            if "three_star" in targets:
+                count = self._register_three_star_global_bonus(selected_kibetu, period)
+                if count:
+                    registered_labels.append("3スターダイヤ")
+                else:
+                    warning_labels.append("3スターダイヤ")
+
+        except Exception as e:
+            logger.exception("月ボーナス表示前の事前登録エラー")
+            messages.error(self.request, f"事前登録中にエラーが発生しました: {e}")
+            return False
+
+        if registered_labels:
+            messages.success(
+                self.request,
+                f"同じ期別の{'・'.join(registered_labels)}ボーナスを事前登録しました。",
+            )
+
+        if warning_labels:
+            messages.warning(
+                self.request,
+                f"{'・'.join(warning_labels)}ボーナスは登録対象データがありませんでした。",
+            )
+
+        return True
+
+    def _insert_auto_register_history(self, cursor, bonus_name, selected_kibetu, count):
+        cursor.execute(
+            """
+                INSERT INTO bonus_db.bonus_register_history (
+                    bonus_name,
+                    kibetu,
+                    registered_at,
+                    registered_by,
+                    comment_text
+                )
+                VALUES (
+                    %s,
+                    %s,
+                    CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'),
+                    %s,
+                    %s
+                )
+            """,
+            [
+                bonus_name,
+                selected_kibetu,
+                self.request.user.username,
+                f"月ボーナス表示前の自動登録: {count}件登録",
+            ],
+        )
+
+    def _register_title_bonus(self, selected_kibetu, period):
+        rows = TitleBonusView()._get_title_bonus_rows(selected_kibetu, period)
+        if not rows:
+            return 0
+
+        insert_sql, insert_params = register_sql.get_title_bonus_insert_data(
+            selected_kibetu,
+            rows,
+        )
+
+        with transaction.atomic(using="rds"):
+            with connections["rds"].cursor() as cursor:
+                cursor.executemany(insert_sql, insert_params)
+                self._insert_auto_register_history(
+                    cursor,
+                    "title_bonus",
+                    selected_kibetu,
+                    len(rows),
+                )
+
+        return len(rows)
+
+    def _register_title_diff_bonus(self, selected_kibetu, period):
+        rows = TitleDiffBonusView()._get_title_diff_bonus_rows(selected_kibetu, period)
+        if not rows:
+            return 0
+
+        insert_sql, insert_params = register_sql.get_title_diff_bonus_insert_data(
+            selected_kibetu,
+            rows,
+        )
+
+        with transaction.atomic(using="rds"):
+            with connections["rds"].cursor() as cursor:
+                cursor.executemany(insert_sql, insert_params)
+                self._insert_auto_register_history(
+                    cursor,
+                    "title_diff_bonus",
+                    selected_kibetu,
+                    len(rows),
+                )
+
+        return len(rows)
+
+    def _register_repurchase_over_bonus(self, selected_kibetu, period):
+        rows = RepurchaseOverBonusView()._get_repurchase_over_bonus_rows(
+            selected_kibetu=selected_kibetu,
+            period=period,
+        )
+        if not rows:
+            return 0
+
+        insert_sql, insert_params = register_sql.get_repurchase_over_bonus_insert_data(
+            selected_kibetu,
+            rows,
+        )
+        if not insert_params:
+            return 0
+
+        with transaction.atomic(using="rds"):
+            with connections["rds"].cursor() as cursor:
+                cursor.executemany(insert_sql, insert_params)
+                self._insert_auto_register_history(
+                    cursor,
+                    "repurchase_over_bonus",
+                    selected_kibetu,
+                    len(insert_params),
+                )
+
+        return len(insert_params)
+
+    def _register_three_star_global_bonus(self, selected_kibetu, period):
+        rows = ThreeStarGlobalBonusView()._get_three_star_global_bonus_rows(
+            selected_kibetu=selected_kibetu,
+            period=period,
+        )
+        if not rows:
+            return 0
+
+        insert_sql, insert_params = register_sql.get_three_star_global_bonus_insert_data(
+            selected_kibetu,
+            rows,
+        )
+        if not insert_params:
+            return 0
+
+        with transaction.atomic(using="rds"):
+            with connections["rds"].cursor() as cursor:
+                cursor.executemany(insert_sql, insert_params)
+                self._insert_auto_register_history(
+                    cursor,
+                    "three_star_global_bonus",
+                    selected_kibetu,
+                    len(insert_params),
+                )
+
+        return len(insert_params)
+
     def _get_month_bonus_rows(self, selected_kibetu):
         params = [
+            selected_kibetu,
             selected_kibetu,
             selected_kibetu,
             selected_kibetu,
@@ -7319,6 +7691,7 @@ class MonthBonusView(generic.ListView):
 
         with connections["rds"].cursor() as cursor:
             cursor.execute(MONTH_BONUS_SQL, params)
+            logger.info(f"Executed SQL: {cursor._executed}")
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
 
@@ -7491,10 +7864,45 @@ class BonusHistryView(generic.TemplateView):
 
                 MAX(
                     CASE
+                        WHEN h.bonus_name = 'week_bonus'
+                        THEN DATE(h.registered_at)
+                    END
+                ) AS week_bonus,
+
+                MAX(
+                    CASE
                         WHEN h.bonus_name = 'title_bonus'
                         THEN DATE(h.registered_at)
                     END
-                ) AS title_bonus
+                ) AS title_bonus,
+
+                MAX(
+                    CASE
+                        WHEN h.bonus_name = 'title_diff_bonus'
+                        THEN DATE(h.registered_at)
+                    END
+                ) AS title_diff_bonus,
+
+                MAX(
+                    CASE
+                        WHEN h.bonus_name = 'repurchase_over_bonus'
+                        THEN DATE(h.registered_at)
+                    END
+                ) AS repurchase_over_bonus,
+
+                MAX(
+                    CASE
+                        WHEN h.bonus_name = 'three_star_global_bonus'
+                        THEN DATE(h.registered_at)
+                    END
+                ) AS three_star_global_bonus,
+
+                MAX(
+                    CASE
+                        WHEN h.bonus_name = 'month_bonus'
+                        THEN DATE(h.registered_at)
+                    END
+                ) AS month_bonus
 
             FROM bonus_db.period_master p
 
@@ -7511,7 +7919,12 @@ class BonusHistryView(generic.TemplateView):
                         'drive_bonus',
                         'basic_bonus',
                         'matching_bonus',
-                        'title_bonus'
+                        'week_bonus',
+                        'title_bonus',
+                        'title_diff_bonus',
+                        'repurchase_over_bonus',
+                        'three_star_global_bonus',
+                        'month_bonus'
                     )
                     GROUP BY kibetu, bonus_name
                 ) b
@@ -7521,8 +7934,11 @@ class BonusHistryView(generic.TemplateView):
             ) h
                 ON p.kibetu = h.kibetu
 
+            WHERE p.st_date IS NULL
+               OR p.st_date <= DATE(CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'))
+
             GROUP BY p.kibetu
-            ORDER BY p.kibetu;
+            ORDER BY p.st_date DESC, p.kibetu DESC;
         """
 
         with connections["rds"].cursor() as cursor:

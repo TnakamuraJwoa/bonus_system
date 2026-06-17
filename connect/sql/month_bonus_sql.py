@@ -31,6 +31,16 @@ repurchase_over_bonus AS (
     GROUP BY root_code
 ),
 
+three_star_global_bonus AS (
+    SELECT
+        jwoa_code AS pay_code,
+        SUM(bonus_amount) AS sum_bv
+    FROM bonus_db.B_three_star_global_bonus_result
+    WHERE kibetu = %s
+      AND bonus_amount > 0
+    GROUP BY jwoa_code
+),
+
 month_user_list AS (
     SELECT
         a.pay_code,
@@ -41,6 +51,8 @@ month_user_list AS (
         SELECT pay_code FROM title_diff_bonus
         UNION
         SELECT pay_code FROM repurchase_over_bonus
+        UNION
+        SELECT pay_code FROM three_star_global_bonus
     ) AS a
     INNER JOIN bonus_db.users AS b
         ON a.pay_code = b.jmoa_code
@@ -56,13 +68,14 @@ month_bonus AS (
         CAST(IFNULL(d.sum_bv, 0) AS DECIMAL(18,2)) AS repurchase_over_bonus,
         CAST(IFNULL(c.sum_bv, 0) AS DECIMAL(18,2)) AS title_diff_bonus,
 
-        CAST(0 AS DECIMAL(18,2)) AS three_star_diamond_global_bonus,
+        CAST(IFNULL(e.sum_bv, 0) AS DECIMAL(18,2)) AS three_star_diamond_global_bonus,
         CAST(0 AS DECIMAL(18,2)) AS crown_three_star_diamond_global_bonus,
 
         CAST(
             IFNULL(b.sum_bv, 0)
             + IFNULL(c.sum_bv, 0)
             + IFNULL(d.sum_bv, 0)
+            + IFNULL(e.sum_bv, 0)
             AS DECIMAL(18,2)
         ) AS month_bonus
 
@@ -76,6 +89,9 @@ month_bonus AS (
 
     LEFT JOIN repurchase_over_bonus AS d
         ON a.pay_code = d.pay_code
+
+    LEFT JOIN three_star_global_bonus AS e
+        ON a.pay_code = e.pay_code
 )
 
 SELECT *

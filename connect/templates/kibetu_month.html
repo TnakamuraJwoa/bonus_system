@@ -7,174 +7,147 @@
 
 {% block contents %}
 
-<div class="container-fluid mt-3">
-  <div class="row g-1">
-
+<div class="container-fluid mt-2 list-page-viewport kibetu-page">
+  <div class="row g-1 h-100">
 
     {% include "com/_sidebar.html" with active_menu="kibetu_month" %}
 
-    <main class="col-12 col-md-9 col-lg-10">
+    <main class="col-12 col-md-9 col-lg-10 list-page-main kibetu-page">
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-
           <h5 class="page-title mb-3">【設定 - 月期別一覧】</h5>
 
-          <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+          <form method="get" class="kibetu-filter-form mb-0">
+            <select name="kibetu" class="form-control custom-select kibetu-filter-form__select" title="kibetu（選択）">
+              <option value="">（全件）</option>
+              {% for k in kibetu_choices %}
+                <option value="{{ k }}" {% if k == selected_kibetu %}selected{% endif %}>{{ k }}</option>
+              {% endfor %}
+            </select>
 
-            <div>
-              <label class="form-label mb-0 small text-muted">kibetu（選択）</label>
-              <select name="kibetu" class="form-select">
-                <option value="">（全件）</option>
-                {% for k in kibetu_choices %}
-                  <option value="{{ k }}" {% if k == selected_kibetu %}selected{% endif %}>
-                    {{ k }}
-                  </option>
-                {% endfor %}
-              </select>
-            </div>
+            <input type="text"
+                   name="q_kibetu"
+                   class="form-control kibetu-filter-form__search"
+                   value="{{ q_kibetu|default:'' }}"
+                   placeholder="kibetu検索"
+                   title="kibetu（検索）">
 
-            <div>
-              <label class="form-label mb-0 small text-muted">kibetu（検索）</label>
-              <input type="text"
-                     name="q_kibetu"
-                     class="form-control"
-                     value="{{ q_kibetu|default:'' }}"
-                     placeholder="例: 2026C01">
-            </div>
-
-            <button type="submit" class="btn btn-primary">絞り込み</button>
-
-            <a class="btn btn-outline-secondary" href="{% url 'connect:kibetu_month' %}">
-              リセット
-            </a>
-
+            <button type="submit" class="btn btn-primary btn-sm px-3">絞り込み</button>
+            <a class="btn btn-outline-secondary btn-sm px-3" href="{% url 'connect:kibetu_month' %}">リセット</a>
           </form>
 
-        </div>
-      </div>
+          {% if user_access.can_create %}
+          <hr class="kibetu-divider">
 
-      <!-- 新規追加 -->
-      {% if user_access.can_create %}
-      <div class="card shadow-sm mb-3">
-        <div class="card-body">
-
-          <h6 class="mb-3">新規追加</h6>
-
-          <form method="post" id="kibetu-month-create-form" class="row g-2 align-items-end">
+          <form method="post" id="kibetu-month-create-form" class="kibetu-create-form mb-0">
             {% csrf_token %}
             <input type="hidden" name="action" value="create">
 
-            <div class="col-md-3">
-              <label class="form-label small text-muted">期別</label>
-              <input type="text"
-                     name="kibetu"
-                     class="form-control js-create-field"
-                     placeholder="例: 2026C01"
-                     value="{{ create_form.kibetu|default:'' }}"
-                     required>
-            </div>
-
-            <div class="col-md-2">
-              <label class="form-label small text-muted">年</label>
-              <input type="number"
-                     name="year"
-                     class="form-control js-create-field js-create-auto-field bg-light"
-                     placeholder=""
-                     value="{{ create_form.year|default:'' }}"
-                     readonly
-                     required>
-            </div>
-
-            <div class="col-md-2">
-              <label class="form-label small text-muted">月</label>
-              <input type="number"
-                     name="month"
-                     class="form-control js-create-field js-create-auto-field bg-light"
-                     min="1"
-                     max="12"
-                     placeholder=""
-                     value="{{ create_form.month|default:'' }}"
-                     readonly
-                     required>
-            </div>
-
-            <div class="col-md-2">
-              <label class="form-label small text-muted">支払日</label>
-              <input type="text"
-                     name="payment_date"
-                     class="form-control js-create-field"
-                     placeholder="YYYY-MM-DD または YYYY/MM/DD"
-                     value="{{ create_form.payment_date|default:'' }}"
-                     autocomplete="off">
-            </div>
-
-            <div class="col-md-3">
-              <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-success flex-fill">
-                  追加
-                </button>
-                <button type="button" class="btn btn-outline-secondary flex-fill" id="clear-kibetu-month-create">
-                  値削除
-                </button>
-              </div>
-            </div>
+            <span class="kibetu-create-form__label">新規</span>
+            <input type="text"
+                   name="kibetu"
+                   class="form-control kibetu-create-form__field kibetu-create-form__field--kibetu js-create-field"
+                   placeholder="期別"
+                   value="{{ create_form.kibetu|default:'' }}"
+                   required>
+            <input type="number"
+                   name="year"
+                   class="form-control kibetu-create-form__field kibetu-create-form__field--short js-create-field js-create-auto-field bg-light"
+                   placeholder="年"
+                   value="{{ create_form.year|default:'' }}"
+                   readonly
+                   required>
+            <input type="number"
+                   name="month"
+                   class="form-control kibetu-create-form__field kibetu-create-form__field--short js-create-field js-create-auto-field bg-light"
+                   min="1"
+                   max="12"
+                   placeholder="月"
+                   value="{{ create_form.month|default:'' }}"
+                   readonly
+                   required>
+            <input type="text"
+                   name="payment_date"
+                   class="form-control kibetu-create-form__field kibetu-create-form__field--pay js-create-field"
+                   placeholder="支払日"
+                   value="{{ create_form.payment_date|default:'' }}"
+                   autocomplete="off">
+            <button type="submit" class="btn btn-success btn-sm px-3">追加</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm px-3" id="clear-kibetu-month-create">値削除</button>
           </form>
-
+          {% endif %}
         </div>
       </div>
-      {% endif %}
 
       <div class="card shadow-sm">
         <div class="card-body">
 
           {% if rows %}
 
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <div class="fw-bold">一覧</div>
-              <div class="text-end">
-                <strong>件数：{{ rows|length }} 件</strong>
-              </div>
+            <div class="kibetu-list-bar">
+              <span class="kibetu-list-bar__title">一覧</span>
+              <span class="kibetu-list-bar__count">件数：{{ rows|length }}</span>
+
+              {% if user_access.can_update %}
+              <form method="post"
+                    id="kibetu-month-bulk-form"
+                    class="kibetu-list-bar__form js-track-change-form mb-0"
+                    data-confirm="一覧の変更を一括保存しますか？">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="bulk_update">
+                <input type="hidden" name="filter_kibetu" value="{{ selected_kibetu|default:'' }}">
+                <input type="hidden" name="filter_q_kibetu" value="{{ q_kibetu|default:'' }}">
+
+                <span class="kibetu-list-bar__legend">
+                  <span class="field-changed-legend"></span>黄色=未保存
+                </span>
+                <span class="kibetu-list-bar__count js-bulk-changed-summary">変更なし</span>
+                <button type="submit" class="btn btn-warning btn-sm js-bulk-save-btn" disabled>
+                  一括保存
+                </button>
+              </form>
+              {% endif %}
             </div>
 
             <div class="table-responsive">
-              <table class="table table-bordered table-sm align-middle mb-0">
+              <table class="table table-bordered table-sm align-middle mb-0 kibetu-list-table">
 
-                <thead class="table-light">
+                <thead>
                   <tr>
                     <th>期別</th>
                     <th>年</th>
                     <th>月</th>
                     <th>支払日</th>
-                    {% if user_access.can_update or user_access.can_delete %}
-                    <th style="width: 170px;">操作</th>
+                    {% if user_access.can_delete %}
+                    <th style="width: 70px;">操作</th>
                     {% endif %}
                   </tr>
                 </thead>
 
                 <tbody>
                   {% for r in rows %}
-                    <tr>
-                      {% if user_access.can_update or user_access.can_delete %}
-                      <form method="post">
-                        {% csrf_token %}
-
-                        <input type="hidden" name="kibetu" value="{{ r.kibetu }}">
-
-                        <td>{{ r.kibetu }}</td>
+                    <tr class="js-kibetu-row">
+                      {% if user_access.can_update %}
+                        <td>
+                          {{ r.kibetu }}
+                          <input type="hidden" name="bulk_kibetu" value="{{ r.kibetu }}" form="kibetu-month-bulk-form">
+                        </td>
 
                         <td>
                           <input type="number"
-                                 name="year"
-                                 class="form-control form-control-sm"
+                                 name="bulk_year"
+                                 form="kibetu-month-bulk-form"
+                                 class="form-control form-control-sm js-track-change"
                                  value="{{ r.year }}"
                                  required>
                         </td>
 
                         <td>
                           <input type="number"
-                                 name="month"
-                                 class="form-control form-control-sm"
+                                 name="bulk_month"
+                                 form="kibetu-month-bulk-form"
+                                 class="form-control form-control-sm js-track-change"
                                  min="1"
                                  max="12"
                                  value="{{ r.month }}"
@@ -183,40 +156,45 @@
 
                         <td>
                           <input type="text"
-                                 name="payment_date"
-                                 class="form-control form-control-sm"
+                                 name="bulk_payment_date"
+                                 form="kibetu-month-bulk-form"
+                                 class="form-control form-control-sm js-track-change"
                                  value="{% if r.payment_date %}{{ r.payment_date|date:'Y-m-d' }}{% endif %}"
                                  placeholder="YYYY-MM-DD または YYYY/MM/DD"
                                  autocomplete="off">
                         </td>
 
-                        <td>
-                          {% if user_access.can_update %}
+                        {% if user_access.can_delete %}
+                        <td class="kibetu-row-actions">
                           <button type="submit"
-                                  name="action"
-                                  value="update"
-                                  class="btn btn-warning btn-sm">
-                            変更
-                          </button>
-                          {% endif %}
-
-                          {% if user_access.can_delete %}
-                          <button type="submit"
-                                  name="action"
-                                  value="delete"
-                                  class="btn btn-danger btn-sm"
+                                  form="kibetu-month-delete-{{ forloop.counter }}"
+                                  class="btn btn-danger btn-sm py-0"
                                   data-confirm-submit="{{ r.kibetu }} を削除しますか？">
                             削除
                           </button>
-                          {% endif %}
                         </td>
-
-                      </form>
+                        {% endif %}
                       {% else %}
                         <td>{{ r.kibetu }}</td>
                         <td>{{ r.year }}</td>
                         <td>{{ r.month }}</td>
                         <td>{{ r.payment_date|date:'Y-m-d' }}</td>
+                        {% if user_access.can_delete %}
+                        <td class="kibetu-row-actions">
+                          <form method="post">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="delete">
+                            <input type="hidden" name="kibetu" value="{{ r.kibetu }}">
+                            <input type="hidden" name="filter_kibetu" value="{{ selected_kibetu|default:'' }}">
+                            <input type="hidden" name="filter_q_kibetu" value="{{ q_kibetu|default:'' }}">
+                            <button type="submit"
+                                    class="btn btn-danger btn-sm py-0"
+                                    data-confirm-submit="{{ r.kibetu }} を削除しますか？">
+                              削除
+                            </button>
+                          </form>
+                        </td>
+                        {% endif %}
                       {% endif %}
                     </tr>
                   {% endfor %}
@@ -225,11 +203,21 @@
               </table>
             </div>
 
+            {% if user_access.can_update and user_access.can_delete %}
+              {% for r in rows %}
+              <form method="post" id="kibetu-month-delete-{{ forloop.counter }}" class="d-none">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="delete">
+                <input type="hidden" name="kibetu" value="{{ r.kibetu }}">
+                <input type="hidden" name="filter_kibetu" value="{{ selected_kibetu|default:'' }}">
+                <input type="hidden" name="filter_q_kibetu" value="{{ q_kibetu|default:'' }}">
+              </form>
+              {% endfor %}
+            {% endif %}
+
           {% else %}
 
-            <p class="mb-0 text-muted">
-              該当データがありません。
-            </p>
+            <p class="mb-0 text-muted small">該当データがありません。</p>
 
           {% endif %}
 
@@ -289,4 +277,5 @@
   }
 })();
 </script>
+<script src="{% static 'js/track-field-changes.js' %}?v=4"></script>
 {% endblock %}

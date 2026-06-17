@@ -46,7 +46,12 @@
                     <th class="text-center">ドライブボーナス</th>
                     <th class="text-center">ベーシックボーナス</th>
                     <th class="text-center">マッチングボーナス</th>
+                    <th class="text-center">週ボーナス</th>
                     <th class="text-center">タイトルボーナス</th>
+                    <th class="text-center">タイトル差額</th>
+                    <th class="text-center">再購入オーバー</th>
+                    <th class="text-center">3スター配当</th>
+                    <th class="text-center">月ボーナス</th>
                   </tr>
                 </thead>
 
@@ -57,7 +62,12 @@
                       <td class="text-center">{{ r.drive_bonus|default:"" }}</td>
                       <td class="text-center">{{ r.basic_bonus|default:"" }}</td>
                       <td class="text-center">{{ r.matching_bonus|default:"" }}</td>
+                      <td class="text-center">{{ r.week_bonus|default:"" }}</td>
                       <td class="text-center">{{ r.title_bonus|default:"" }}</td>
+                      <td class="text-center">{{ r.title_diff_bonus|default:"" }}</td>
+                      <td class="text-center">{{ r.repurchase_over_bonus|default:"" }}</td>
+                      <td class="text-center">{{ r.three_star_global_bonus|default:"" }}</td>
+                      <td class="text-center">{{ r.month_bonus|default:"" }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>
