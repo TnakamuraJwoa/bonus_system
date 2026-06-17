@@ -43,6 +43,7 @@
                        style="position: sticky; top: 0; z-index: 1;">
                   <tr>
                     <th class="text-center" style="width:170px;">期別</th>
+                    <th class="text-center">完成日</th>
                     <th class="text-center">ドライブボーナス</th>
                     <th class="text-center">ベーシックボーナス</th>
                     <th class="text-center">マッチングボーナス</th>
@@ -57,8 +58,9 @@
 
                 <tbody>
                   {% for r in rows %}
-                    <tr>
+                    <tr class="{% if r.is_next_completion_date %}table-primary{% endif %}">
                       <td class="text-center">{{ r.kibetu }}</td>
+                      <td class="text-center">{{ r.completion_date|default:"" }}</td>
                       <td class="text-center">{{ r.drive_bonus|default:"" }}</td>
                       <td class="text-center">{{ r.basic_bonus|default:"" }}</td>
                       <td class="text-center">{{ r.matching_bonus|default:"" }}</td>

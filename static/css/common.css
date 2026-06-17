@@ -430,6 +430,7 @@ html, body {
     min-width: 100%;
     width: 100%;
     max-width: 480px;
+    padding-right: 2.3rem;
     border-radius: var(--radius-sm);
     border-color: var(--color-border);
     font-weight: 600;
@@ -439,6 +440,119 @@ html, body {
 .bonus-calc-kibetu-input:focus {
     border-color: var(--color-primary);
     box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+}
+
+.bonus-calc-kibetu-select {
+    position: relative;
+    max-width: 480px;
+}
+
+.bonus-calc-kibetu-toggle {
+    position: absolute;
+    right: 0.6rem;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 0;
+    background: transparent;
+    color: #475569;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0.25rem;
+}
+
+.bonus-calc-kibetu-options {
+    display: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 0.25rem);
+    z-index: 20;
+    max-height: 28rem;
+    overflow-y: auto;
+    padding: 0.35rem;
+    background: #fff;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 16px 32px rgba(15, 23, 42, 0.16);
+}
+
+.bonus-calc-kibetu-select.is-open .bonus-calc-kibetu-options {
+    display: block;
+}
+
+.bonus-calc-kibetu-option {
+    display: block;
+    width: 100%;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid transparent;
+    border-radius: 0.45rem;
+    background: transparent;
+    color: var(--color-text);
+    text-align: left;
+}
+
+.bonus-calc-kibetu-option:hover,
+.bonus-calc-kibetu-option:focus {
+    background: #f1f5f9;
+    outline: none;
+}
+
+.bonus-calc-kibetu-option--next {
+    border-color: #f59e0b;
+    background: #fffbeb;
+}
+
+.bonus-calc-kibetu-option--next:hover,
+.bonus-calc-kibetu-option--next:focus {
+    background: #fef3c7;
+}
+
+.bonus-calc-kibetu-option--previous-month {
+    border-color: #3b82f6;
+    background: #eff6ff;
+}
+
+.bonus-calc-kibetu-option--previous-month:hover,
+.bonus-calc-kibetu-option--previous-month:focus {
+    background: #dbeafe;
+}
+
+.bonus-calc-kibetu-option__title,
+.bonus-calc-kibetu-option__meta {
+    display: inline;
+}
+
+.bonus-calc-kibetu-option__title {
+    font-weight: 700;
+}
+
+.bonus-calc-kibetu-option__meta {
+    color: #475569;
+    font-size: 0.82rem;
+}
+
+.bonus-calc-kibetu-option__badge {
+    display: inline-block;
+    margin-left: 0.35rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 999px;
+    background: #f59e0b;
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.bonus-calc-kibetu-option__badge-row {
+    display: block;
+    margin-top: 0.25rem;
+}
+
+.bonus-calc-kibetu-option__badge-row .bonus-calc-kibetu-option__badge {
+    margin-left: 0;
+}
+
+.bonus-calc-kibetu-option__badge--previous-month {
+    background: #3b82f6;
 }
 
 .bonus-calc-pre-register {

@@ -7840,6 +7840,7 @@ class BonusHistryView(generic.TemplateView):
         sql = """
             SELECT
                 p.kibetu,
+                p.completion_date,
 
                 MAX(
                     CASE
@@ -7949,6 +7950,20 @@ class BonusHistryView(generic.TemplateView):
                 dict(zip(cols, row))
                 for row in cursor.fetchall()
             ]
+
+        today = date.today()
+        next_completion_date = min(
+            (
+                row["completion_date"]
+                for row in rows
+                if row["completion_date"] and row["completion_date"] >= today
+            ),
+            default=None,
+        )
+        for row in rows:
+            row["is_next_completion_date"] = (
+                row["completion_date"] == next_completion_date
+            )
 
         return rows
 

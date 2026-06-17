@@ -1,6 +1,7 @@
 from datetime import date, datetime
 
 from django import template
+from django.db.models import Q
 from django.urls import reverse
 from django.utils.html import format_html
 from dateutil.relativedelta import relativedelta
@@ -180,18 +181,43 @@ def bonus_calc_kibetu_input(context, selected_kibetu="", period_type="weekly"):
         kibetu_choice_mode = request.GET.get("kibetu_choice_mode") or "recent"
 
     if period_type == "monthly":
+        today = date.today()
         period_choices = (
-            MonthlyPeriod.objects.using("rds").all().order_by("-kibetu")
+            MonthlyPeriod.objects.using("rds")
+            .filter(Q(year__lt=today.year) | Q(year=today.year, month__lt=today.month))
+            .order_by("-kibetu")
         )
         datalist_id = "bonus-calc-kibetu-monthly"
+        next_completion_kibetu = None
+        previous_month = date.today() - relativedelta(months=1)
+        previous_month_period = (
+            MonthlyPeriod.objects.using("rds")
+            .filter(year=previous_month.year, month=previous_month.month)
+            .first()
+        )
+        previous_month_kibetu = (
+            previous_month_period.kibetu if previous_month_period else None
+        )
     else:
         period_choices = PeriodMaster.objects.using("rds").all()
+        today = date.today()
+        next_completion_period = (
+            period_choices
+            .filter(completion_date__gte=today)
+            .order_by("completion_date", "-kibetu")
+            .first()
+        )
+        next_completion_kibetu = (
+            next_completion_period.kibetu if next_completion_period else None
+        )
+        previous_month_kibetu = None
         if kibetu_choice_mode != "all":
-            latest_period = period_choices.order_by("-st_date", "-kibetu").first()
-            if latest_period and latest_period.st_date:
-                recent_start = latest_period.st_date.replace(day=1)
-                recent_start = recent_start - relativedelta(months=6)
-                period_choices = period_choices.filter(st_date__gte=recent_start)
+            recent_start = today - relativedelta(months=5)
+            recent_end = today + relativedelta(months=1)
+            period_choices = period_choices.filter(
+                completion_date__gte=recent_start,
+                completion_date__lte=recent_end,
+            )
             kibetu_choice_mode = "recent"
 
         period_choices = period_choices.order_by("-kibetu")
@@ -203,6 +229,8 @@ def bonus_calc_kibetu_input(context, selected_kibetu="", period_type="weekly"):
         "period_type": period_type,
         "datalist_id": datalist_id,
         "kibetu_choice_mode": kibetu_choice_mode,
+        "next_completion_kibetu": next_completion_kibetu,
+        "previous_month_kibetu": previous_month_kibetu,
     }
 
 
