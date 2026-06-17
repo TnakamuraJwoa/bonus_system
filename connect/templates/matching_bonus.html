@@ -2,7 +2,7 @@
 {% load static custom_filters %}
 
 {% block head %}
-    <link href="{% static 'css/common.css' %}?v=37" rel="stylesheet">
+    <link href="{% static 'css/common.css' %}?v=48" rel="stylesheet">
 {% endblock %}
 
 {% block contents %}
@@ -18,19 +18,23 @@
         <div class="card-body">
           {% include "com/_bonus_calc_help.html" with title="【ボーナス計算 - マッチングボーナス】" help_title="マッチングボーナス" help_key="matching_bonus" %}
 
-          <div class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+          <div class="bonus-calc-form">
 
-            <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+            <form method="get" id="matchingBonusSearchForm" class="mb-0">
               {% bonus_calc_kibetu_input selected_kibetu period_type="weekly" %}
+            </form>
 
-              <button type="submit" class="btn btn-primary">表示</button>
+            <div class="bonus-calc-selection-status">
+              {% bonus_calc_period_status empty_message="期別を選択してください" %}
+            </div>
 
+            <div class="bonus-calc-action-row">
+              <button type="submit" form="matchingBonusSearchForm" class="btn btn-primary">表示</button>
               <a class="btn btn-outline-secondary" href="{% url 'connect:basic_bonus' %}">
                 リセット
               </a>
-            </form>
 
-            {% if user_access.can_execute and selected_period and rows %}
+              {% if user_access.can_execute and selected_period and rows %}
               <form method="post"
                     class="mb-0"
                     data-confirm="表示中のマッチングボーナス結果を登録しますか？すでに登録済みの場合は上書き更新されます。">
@@ -42,11 +46,10 @@
                   この期別の結果を登録
                 </button>
               </form>
-            {% endif %}
+              {% endif %}
+            </div>
 
           </div>
-
-          {% bonus_calc_period_status empty_message="期別を選択してください" %}
         </div>
       </div>
 

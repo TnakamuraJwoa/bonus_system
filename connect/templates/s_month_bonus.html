@@ -2,7 +2,7 @@
 {% load static custom_filters %}
 
 {% block head %}
-<link href="{% static 'css/common.css' %}" rel="stylesheet">
+<link href="{% static 'css/common.css' %}?v=48" rel="stylesheet">
 {% endblock %}
 
 {% block contents %}
@@ -16,9 +16,12 @@
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <h5 class="page-title mb-3">【ボーナス検索 - 月ボーナス】</h5>
+          <form method="get" class="bonus-search-form">
+            <div class="bonus-search-header">
+              <h5 class="page-title mb-0">【ボーナス検索 - 月ボーナス】</h5>
+            </div>
 
-          <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+            <div class="bonus-search-filters">
             <input type="hidden" name="sort" value="{{ sort|default:'' }}">
             <input type="hidden" name="direction" value="{{ direction|default:'' }}">
             <div>
@@ -45,13 +48,16 @@
                      value="{{ jwoa_name }}" placeholder="部分一致">
             </div>
 
-            <button type="submit" class="btn btn-primary">表示</button>
-            <a class="btn btn-outline-secondary" href="{% url 'connect:s_month_bonus' %}">リセット</a>
-            {% if user_access.can_export %}
-            <button type="submit" name="export" value="excel" class="btn btn-success">
-              Excel出力
-            </button>
-            {% endif %}
+            <div class="bonus-search-actions">
+              <button type="submit" class="btn btn-primary">表示</button>
+              <a class="btn btn-outline-secondary" href="{% url 'connect:s_month_bonus' %}">リセット</a>
+              {% if user_access.can_export %}
+              <button type="submit" name="export" value="excel" class="btn btn-success">
+                Excel出力
+              </button>
+              {% endif %}
+            </div>
+            </div>
           </form>
 
           <div class="selection-indicator-group mt-3">

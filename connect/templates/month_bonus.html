@@ -2,7 +2,7 @@
 {% load static custom_filters %}
 
 {% block head %}
-    <link href="{% static 'css/common.css' %}?v=37" rel="stylesheet">
+    <link href="{% static 'css/common.css' %}?v=48" rel="stylesheet">
 {% endblock %}
 
 {% block contents %}
@@ -24,11 +24,10 @@
                   id="monthCalcForm">
               <div class="bonus-calc-toolbar__period-row">
                 {% bonus_calc_kibetu_input selected_kibetu period_type="monthly" %}
+              </div>
 
-                <div class="bonus-calc-actions bonus-calc-actions--inline">
-                  <button type="submit" class="btn btn-primary" id="monthCalcSubmitButton">計算</button>
-                  <a class="btn btn-outline-secondary" href="{% url 'connect:month_bonus' %}">リセット</a>
-                </div>
+              <div class="bonus-calc-selection-status">
+                {% bonus_calc_period_status empty_message="期別を選択して「計算」を押してください" %}
               </div>
 
               <div class="bonus-calc-pre-register">
@@ -51,6 +50,11 @@
                   {% endfor %}
                 </div>
               </div>
+
+              <div class="bonus-calc-actions bonus-calc-actions--inline">
+                <button type="submit" class="btn btn-primary" id="monthCalcSubmitButton">計算</button>
+                <a class="btn btn-outline-secondary" href="{% url 'connect:month_bonus' %}">リセット</a>
+              </div>
             </form>
 
             {% if user_access.can_execute and selected_period and rows %}
@@ -68,10 +72,6 @@
                 </form>
               </div>
             {% endif %}
-          </div>
-
-          <div class="bonus-calc-status-hint">
-            {% bonus_calc_period_status empty_message="期別を選択して「計算」を押してください" %}
           </div>
         </div>
       </div>

@@ -2,7 +2,7 @@
 {% load static custom_filters %}
 
 {% block head %}
-    <link href="{% static 'css/common.css' %}?v=37" rel="stylesheet">
+    <link href="{% static 'css/common.css' %}?v=48" rel="stylesheet">
 {% endblock %}
 
 {% block contents %}
@@ -18,21 +18,25 @@
         <div class="card-body">
           {% include "com/_bonus_calc_help.html" with title="【ボーナス計算 - 再購入オーバーボーナス】" help_title="再購入オーバーボーナス" help_key="repurchase_over_bonus" %}
 
-          <div class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+          <div class="bonus-calc-form">
 
-            <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+            <form method="get" id="repurchaseOverBonusSearchForm" class="mb-0">
 
               {% bonus_calc_kibetu_input selected_kibetu period_type="monthly" %}
+            </form>
 
-              <button type="submit" class="btn btn-primary">表示</button>
+            <div class="bonus-calc-selection-status">
+              {% bonus_calc_period_status empty_message="期別を選択してください" %}
+            </div>
 
+            <div class="bonus-calc-action-row">
+              <button type="submit" form="repurchaseOverBonusSearchForm" class="btn btn-primary">表示</button>
               <a class="btn btn-outline-secondary"
                  href="{% url 'connect:repurchase_over_bonus' %}">
                 リセット
               </a>
-            </form>
 
-            {% if user_access.can_execute and selected_period and rows %}
+              {% if user_access.can_execute and selected_period and rows %}
               <form method="post"
                     class="mb-0"
                     data-confirm="表示中の再購入オーバーボーナス結果を登録しますか？">
@@ -44,11 +48,10 @@
                   この期別の結果を登録
                 </button>
               </form>
-            {% endif %}
+              {% endif %}
+            </div>
 
           </div>
-
-          {% bonus_calc_period_status empty_message="期別を選択してください" %}
         </div>
       </div>
 
