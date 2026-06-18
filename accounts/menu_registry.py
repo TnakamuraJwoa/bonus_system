@@ -51,6 +51,7 @@ MENU_FEATURES = (
         "bonus_search",
         ("s_matching_bonus",),
     ),
+    MenuFeature("s_month_title", "月タイトル（検索）", "bonus_search", ("s_month_title",)),
     MenuFeature("s_title_bonus", "タイトルボーナス（検索）", "bonus_search", ("s_title_bonus",)),
     MenuFeature(
         "s_title_diff_bonus",
@@ -98,8 +99,9 @@ MENU_FEATURES = (
     ),
     # --- ボーナス計算（合計・履歴） ---
     MenuFeature("week_bonus", "週間ボーナス（計算）", "bonus_calc", ("week_bonus",)),
+    MenuFeature("month_title", "月タイトル（計算）", "bonus_calc", ("month_title",)),
     MenuFeature("month_bonus", "月間ボーナス（計算）", "bonus_calc", ("month_bonus",)),
-    MenuFeature("bonus_histry", "個人実績の登録履歴", "bonus_calc", ("bonus_histry",)),
+    MenuFeature("bonus_histry", "個人実績の登録履歴", "bonus_calc", ("bonus_histry", "bonus_histry_month")),
     # --- 業務検索 ---
     MenuFeature(
         "business_personal_performance",
@@ -193,6 +195,7 @@ BONUS_TOTAL_URL_NAMES = frozenset({
     "week_bonus",
     "month_bonus",
     "bonus_histry",
+    "bonus_histry_month",
 })
 
 

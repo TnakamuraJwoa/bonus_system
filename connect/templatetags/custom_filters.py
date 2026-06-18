@@ -40,6 +40,8 @@ INDIVIDUAL_BONUS_URL_PAIRS = {
     "s_basic_bonus": ("basic_bonus", "s_basic_bonus"),
     "matching_bonus": ("matching_bonus", "s_matching_bonus"),
     "s_matching_bonus": ("matching_bonus", "s_matching_bonus"),
+    "month_title": ("month_title", "s_month_title"),
+    "s_month_title": ("month_title", "s_month_title"),
     "title_bonus": ("title_bonus", "s_title_bonus"),
     "s_title_bonus": ("title_bonus", "s_title_bonus"),
     "title_diff_bonus": ("title_diff_bonus", "s_title_diff_bonus"),

@@ -31,6 +31,7 @@ from .models import Settings
 
 from connect.sql.week_bonus_sql import WEEK_BONUS_SQL
 from connect.sql.month_bonus_sql import MONTH_BONUS_SQL
+from connect.sql.month_title_sql import MONTH_TITLE_SQL
 
 from connect.sql.drive_bonus_sql import DRIVE_BONUS_SQL
 from connect.sql.basic_bonus_sql import BASIC_BONUS_SQL
@@ -696,6 +697,15 @@ SEARCH_EXPORT_COLUMNS = {
         ("ベーシックボーナス", "basic_bonus", "int"),
         ("マッチングボーナス", "matching_bonus", "int"),
         ("週間ボーナス", "week_bonus", "int"),
+        ("決済時間", "updated_at"),
+    ],
+    "month_title": [
+        ("期別", "kibetu"),
+        ("会員コード", "jwoa_code"),
+        ("会員名", "jwoa_name"),
+        ("インカム系列BV", "income_line_bv", "int"),
+        ("ベーシック系列BV", "basic_line_bv", "int"),
+        ("タイトル", "title_name"),
         ("決済時間", "updated_at"),
     ],
     "month_bonus": [
@@ -7362,6 +7372,273 @@ class S_WeekBonusView(generic.ListView):
         return ctx
 
 
+class S_MonthTitleView(generic.ListView):
+    template_name = "s_month_title.html"
+    context_object_name = "object_list"
+    model = MonthlyPeriod
+
+    def get_queryset(self):
+        with connections["rds"].cursor() as cursor:
+            cursor.execute("""
+                SELECT DISTINCT kibetu
+                FROM bonus_db.month_title
+                ORDER BY kibetu DESC
+            """)
+            registered_kibetu_list = [row[0] for row in cursor.fetchall()]
+
+        if not registered_kibetu_list:
+            return MonthlyPeriod.objects.using("rds").none()
+
+        return (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu__in=registered_kibetu_list)
+            .order_by("-year", "-month")
+        )
+
+    def get_title_options(self):
+        title_options = [{"title_id": "0", "title_name": "タイトルなし"}]
+        title_options.extend(
+            {
+                "title_id": str(title.title_id),
+                "title_name": title.title_name,
+            }
+            for title in TitleMaster.objects.using("rds").order_by("title_id")
+        )
+        return title_options
+
+    def get(self, request, *args, **kwargs):
+        self.object_list = self.get_queryset()
+        context = self.get_context_data()
+
+        if request.GET.get("export") == "excel":
+            rows = context.get("rows", [])
+            kibetu = context.get("selected_kibetu", "")
+            filename = build_bonus_export_filename("month_title_result", kibetu=kibetu)
+            return export_search_rows_to_excel(
+                rows,
+                SEARCH_EXPORT_COLUMNS["month_title"],
+                "MonthTitleResult",
+                filename,
+            )
+
+        return self.render_to_response(context)
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
+        selected_title_id = (self.request.GET.get("title_id") or "").strip()
+        if not selected_kibetu and self.object_list:
+            selected_kibetu = self.object_list[0].kibetu
+
+        ctx["selected_kibetu"] = selected_kibetu
+        ctx["selected_title_id"] = selected_title_id
+        ctx["title_options"] = self.get_title_options()
+        ctx["rows"] = []
+        ctx["selected_period"] = None
+
+        if not selected_kibetu:
+            return ctx
+
+        period = MonthlyPeriod.objects.using("rds").filter(kibetu=selected_kibetu).first()
+        if not period:
+            return ctx
+
+        ctx["selected_period"] = period
+
+        sort_ctx = get_bonus_sort_context(
+            self.request,
+            {
+                "kibetu": "mt.kibetu",
+                "jwoa_code": "mt.jwoa_code",
+                "jwoa_name": "mt.jwoa_name",
+                "income_line_bv": "mt.income_line_bv",
+                "basic_line_bv": "mt.basic_line_bv",
+                "title_id": "mt.title_id",
+                "title_name": "title_name",
+                "updated_at": "mt.updated_at",
+            },
+            default_sort="jwoa_code",
+        )
+        ctx.update(sort_ctx)
+
+        sql = """
+            SELECT
+                mt.id,
+                mt.kibetu,
+                mt.jwoa_code,
+                mt.jwoa_name,
+                mt.income_line_bv,
+                mt.basic_line_bv,
+                mt.title_id,
+                COALESCE(tm.title_name, 'タイトルなし') AS title_name,
+                mt.created_at,
+                mt.updated_at
+            FROM bonus_db.month_title AS mt
+            LEFT JOIN bonus_db.title_master AS tm
+              ON mt.title_id = tm.title_id
+            WHERE mt.kibetu = %s
+        """
+
+        params = [selected_kibetu]
+        if selected_title_id:
+            sql += "\n            AND mt.title_id = %s"
+            params.append(selected_title_id)
+
+        sql, filter_values = apply_like_filters(
+            sql,
+            params,
+            self.request,
+            {
+                "jwoa_code": "mt.jwoa_code",
+                "jwoa_name": "mt.jwoa_name",
+            },
+        )
+        ctx.update(filter_values)
+        ctx["selected_title_label"] = ""
+        for option in ctx["title_options"]:
+            if option["title_id"] == selected_title_id:
+                ctx["selected_title_label"] = option["title_name"]
+                break
+        sql += "\n            ORDER BY " + sort_ctx["order_sql"]
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            logger.info(f"Executed SQL: {cursor._executed}")
+            cols = [c[0] for c in cursor.description]
+            rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+        ctx["rows"] = rows
+
+        return ctx
+
+
+
+class MonthTitleView(generic.ListView):
+    template_name = "month_title.html"
+    context_object_name = "object_list"
+    model = MonthlyPeriod
+
+    def get_queryset(self):
+        return MonthlyPeriod.objects.using("rds").all()
+
+    def get(self, request, *args, **kwargs):
+        self.object_list = self.get_queryset()
+        context = self.get_context_data()
+        return self.render_to_response(context)
+
+    def post(self, request, *args, **kwargs):
+        action = request.POST.get("action", "")
+        selected_kibetu = request.POST.get("kibetu", "").strip()
+
+        if action != "register_month_title":
+            messages.error(request, "不正な操作です。")
+            return redirect("connect:month_title")
+
+        if not selected_kibetu:
+            messages.error(request, "期別を選択してください。")
+            return redirect("connect:month_title")
+
+        period = MonthlyPeriod.objects.using("rds").filter(kibetu=selected_kibetu).first()
+        if not period:
+            messages.error(request, "選択された期別が存在しません。")
+            return redirect("connect:month_title")
+
+        try:
+            rows = self._get_month_title_rows(period)
+
+            if not rows:
+                messages.warning(request, "登録対象データがありません。")
+                return redirect(f"/month_title/?kibetu={selected_kibetu}")
+
+            delete_sql, delete_params, insert_sql, insert_params = (
+                register_sql.get_month_title_delete_insert_data(
+                    selected_kibetu,
+                    rows,
+                )
+            )
+
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    logger.info("月タイトル登録前削除SQLを実行します。kibetu=%s", selected_kibetu)
+                    cursor.execute(delete_sql, delete_params)
+
+                    logger.info("月タイトル登録INSERT SQLを実行します。kibetu=%s", selected_kibetu)
+                    cursor.executemany(insert_sql, insert_params)
+
+                    history_sql = """
+                        INSERT INTO bonus_db.bonus_register_history (
+                            bonus_name,
+                            kibetu,
+                            registered_at,
+                            registered_by,
+                            comment_text
+                        )
+                        VALUES (
+                            %s,
+                            %s,
+                            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'),
+                            %s,
+                            %s
+                        )
+                    """
+
+                    cursor.execute(
+                        history_sql,
+                        [
+                            "month_title",
+                            selected_kibetu,
+                            request.user.username,
+                            f"既存データ削除後、{len(rows)}件登録",
+                        ],
+                    )
+
+            messages.success(
+                request,
+                f"{len(rows)}件を月タイトル結果に登録しました。",
+            )
+            return redirect(f"/month_title/?kibetu={selected_kibetu}")
+
+        except Exception as e:
+            logger.exception("月タイトル登録エラー")
+            messages.error(request, f"登録中にエラーが発生しました: {e}")
+            return redirect(f"/month_title/?kibetu={selected_kibetu}")
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        selected_kibetu = self.request.GET.get("kibetu", "").strip()
+        ctx["selected_kibetu"] = selected_kibetu
+        ctx["selected_period"] = None
+        ctx["rows"] = []
+
+        if not selected_kibetu:
+            return ctx
+
+        period = MonthlyPeriod.objects.using("rds").filter(kibetu=selected_kibetu).first()
+        ctx["selected_period"] = period
+
+        if not period:
+            return ctx
+
+        ctx["rows"] = self._get_month_title_rows(period)
+
+        return ctx
+
+    def _get_month_title_rows(self, period):
+        params = [
+            period.year,
+            period.month,
+        ]
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(MONTH_TITLE_SQL, params)
+            logger.info(f"Executed SQL: {cursor._executed}")
+            cols = [c[0] for c in cursor.description]
+            rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+        return rows
+
 
 class MonthBonusView(generic.ListView):
     template_name = "month_bonus.html"
@@ -7868,114 +8145,12 @@ class BonusHistryView(generic.TemplateView):
         return ctx
 
     def _get_history_rows(self):
+        from connect.sql.bonus_histry_sql import WEEK_BONUS_HISTORY_SQL
 
-        sql = """
-            SELECT
-                p.kibetu,
-                p.completion_date,
-
-                MAX(
-                    CASE
-                        WHEN h.bonus_name = 'drive_bonus'
-                        THEN DATE(h.registered_at)
-                    END
-                ) AS drive_bonus,
-
-                MAX(
-                    CASE
-                        WHEN h.bonus_name = 'basic_bonus'
-                        THEN DATE(h.registered_at)
-                    END
-                ) AS basic_bonus,
-
-                MAX(
-                    CASE
-                        WHEN h.bonus_name = 'matching_bonus'
-                        THEN DATE(h.registered_at)
-                    END
-                ) AS matching_bonus,
-
-                MAX(
-                    CASE
-                        WHEN h.bonus_name = 'week_bonus'
-                        THEN DATE(h.registered_at)
-                    END
-                ) AS week_bonus,
-
-                MAX(
-                    CASE
-                        WHEN h.bonus_name = 'title_bonus'
-                        THEN DATE(h.registered_at)
-                    END
-                ) AS title_bonus,
-
-                MAX(
-                    CASE
-                        WHEN h.bonus_name = 'title_diff_bonus'
-                        THEN DATE(h.registered_at)
-                    END
-                ) AS title_diff_bonus,
-
-                MAX(
-                    CASE
-                        WHEN h.bonus_name = 'repurchase_over_bonus'
-                        THEN DATE(h.registered_at)
-                    END
-                ) AS repurchase_over_bonus,
-
-                MAX(
-                    CASE
-                        WHEN h.bonus_name = 'three_star_global_bonus'
-                        THEN DATE(h.registered_at)
-                    END
-                ) AS three_star_global_bonus,
-
-                MAX(
-                    CASE
-                        WHEN h.bonus_name = 'month_bonus'
-                        THEN DATE(h.registered_at)
-                    END
-                ) AS month_bonus
-
-            FROM bonus_db.period_master p
-
-            LEFT JOIN (
-                SELECT a.*
-                FROM bonus_db.bonus_register_history a
-                INNER JOIN (
-                    SELECT
-                        kibetu,
-                        bonus_name,
-                        MAX(registered_at) AS max_registered_at
-                    FROM bonus_db.bonus_register_history
-                    WHERE bonus_name IN (
-                        'drive_bonus',
-                        'basic_bonus',
-                        'matching_bonus',
-                        'week_bonus',
-                        'title_bonus',
-                        'title_diff_bonus',
-                        'repurchase_over_bonus',
-                        'three_star_global_bonus',
-                        'month_bonus'
-                    )
-                    GROUP BY kibetu, bonus_name
-                ) b
-                    ON a.kibetu = b.kibetu
-                   AND a.bonus_name = b.bonus_name
-                   AND a.registered_at = b.max_registered_at
-            ) h
-                ON p.kibetu = h.kibetu
-
-            WHERE p.st_date IS NULL
-               OR p.st_date <= DATE(CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'))
-
-            GROUP BY p.kibetu
-            ORDER BY p.st_date DESC, p.kibetu DESC;
-        """
+        logger.info("登録履歴（週）SQL実行")
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql)
+            cursor.execute(WEEK_BONUS_HISTORY_SQL)
 
             cols = [c[0] for c in cursor.description]
             rows = [
@@ -7995,6 +8170,38 @@ class BonusHistryView(generic.TemplateView):
         for row in rows:
             row["is_next_completion_date"] = (
                 row["completion_date"] == next_completion_date
+            )
+
+        return rows
+
+
+class BonusHistryMonthView(generic.TemplateView):
+    template_name = "bonus_histry_month.html"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["rows"] = self._get_history_rows()
+        return ctx
+
+    def _get_history_rows(self):
+        from connect.sql.bonus_histry_sql import MONTH_BONUS_HISTORY_SQL
+
+        logger.info("登録履歴（月）SQL実行")
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(MONTH_BONUS_HISTORY_SQL)
+
+            cols = [c[0] for c in cursor.description]
+            rows = [
+                dict(zip(cols, row))
+                for row in cursor.fetchall()
+            ]
+
+        previous_month = date.today() - relativedelta(months=1)
+        for row in rows:
+            row["is_previous_month"] = (
+                row.get("year") == previous_month.year
+                and row.get("month") == previous_month.month
             )
 
         return rows

@@ -1,4 +1,4 @@
-﻿{% extends 'base.html' %}
+{% extends 'base.html' %}
 {% load static %}
 
 {% block head %}
@@ -10,13 +10,13 @@
   <div class="row g-1 h-100">
 
 
-    {% include "com/_sidebar_bonus_week.html" with active_menu="bonus_histry" %}
+    {% include "com/_sidebar_bonus_week.html" with active_menu="bonus_histry_month" %}
 
     <main class="col-12 col-md-9 col-lg-10 app-page-main">
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <h5 class="page-title mb-0">【ボーナス計算 - 登録履歴（週）】</h5>
+          <h5 class="page-title mb-0">【ボーナス計算 - 登録履歴（月）】</h5>
         </div>
       </div>
 
@@ -27,7 +27,7 @@
           {% if rows %}
 
             <div class="d-flex justify-content-between align-items-center mb-2">
-              <div class="fw-bold">登録履歴一覧（週次）</div>
+              <div class="fw-bold">登録履歴一覧（月次）</div>
               <div class="text-end">
                 <strong>件数：{{ rows|length }} 件</strong>
               </div>
@@ -43,23 +43,27 @@
                        style="position: sticky; top: 0; z-index: 1;">
                   <tr>
                     <th class="text-center" style="width:170px;">期別</th>
-                    <th class="text-center">完成日</th>
-                    <th class="text-center">ドライブボーナス</th>
-                    <th class="text-center">ベーシックボーナス</th>
-                    <th class="text-center">マッチングボーナス</th>
-                    <th class="text-center bonus-histry-col bonus-histry-col--week">週ボーナス</th>
+                    <th class="text-center">支払日</th>
+                    <th class="text-center">月タイトル</th>
+                    <th class="text-center">タイトルボーナス</th>
+                    <th class="text-center">タイトル差額</th>
+                    <th class="text-center">再購入オーバー</th>
+                    <th class="text-center">3スター配当</th>
+                    <th class="text-center bonus-histry-col bonus-histry-col--month">月ボーナス</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {% for r in rows %}
-                    <tr class="{% if r.is_next_completion_date %}table-primary{% endif %}">
+                    <tr class="{% if r.is_previous_month %}table-primary{% endif %}">
                       <td class="text-center">{{ r.kibetu }}</td>
-                      <td class="text-center">{{ r.completion_date|default:"" }}</td>
-                      <td class="text-center">{{ r.drive_bonus|default:"" }}</td>
-                      <td class="text-center">{{ r.basic_bonus|default:"" }}</td>
-                      <td class="text-center">{{ r.matching_bonus|default:"" }}</td>
-                      <td class="text-center bonus-histry-col bonus-histry-col--week">{{ r.week_bonus|default:"" }}</td>
+                      <td class="text-center">{{ r.payment_date|default:"" }}</td>
+                      <td class="text-center">{{ r.month_title|default:"" }}</td>
+                      <td class="text-center">{{ r.title_bonus|default:"" }}</td>
+                      <td class="text-center">{{ r.title_diff_bonus|default:"" }}</td>
+                      <td class="text-center">{{ r.repurchase_over_bonus|default:"" }}</td>
+                      <td class="text-center">{{ r.three_star_global_bonus|default:"" }}</td>
+                      <td class="text-center bonus-histry-col bonus-histry-col--month">{{ r.month_bonus|default:"" }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

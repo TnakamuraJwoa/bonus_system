@@ -1096,3 +1096,38 @@ tr.field-changed-row {
     white-space: nowrap;
 }
 
+/* 登録履歴：週ボーナス / 月ボーナス列 */
+.table thead th.bonus-histry-col--week {
+    background-color: #f59e0b !important;
+    color: #fff !important;
+    font-weight: 700;
+    border-left: 3px solid #d97706;
+}
+
+.table thead th.bonus-histry-col--month {
+    background-color: #3b82f6 !important;
+    color: #fff !important;
+    font-weight: 700;
+    border-left: 3px solid #2563eb;
+}
+
+.table tbody td.bonus-histry-col--week {
+    background-color: #fffbeb;
+    border-left: 3px solid #fcd34d;
+}
+
+.table tbody td.bonus-histry-col--month {
+    background-color: #eff6ff;
+    border-left: 3px solid #93c5fd;
+}
+
+.table tbody tr.table-primary td.bonus-histry-col--week {
+    background-color: #fef3c7;
+    border-left-color: #f59e0b;
+}
+
+.table tbody tr.table-primary td.bonus-histry-col--month {
+    background-color: #dbeafe;
+    border-left-color: #3b82f6;
+}
+

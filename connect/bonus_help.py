@@ -51,6 +51,10 @@ DEFAULT_BONUS_HELP = {
         "title": "月ボーナスの説明",
         "content": "月ボーナスは、指定した期別の月次実績をもとに、月単位のボーナスを算出します。",
     },
+    "month_title": {
+        "title": "月タイトルの説明",
+        "content": "月タイトルは、指定した期別の購入情報からインカム系列BVとベーシック系列BVを集計し、会員ごとのタイトルIDを算出します。",
+    },
 }
 
 ALLOWED_BONUS_HELP_KEYS = set(DEFAULT_BONUS_HELP.keys())

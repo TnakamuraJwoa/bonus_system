@@ -2,7 +2,7 @@
 <nav class="col-12 col-md-3 col-lg-2">
   <div class="card shadow-sm position-sticky" style="top: 1rem;">
 
-    {% if user_access|can_menu:"s_drive_bonus" or user_access|can_menu:"s_basic_bonus" or user_access|can_menu:"s_matching_bonus" %}
+    {% if user_access|can_menu:"s_drive_bonus" or user_access|can_menu:"s_basic_bonus" or user_access|can_menu:"s_matching_bonus" or user_access|can_menu:"s_month_title" %}
     <div class="card-body">
       <div class="fw-bold mb-2">■ 週ボーナス</div>
 
@@ -22,6 +22,14 @@
            href="{% url 'connect:s_matching_bonus' %}">マッチングボーナス</a>
         {% endif %}
       </div>
+
+      {% if user_access|can_menu:"s_month_title" %}
+      <div class="fw-bold mt-4 mb-2">■ 月タイトル</div>
+      <div class="list-group">
+        <a class="list-group-item list-group-item-action {% if active_menu == 'month_title' %}active{% endif %}"
+           href="{% url 'connect:s_month_title' %}">月タイトル</a>
+      </div>
+      {% endif %}
     </div>
     {% endif %}
 

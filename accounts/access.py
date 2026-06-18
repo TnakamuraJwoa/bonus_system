@@ -31,6 +31,7 @@ EXECUTE_ACTIONS = {
     "register_three_star_global_bonus",
     "three_star_global_bonus",
     "register_week_bonus",
+    "register_month_title",
     "register_month_bonus",
     "copy",
 }

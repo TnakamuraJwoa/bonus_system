@@ -109,6 +109,41 @@ def get_title_bonus_insert_data(selected_kibetu, rows):
     return insert_sql, insert_params
 
 
+## 月タイトル
+def get_month_title_delete_insert_data(selected_kibetu, rows):
+    delete_sql = """
+        DELETE FROM bonus_db.month_title
+        WHERE kibetu = %s
+    """
+
+    insert_sql = """
+        INSERT INTO bonus_db.month_title (
+            kibetu,
+            jwoa_code,
+            jwoa_name,
+            income_line_bv,
+            basic_line_bv,
+            title_id
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s
+        )
+    """
+
+    insert_params = []
+
+    for r in rows:
+        insert_params.append([
+            selected_kibetu,
+            r.get("jwoa_code") or "",
+            r.get("jwoa_name") or "",
+            r.get("income_line_bv") or 0,
+            r.get("basic_line_bv") or 0,
+            r.get("title_id") or 0,
+        ])
+
+    return delete_sql, [selected_kibetu], insert_sql, insert_params
+
+
 ## basic_bv_line
 ## 繰り越しBV
 def get_basic_bv_line_insert_data(selected_kibetu, rows):
