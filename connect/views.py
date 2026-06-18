@@ -4825,6 +4825,7 @@ class TitleBonusView(generic.ListView):
         params = [
             kibetu_year,
             kibetu_month,
+            selected_kibetu,
             kibetu_year,
             kibetu_month,
             prev_year,
@@ -5153,14 +5154,10 @@ class TitleDiffBonusView(generic.ListView):
         kibetu_year = period.year
         kibetu_month = period.month
 
-        kibetu_year_str = f"{kibetu_year}"
-        kibetu_month_str = f"{kibetu_month:02d}"
-
         params = [
             kibetu_month,
             kibetu_year,
-            kibetu_year_str,
-            kibetu_month_str,
+            selected_kibetu,
         ]
 
         with connections["rds"].cursor() as cursor:
@@ -6489,8 +6486,7 @@ class ThreeStarGlobalBonusView(generic.ListView):
         params = [
             prev_year,
             prev_month,
-            kibetu_year,
-            kibetu_month,
+            selected_kibetu,
         ]
 
         with connections["rds"].cursor() as cursor:

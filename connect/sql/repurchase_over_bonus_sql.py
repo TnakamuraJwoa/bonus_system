@@ -7,7 +7,7 @@ repurchase_users AS (
     FROM bonus_db.purchase_info_list
     WHERE register_year = %s
       AND register_month = %s
-      AND order_type = 101
+      AND order_type IN (101, 105)
 ),
 
 repurchase_100bv_users AS (
