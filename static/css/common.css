@@ -588,6 +588,17 @@ html, body {
     display: inline;
 }
 
+.bonus-calc-kibetu-option__main {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.bonus-calc-kibetu-option__text {
+    min-width: 0;
+}
+
 .bonus-calc-kibetu-option__title {
     font-weight: 700;
 }
@@ -621,6 +632,18 @@ html, body {
     background: #3b82f6;
 }
 
+.bonus-calc-kibetu-option__badge--created {
+    flex: 0 0 auto;
+    margin-left: auto;
+    background: #16a34a;
+}
+
+.bonus-calc-kibetu-option__badge--zero-count {
+    flex: 0 0 auto;
+    margin-left: auto;
+    background: #dc2626;
+}
+
 .bonus-calc-pre-register {
     padding: 1rem 1.1rem;
     border: 1px solid var(--color-border);
@@ -631,12 +654,21 @@ html, body {
 .bonus-calc-pre-register__header {
     display: flex;
     flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0.35rem 0.75rem;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
     margin-bottom: 0.75rem;
     font-size: 0.875rem;
     font-weight: 700;
     color: var(--color-text);
+}
+
+.bonus-calc-pre-register__title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem 0.75rem;
+    min-width: 0;
 }
 
 .bonus-calc-pre-register__header small {
@@ -645,18 +677,35 @@ html, body {
     color: var(--color-text-muted);
 }
 
+.bonus-calc-pre-register__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.4rem;
+    margin-left: auto;
+}
+
+.bonus-calc-pre-register__actions .btn-sm {
+    padding: 0.2rem 0.55rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.35;
+}
+
 .bonus-calc-pre-register__grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 0.55rem;
+    grid-template-columns: repeat(auto-fill, 200px);
+    gap: 0.95rem;
 }
 
 .bonus-calc-pre-register__item {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.55rem;
     margin: 0;
-    padding: 0.6rem 0.8rem;
+    width: 200px;
+    min-height: 2.75rem;
+    padding: 0.65rem 0.95rem;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
     background: #ffffff;
@@ -692,9 +741,10 @@ html, body {
 }
 
 .bonus-calc-actions--inline {
-    flex: 0 0 100%;
+    flex: 0 0 auto;
     justify-content: flex-end;
-    margin-top: 0.75rem;
+    margin-top: 0;
+    margin-left: auto;
     padding-bottom: 1px;
 }
 
@@ -1111,9 +1161,22 @@ tr.field-changed-row {
     border-left: 3px solid #2563eb;
 }
 
+.table thead th.bonus-histry-col--title {
+    background-color: #7c3aed !important;
+    color: #fff !important;
+    font-weight: 700;
+    border-left: 3px solid #6d28d9;
+}
+
 .table tbody td.bonus-histry-col--week {
     background-color: #fffbeb;
     border-left: 3px solid #fcd34d;
+}
+
+.table tbody td.bonus-histry-col--title {
+    background-color: #f5f3ff;
+    border-left: 3px solid #c4b5fd;
+    font-weight: 600;
 }
 
 .table tbody td.bonus-histry-col--month {
@@ -1129,5 +1192,56 @@ tr.field-changed-row {
 .table tbody tr.table-primary td.bonus-histry-col--month {
     background-color: #dbeafe;
     border-left-color: #3b82f6;
+}
+
+.table tbody tr.table-primary td.bonus-histry-col--title {
+    background-color: #ede9fe;
+    border-left-color: #7c3aed;
+}
+
+.table tbody td.bonus-histry-cell--empty {
+    background-color: #fee2e2 !important;
+    color: #991b1b;
+    font-weight: 700;
+}
+
+.table tbody td.bonus-histry-col--week.bonus-histry-cell--empty,
+.table tbody td.bonus-histry-col--title.bonus-histry-cell--empty,
+.table tbody td.bonus-histry-col--month.bonus-histry-cell--empty {
+    background-color: #fee2e2 !important;
+    border-left-color: #fca5a5 !important;
+    color: #991b1b;
+}
+
+.table tbody tr.table-primary td.bonus-histry-cell--empty {
+    background-color: #fecaca !important;
+}
+
+.table tbody tr.table-primary td.bonus-histry-col--week.bonus-histry-cell--empty,
+.table tbody tr.table-primary td.bonus-histry-col--title.bonus-histry-cell--empty,
+.table tbody tr.table-primary td.bonus-histry-col--month.bonus-histry-cell--empty {
+    background-color: #fecaca !important;
+    border-left-color: #f87171 !important;
+}
+
+.bonus-histry-legend {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: #64748b;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.bonus-histry-legend__sample {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    border: 1px solid #fca5a5;
+    border-radius: 0.2rem;
+}
+
+.bonus-histry-legend__sample--empty {
+    background-color: #fee2e2;
 }
 

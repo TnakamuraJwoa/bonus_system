@@ -9,6 +9,16 @@ WEEK_BONUS_HISTORY_SQL = """
                 THEN DATE(h.registered_at)
             END
         ) AS drive_bonus,
+        MAX(
+            CASE
+                WHEN h.bonus_name = 'drive_bonus'
+                 AND (
+                    h.comment_text LIKE '0件%%'
+                    OR h.comment_text LIKE '%%: 0件登録'
+                 )
+                THEN 1
+            END
+        ) AS drive_bonus_is_empty,
 
         MAX(
             CASE
@@ -16,6 +26,16 @@ WEEK_BONUS_HISTORY_SQL = """
                 THEN DATE(h.registered_at)
             END
         ) AS basic_bonus,
+        MAX(
+            CASE
+                WHEN h.bonus_name = 'basic_bonus'
+                 AND (
+                    h.comment_text LIKE '0件%%'
+                    OR h.comment_text LIKE '%%: 0件登録'
+                 )
+                THEN 1
+            END
+        ) AS basic_bonus_is_empty,
 
         MAX(
             CASE
@@ -23,13 +43,33 @@ WEEK_BONUS_HISTORY_SQL = """
                 THEN DATE(h.registered_at)
             END
         ) AS matching_bonus,
+        MAX(
+            CASE
+                WHEN h.bonus_name = 'matching_bonus'
+                 AND (
+                    h.comment_text LIKE '0件%%'
+                    OR h.comment_text LIKE '%%: 0件登録'
+                 )
+                THEN 1
+            END
+        ) AS matching_bonus_is_empty,
 
         MAX(
             CASE
                 WHEN h.bonus_name = 'week_bonus'
                 THEN DATE(h.registered_at)
             END
-        ) AS week_bonus
+        ) AS week_bonus,
+        MAX(
+            CASE
+                WHEN h.bonus_name = 'week_bonus'
+                 AND (
+                    h.comment_text LIKE '0件%%'
+                    OR h.comment_text LIKE '%%: 0件登録'
+                 )
+                THEN 1
+            END
+        ) AS week_bonus_is_empty
 
     FROM bonus_db.period_master p
 
@@ -76,6 +116,16 @@ MONTH_BONUS_HISTORY_SQL = """
                 THEN DATE(h.registered_at)
             END
         ) AS month_title,
+        MAX(
+            CASE
+                WHEN h.bonus_name = 'month_title'
+                 AND (
+                    h.comment_text LIKE '0件%%'
+                    OR h.comment_text LIKE '%%: 0件登録'
+                 )
+                THEN 1
+            END
+        ) AS month_title_is_empty,
 
         MAX(
             CASE
@@ -83,6 +133,16 @@ MONTH_BONUS_HISTORY_SQL = """
                 THEN DATE(h.registered_at)
             END
         ) AS title_bonus,
+        MAX(
+            CASE
+                WHEN h.bonus_name = 'title_bonus'
+                 AND (
+                    h.comment_text LIKE '0件%%'
+                    OR h.comment_text LIKE '%%: 0件登録'
+                 )
+                THEN 1
+            END
+        ) AS title_bonus_is_empty,
 
         MAX(
             CASE
@@ -90,6 +150,16 @@ MONTH_BONUS_HISTORY_SQL = """
                 THEN DATE(h.registered_at)
             END
         ) AS title_diff_bonus,
+        MAX(
+            CASE
+                WHEN h.bonus_name = 'title_diff_bonus'
+                 AND (
+                    h.comment_text LIKE '0件%%'
+                    OR h.comment_text LIKE '%%: 0件登録'
+                 )
+                THEN 1
+            END
+        ) AS title_diff_bonus_is_empty,
 
         MAX(
             CASE
@@ -97,6 +167,16 @@ MONTH_BONUS_HISTORY_SQL = """
                 THEN DATE(h.registered_at)
             END
         ) AS repurchase_over_bonus,
+        MAX(
+            CASE
+                WHEN h.bonus_name = 'repurchase_over_bonus'
+                 AND (
+                    h.comment_text LIKE '0件%%'
+                    OR h.comment_text LIKE '%%: 0件登録'
+                 )
+                THEN 1
+            END
+        ) AS repurchase_over_bonus_is_empty,
 
         MAX(
             CASE
@@ -104,13 +184,33 @@ MONTH_BONUS_HISTORY_SQL = """
                 THEN DATE(h.registered_at)
             END
         ) AS three_star_global_bonus,
+        MAX(
+            CASE
+                WHEN h.bonus_name = 'three_star_global_bonus'
+                 AND (
+                    h.comment_text LIKE '0件%%'
+                    OR h.comment_text LIKE '%%: 0件登録'
+                 )
+                THEN 1
+            END
+        ) AS three_star_global_bonus_is_empty,
 
         MAX(
             CASE
                 WHEN h.bonus_name = 'month_bonus'
                 THEN DATE(h.registered_at)
             END
-        ) AS month_bonus
+        ) AS month_bonus,
+        MAX(
+            CASE
+                WHEN h.bonus_name = 'month_bonus'
+                 AND (
+                    h.comment_text LIKE '0件%%'
+                    OR h.comment_text LIKE '%%: 0件登録'
+                 )
+                THEN 1
+            END
+        ) AS month_bonus_is_empty
 
     FROM bonus_db.monthly_period mp
 

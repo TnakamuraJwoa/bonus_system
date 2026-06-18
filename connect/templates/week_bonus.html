@@ -2,7 +2,7 @@
 {% load static custom_filters %}
 
 {% block head %}
-    <link href="{% static 'css/common.css' %}?v=48" rel="stylesheet">
+    <link href="{% static 'css/common.css' %}?v=51" rel="stylesheet">
 {% endblock %}
 
 {% block contents %}
@@ -16,7 +16,7 @@
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          {% include "com/_bonus_calc_help.html" with title="【ボーナス計算 - 週ボーナス】" help_title="週ボーナス" help_key="week_bonus" %}
+          {% include "com/_bonus_calc_help.html" with title="【ボーナス計算 - 週ボーナス】" help_title="週ボーナス" help_key="week_bonus" history_modal_id="weekBonusHistoryModal" history_title="登録履歴を表示" %}
 
           <div class="bonus-calc-toolbar">
             <form method="get"
@@ -24,37 +24,45 @@
                   id="weekCalcForm">
               <div class="bonus-calc-toolbar__period-row">
                 {% bonus_calc_kibetu_input selected_kibetu period_type="weekly" %}
+                <div class="bonus-calc-actions bonus-calc-actions--inline">
+                  <button type="submit" class="btn btn-primary" id="weekCalcSubmitButton">計算</button>
+                  <a class="btn btn-outline-secondary" href="{% url 'connect:week_bonus' %}">リセット</a>
+                </div>
               </div>
 
               <div class="bonus-calc-selection-status">
                 {% bonus_calc_period_status empty_message="期別を選択して「計算」を押してください" %}
               </div>
 
-              <div class="bonus-calc-pre-register">
-                <div class="bonus-calc-pre-register__header">
-                  <span>計算前に登録</span>
-                  <small>チェックした個人ボーナスを自動登録してから集計します</small>
+              {% if not rows %}
+                <div class="bonus-calc-pre-register">
+                  <div class="bonus-calc-pre-register__header">
+                    <div class="bonus-calc-pre-register__title">
+                      <span>計算前に登録</span>
+                      <small>チェックした個人ボーナスを自動登録してから集計します</small>
+                    </div>
+                    <div class="bonus-calc-pre-register__actions" aria-label="事前登録チェックの一括操作">
+                      <button type="button" class="btn btn-outline-primary btn-sm" data-pre-register-check-all>すべてチェック</button>
+                      <button type="button" class="btn btn-outline-secondary btn-sm" data-pre-register-uncheck-all>すべて解除</button>
+                    </div>
+                  </div>
+                  <div class="bonus-calc-pre-register__grid">
+                    {% for key, label in pre_register_options %}
+                      <label class="bonus-calc-pre-register__item{% if key in pre_register_targets %} bonus-calc-pre-register__item--checked{% endif %}">
+                        <input
+                          type="checkbox"
+                          name="pre_register"
+                          value="{{ key }}"
+                          class="form-check-input mt-0"
+                          {% if key in pre_register_targets %}checked{% endif %}
+                        >
+                        <span>{{ label }}</span>
+                      </label>
+                    {% endfor %}
+                  </div>
                 </div>
-                <div class="bonus-calc-pre-register__grid">
-                  {% for key, label in pre_register_options %}
-                    <label class="bonus-calc-pre-register__item{% if key in pre_register_targets %} bonus-calc-pre-register__item--checked{% endif %}">
-                      <input
-                        type="checkbox"
-                        name="pre_register"
-                        value="{{ key }}"
-                        class="form-check-input mt-0"
-                        {% if key in pre_register_targets %}checked{% endif %}
-                      >
-                      <span>{{ label }}</span>
-                    </label>
-                  {% endfor %}
-                </div>
-              </div>
+              {% endif %}
 
-              <div class="bonus-calc-actions bonus-calc-actions--inline">
-                <button type="submit" class="btn btn-primary" id="weekCalcSubmitButton">計算</button>
-                <a class="btn btn-outline-secondary" href="{% url 'connect:week_bonus' %}">リセット</a>
-              </div>
             </form>
 
             {% if user_access.can_execute and selected_period and rows %}
@@ -130,6 +138,8 @@
   </div>
 </div>
 
+{% include "com/_bonus_histry_week_modal.html" with modal_id="weekBonusHistoryModal" %}
+
 <div class="bonus-calculating-overlay" id="weekCalculatingOverlay" aria-live="polite" aria-hidden="true">
   <div class="bonus-calculating-box">
     <div class="bonus-calculating-spinner" aria-hidden="true"></div>
@@ -156,12 +166,38 @@ document.addEventListener("DOMContentLoaded", function() {
   var progressTimer = null;
   var progressValue = 0;
 
-  document.querySelectorAll(".bonus-calc-pre-register__item input[type='checkbox']").forEach(function(input) {
+  var preRegisterInputs = Array.prototype.slice.call(
+    document.querySelectorAll(".bonus-calc-pre-register__item input[type='checkbox']")
+  );
+
+  function updatePreRegisterItem(input) {
+    input.closest(".bonus-calc-pre-register__item").classList.toggle(
+      "bonus-calc-pre-register__item--checked",
+      input.checked
+    );
+  }
+
+  preRegisterInputs.forEach(function(input) {
     input.addEventListener("change", function() {
-      input.closest(".bonus-calc-pre-register__item").classList.toggle(
-        "bonus-calc-pre-register__item--checked",
-        input.checked
-      );
+      updatePreRegisterItem(input);
+    });
+  });
+
+  document.querySelectorAll("[data-pre-register-check-all]").forEach(function(button) {
+    button.addEventListener("click", function() {
+      preRegisterInputs.forEach(function(input) {
+        input.checked = true;
+        updatePreRegisterItem(input);
+      });
+    });
+  });
+
+  document.querySelectorAll("[data-pre-register-uncheck-all]").forEach(function(button) {
+    button.addEventListener("click", function() {
+      preRegisterInputs.forEach(function(input) {
+        input.checked = false;
+        updatePreRegisterItem(input);
+      });
     });
   });
 

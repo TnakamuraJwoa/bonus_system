@@ -59,6 +59,19 @@ TOTAL_BONUS_URL_PAIRS = {
     "s_month_bonus": ("month_bonus", "s_month_bonus"),
 }
 
+BONUS_HISTORY_FIELD_BY_URL_NAME = {
+    "drive_bonus": "drive_bonus",
+    "basic_bonus": "basic_bonus",
+    "matching_bonus": "matching_bonus",
+    "week_bonus": "week_bonus",
+    "month_title": "month_title",
+    "title_bonus": "title_bonus",
+    "title_diff_bonus": "title_diff_bonus",
+    "repurchase_over_bonus": "repurchase_over_bonus",
+    "three_star_global_bonus": "three_star_global_bonus",
+    "month_bonus": "month_bonus",
+}
+
 
 @register.simple_tag
 def paired_bonus_url(current_url_name, target_mode, bonus_group):
@@ -230,6 +243,26 @@ def bonus_calc_kibetu_input(context, selected_kibetu="", period_type="weekly"):
 
         period_choices = period_choices.order_by("-kibetu")
         datalist_id = "bonus-calc-kibetu-weekly"
+
+    history_target_url_name = str(context.get("history_target_url_name") or "")
+    history_target_url_name = history_target_url_name.split(":")[-1]
+    history_field = BONUS_HISTORY_FIELD_BY_URL_NAME.get(history_target_url_name)
+    created_kibetu_set = set()
+    zero_count_kibetu_set = set()
+    if history_field:
+        for row in context.get("history_rows") or []:
+            if row.get(history_field):
+                created_kibetu_set.add(row.get("kibetu"))
+            if row.get(f"{history_field}_is_empty"):
+                zero_count_kibetu_set.add(row.get("kibetu"))
+
+    period_choices = list(period_choices)
+    for period in period_choices:
+        period.is_zero_count = period.kibetu in zero_count_kibetu_set
+        period.is_created = (
+            period.kibetu in created_kibetu_set
+            and period.kibetu not in zero_count_kibetu_set
+        )
 
     return {
         "selected_kibetu": selected_kibetu or "",

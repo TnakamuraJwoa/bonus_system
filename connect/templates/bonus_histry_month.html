@@ -27,7 +27,10 @@
           {% if rows %}
 
             <div class="d-flex justify-content-between align-items-center mb-2">
-              <div class="fw-bold">登録履歴一覧（月次）</div>
+              <div class="d-flex align-items-center gap-3">
+                <div class="fw-bold">登録履歴一覧（月次）</div>
+                {% include "com/_bonus_histry_legend.html" %}
+              </div>
               <div class="text-end">
                 <strong>件数：{{ rows|length }} 件</strong>
               </div>
@@ -44,7 +47,7 @@
                   <tr>
                     <th class="text-center" style="width:170px;">期別</th>
                     <th class="text-center">支払日</th>
-                    <th class="text-center">月タイトル</th>
+                    <th class="text-center bonus-histry-col bonus-histry-col--title">タイトル</th>
                     <th class="text-center">タイトルボーナス</th>
                     <th class="text-center">タイトル差額</th>
                     <th class="text-center">再購入オーバー</th>
@@ -58,12 +61,12 @@
                     <tr class="{% if r.is_previous_month %}table-primary{% endif %}">
                       <td class="text-center">{{ r.kibetu }}</td>
                       <td class="text-center">{{ r.payment_date|default:"" }}</td>
-                      <td class="text-center">{{ r.month_title|default:"" }}</td>
-                      <td class="text-center">{{ r.title_bonus|default:"" }}</td>
-                      <td class="text-center">{{ r.title_diff_bonus|default:"" }}</td>
-                      <td class="text-center">{{ r.repurchase_over_bonus|default:"" }}</td>
-                      <td class="text-center">{{ r.three_star_global_bonus|default:"" }}</td>
-                      <td class="text-center bonus-histry-col bonus-histry-col--month">{{ r.month_bonus|default:"" }}</td>
+                      <td class="text-center bonus-histry-col bonus-histry-col--title{% if r.month_title_is_empty %} bonus-histry-cell--empty{% endif %}">{{ r.month_title|default:"" }}</td>
+                      <td class="text-center{% if r.title_bonus_is_empty %} bonus-histry-cell--empty{% endif %}">{{ r.title_bonus|default:"" }}</td>
+                      <td class="text-center{% if r.title_diff_bonus_is_empty %} bonus-histry-cell--empty{% endif %}">{{ r.title_diff_bonus|default:"" }}</td>
+                      <td class="text-center{% if r.repurchase_over_bonus_is_empty %} bonus-histry-cell--empty{% endif %}">{{ r.repurchase_over_bonus|default:"" }}</td>
+                      <td class="text-center{% if r.three_star_global_bonus_is_empty %} bonus-histry-cell--empty{% endif %}">{{ r.three_star_global_bonus|default:"" }}</td>
+                      <td class="text-center bonus-histry-col bonus-histry-col--month{% if r.month_bonus_is_empty %} bonus-histry-cell--empty{% endif %}">{{ r.month_bonus|default:"" }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

@@ -37,20 +37,29 @@
                 class="bonus-calc-kibetu-option{% if obj.kibetu == next_completion_kibetu %} bonus-calc-kibetu-option--next{% endif %}{% if obj.kibetu == previous_month_kibetu %} bonus-calc-kibetu-option--previous-month{% endif %}"
                 data-kibetu-value="{{ obj.kibetu }}"
                 data-kibetu-search="{{ obj.kibetu }} {{ obj.st_date }} {{ obj.end_date }} {{ obj.payment_date }}">
-          <span class="bonus-calc-kibetu-option__title">
-            {{ obj.kibetu }}
-          </span>
-          <span class="bonus-calc-kibetu-option__separator"> </span>
-          <span class="bonus-calc-kibetu-option__meta">
-            {% if period_type == "monthly" %}
-              {% if obj.payment_date %}{{ obj.payment_date }}{% else %}日付未設定{% endif %}
-            {% else %}
-              {% if obj.st_date %}{{ obj.st_date }} - {{ obj.end_date }}{% else %}日付未設定{% endif %}
+          <span class="bonus-calc-kibetu-option__main">
+            <span class="bonus-calc-kibetu-option__text">
+              <span class="bonus-calc-kibetu-option__title">
+                {{ obj.kibetu }}
+              </span>
+              <span class="bonus-calc-kibetu-option__separator"> </span>
+              <span class="bonus-calc-kibetu-option__meta">
+                {% if period_type == "monthly" %}
+                  {% if obj.payment_date %}{{ obj.payment_date }}{% else %}日付未設定{% endif %}
+                {% else %}
+                  {% if obj.st_date %}{{ obj.st_date }} - {{ obj.end_date }}{% else %}日付未設定{% endif %}
+                {% endif %}
+              </span>
+              {% if obj.kibetu == previous_month_kibetu %}
+                <span class="bonus-calc-kibetu-option__badge bonus-calc-kibetu-option__badge--previous-month">前月</span>
+              {% endif %}
+            </span>
+            {% if obj.is_zero_count %}
+              <span class="bonus-calc-kibetu-option__badge bonus-calc-kibetu-option__badge--zero-count">ゼロ件</span>
+            {% elif obj.is_created %}
+              <span class="bonus-calc-kibetu-option__badge bonus-calc-kibetu-option__badge--created">作成済み</span>
             {% endif %}
           </span>
-          {% if obj.kibetu == previous_month_kibetu %}
-            <span class="bonus-calc-kibetu-option__badge bonus-calc-kibetu-option__badge--previous-month">前月</span>
-          {% endif %}
           {% if obj.kibetu == next_completion_kibetu %}
             <span class="bonus-calc-kibetu-option__badge-row">
               <span class="bonus-calc-kibetu-option__badge">次の完成日</span>

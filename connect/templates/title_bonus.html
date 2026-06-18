@@ -2,7 +2,7 @@
 {% load static custom_filters %}
 
 {% block head %}
-    <link href="{% static 'css/common.css' %}?v=48" rel="stylesheet">
+    <link href="{% static 'css/common.css' %}?v=51" rel="stylesheet">
 {% endblock %}
 
 {% block contents %}
@@ -16,7 +16,7 @@
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          {% include "com/_bonus_calc_help.html" with title="【ボーナス計算 - タイトルボーナス】" help_title="タイトルボーナス" help_key="title_bonus" %}
+          {% include "com/_bonus_calc_help.html" with title="【ボーナス計算 - タイトルボーナス】" help_title="タイトルボーナス" help_key="title_bonus" history_modal_id="titleBonusHistoryModal" history_title="登録履歴を表示" %}
 
           <div class="bonus-calc-form">
 
@@ -29,7 +29,7 @@
             </div>
 
             <div class="bonus-calc-action-row">
-              <button type="submit" form="titleBonusSearchForm" class="btn btn-primary">表示</button>
+              <button type="submit" form="titleBonusSearchForm" class="btn btn-primary" data-bonus-calc-submit="titleBonusSearchForm">計算</button>
               <a class="btn btn-outline-secondary" href="{% url 'connect:title_bonus' %}">
                 リセット
               </a>
@@ -104,7 +104,7 @@
             {% if selected_kibetu %}
               <p class="mb-0">この期間のデータはありません。</p>
             {% else %}
-              <p class="mb-0 text-muted">期別を選択して「表示」を押してください。</p>
+              <p class="mb-0 text-muted">期別を選択して「計算」を押してください。</p>
             {% endif %}
           {% endif %}
 
@@ -114,4 +114,6 @@
     </main>
   </div>
 </div>
+{% include "com/_bonus_histry_month_modal.html" with modal_id="titleBonusHistoryModal" %}
+{% include "com/_bonus_calc_progress_overlay.html" with form_id="titleBonusSearchForm" overlay_id="titleBonusProgressOverlay" progress_bar_id="titleBonusProgressBar" progress_text_id="titleBonusProgressText" %}
 {% endblock %}

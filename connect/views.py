@@ -54,6 +54,154 @@ from connect.bonus_help import list_bonus_help, save_bonus_help
 logger = logging.getLogger(__name__)
 
 
+def insert_bonus_register_history(bonus_name, kibetu, username, comment_text):
+    """結果データが0件の場合も、登録操作の履歴を残す。"""
+    with connections["rds"].cursor() as cursor:
+        logger.info(
+            "ボーナス登録履歴登録: bonus_name=%s kibetu=%s comment=%s",
+            bonus_name,
+            kibetu,
+            comment_text,
+        )
+        cursor.execute(
+            """
+                INSERT INTO bonus_db.bonus_register_history (
+                    bonus_name,
+                    kibetu,
+                    registered_at,
+                    registered_by,
+                    comment_text
+                )
+                VALUES (
+                    %s,
+                    %s,
+                    CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'),
+                    %s,
+                    %s
+                )
+            """,
+            [
+                bonus_name,
+                kibetu,
+                username,
+                comment_text,
+            ],
+        )
+
+
+def get_rds_jst_now():
+    with connections["rds"].cursor() as cursor:
+        cursor.execute("SELECT CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo')")
+        row = cursor.fetchone()
+    return row[0] if row else None
+
+
+def delete_auto_register_history_after(kibetu, bonus_names, username, started_at):
+    """事前登録失敗時に、今回作成した登録履歴だけ削除する。"""
+    if not kibetu or not bonus_names or not started_at:
+        return False
+
+    placeholders = ", ".join(["%s"] * len(bonus_names))
+    sql = f"""
+        DELETE FROM bonus_db.bonus_register_history
+        WHERE kibetu = %s
+          AND bonus_name IN ({placeholders})
+          AND registered_by = %s
+          AND registered_at >= %s
+          AND comment_text LIKE %s
+    """
+    params = [
+        kibetu,
+        *bonus_names,
+        username,
+        started_at,
+        "%ボーナス表示前の自動登録:%",
+    ]
+
+    try:
+        with transaction.atomic(using="rds"):
+            with connections["rds"].cursor() as cursor:
+                cursor.execute(sql, params)
+                deleted_count = cursor.rowcount
+    except Exception:
+        logger.exception(
+            "事前登録失敗後の登録履歴削除に失敗しました: kibetu=%s bonus_names=%s",
+            kibetu,
+            ",".join(bonus_names),
+        )
+        return False
+
+    logger.info(
+        "事前登録失敗により登録履歴を削除しました: kibetu=%s bonus_names=%s deleted=%s",
+        kibetu,
+        ",".join(bonus_names),
+        deleted_count,
+    )
+    return True
+
+
+def has_month_title_rows(selected_kibetu):
+    with connections["rds"].cursor() as cursor:
+        cursor.execute(
+            """
+                SELECT 1
+                FROM bonus_db.month_title
+                WHERE kibetu = %s
+                LIMIT 1
+            """,
+            [selected_kibetu],
+        )
+        return cursor.fetchone() is not None
+
+
+def warn_month_title_required(request, action_label="計算"):
+    messages.warning(
+        request,
+        f"{action_label}するには、同じ期別の月タイトルを先に計算・登録してください。",
+    )
+
+
+def normalize_bonus_histry_rows(rows):
+    for row in rows:
+        for key, value in list(row.items()):
+            if key.endswith("_is_empty"):
+                row[key] = bool(value)
+    return rows
+
+
+def insert_empty_bonus_history_on_display(request, bonus_name, kibetu):
+    """表示時に0件だった場合も、同日の重複を避けて履歴を残す。"""
+    if not kibetu:
+        return
+
+    with transaction.atomic(using="rds"):
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(
+                """
+                    SELECT 1
+                    FROM bonus_db.bonus_register_history
+                    WHERE bonus_name = %s
+                      AND kibetu = %s
+                      AND DATE(registered_at) = DATE(CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'))
+                      AND comment_text LIKE '0件%%'
+                    LIMIT 1
+                """,
+                [
+                    bonus_name,
+                    kibetu,
+                ],
+            )
+            if cursor.fetchone():
+                return
+
+        insert_bonus_register_history(
+            bonus_name,
+            kibetu,
+            request.user.username,
+            "0件表示（対象データなし）",
+        )
+
+
 def parse_input_date(value):
     if value is None:
         return None
@@ -782,7 +930,14 @@ class DriveBonusView(generic.ListView):
             rows = self._get_drive_bonus_rows(selected_kibetu, period)
 
             if not rows:
-                messages.warning(request, "登録対象データがありません。")
+                with transaction.atomic(using="rds"):
+                    insert_bonus_register_history(
+                        "drive_bonus",
+                        selected_kibetu,
+                        request.user.username,
+                        "0件登録（対象データなし）",
+                    )
+                messages.warning(request, "登録対象データはありませんが、登録履歴を残しました。")
                 return redirect(f"/drive_bonus/?kibetu={selected_kibetu}")
 
             insert_sql = """
@@ -872,6 +1027,8 @@ class DriveBonusView(generic.ListView):
 
         selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
         ctx["selected_kibetu"] = selected_kibetu
+        ctx["history_rows"] = get_week_bonus_history_rows()
+        ctx["history_target_url_name"] = "connect:drive_bonus"
         ctx["rows"] = []
         ctx["selected_period"] = None
 
@@ -884,9 +1041,20 @@ class DriveBonusView(generic.ListView):
 
         ctx["selected_period"] = period
         if not ensure_week_purchase_info(self.request, selected_kibetu, period):
+            insert_empty_bonus_history_on_display(
+                self.request,
+                "drive_bonus",
+                selected_kibetu,
+            )
             return ctx
 
         ctx["rows"] = self._get_drive_bonus_rows(selected_kibetu, period)
+        if not ctx["rows"]:
+            insert_empty_bonus_history_on_display(
+                self.request,
+                "drive_bonus",
+                selected_kibetu,
+            )
 
         return ctx
 
@@ -2268,7 +2436,14 @@ class BasicBonusView(generic.ListView):
             basic_bv_line_rows = self._get_basic_bv_line_rows(selected_kibetu, period)
 
             if not basic_bonus_rows:
-                messages.warning(request, "登録対象データがありません。")
+                with transaction.atomic(using="rds"):
+                    insert_bonus_register_history(
+                        "basic_bonus",
+                        selected_kibetu,
+                        request.user.username,
+                        "0件登録（対象データなし）",
+                    )
+                messages.warning(request, "登録対象データはありませんが、登録履歴を残しました。")
                 return redirect(f"/basic_bonus/?kibetu={selected_kibetu}")
 
             #B_basic_bonus_result
@@ -2339,6 +2514,8 @@ class BasicBonusView(generic.ListView):
 
         selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
         ctx["selected_kibetu"] = selected_kibetu
+        ctx["history_rows"] = get_week_bonus_history_rows()
+        ctx["history_target_url_name"] = "connect:basic_bonus"
         ctx["rows"] = []
         ctx["selected_period"] = None
 
@@ -2351,6 +2528,12 @@ class BasicBonusView(generic.ListView):
 
         ctx["selected_period"] = period
         ctx["rows"] = self._get_basic_bonus_rows(selected_kibetu, period)
+        if not ctx["rows"]:
+            insert_empty_bonus_history_on_display(
+                self.request,
+                "basic_bonus",
+                selected_kibetu,
+            )
 
         return ctx
 
@@ -3925,7 +4108,14 @@ class MatchingBonusView(generic.ListView):
             rows = self._get_basic_bonus_rows(selected_kibetu, period)
 
             if not rows:
-                messages.warning(request, "登録対象データがありません。")
+                with transaction.atomic(using="rds"):
+                    insert_bonus_register_history(
+                        "matching_bonus",
+                        selected_kibetu,
+                        request.user.username,
+                        "0件登録（対象データなし）",
+                    )
+                messages.warning(request, "登録対象データはありませんが、登録履歴を残しました。")
                 return redirect(f"/matching_bonus/?kibetu={selected_kibetu}")
 
             insert_sql = """
@@ -4004,6 +4194,8 @@ class MatchingBonusView(generic.ListView):
 
         selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
         ctx["selected_kibetu"] = selected_kibetu
+        ctx["history_rows"] = get_week_bonus_history_rows()
+        ctx["history_target_url_name"] = "connect:matching_bonus"
         ctx["rows"] = []
         ctx["selected_period"] = None
 
@@ -4016,6 +4208,12 @@ class MatchingBonusView(generic.ListView):
 
         ctx["selected_period"] = period
         ctx["rows"] = self._get_basic_bonus_rows(selected_kibetu, period)
+        if not ctx["rows"]:
+            insert_empty_bonus_history_on_display(
+                self.request,
+                "matching_bonus",
+                selected_kibetu,
+            )
 
         return ctx
 
@@ -4488,6 +4686,10 @@ class TitleBonusView(generic.ListView):
             messages.error(request, "選択された期別が存在しません。")
             return redirect("connect:title_bonus")
 
+        if not has_month_title_rows(selected_kibetu):
+            warn_month_title_required(request, "登録")
+            return redirect(f"/title_bonus/?kibetu={selected_kibetu}")
+
         try:
             title_bonus_rows = self._get_title_bonus_rows(
                 selected_kibetu,
@@ -4495,7 +4697,14 @@ class TitleBonusView(generic.ListView):
             )
 
             if not title_bonus_rows:
-                messages.warning(request, "登録対象データがありません。")
+                with transaction.atomic(using="rds"):
+                    insert_bonus_register_history(
+                        "title_bonus",
+                        selected_kibetu,
+                        request.user.username,
+                        "0件登録（対象データなし）",
+                    )
+                messages.warning(request, "登録対象データはありませんが、登録履歴を残しました。")
                 return redirect(f"/title_bonus/?kibetu={selected_kibetu}")
 
             insert_sql, insert_params = (
@@ -4554,6 +4763,8 @@ class TitleBonusView(generic.ListView):
         selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
 
         ctx["selected_kibetu"] = selected_kibetu
+        ctx["history_rows"] = get_month_bonus_history_rows()
+        ctx["history_target_url_name"] = "connect:title_bonus"
         ctx["rows"] = []
         ctx["selected_period"] = None
 
@@ -4571,12 +4782,27 @@ class TitleBonusView(generic.ListView):
 
         ctx["selected_period"] = period
         if not ensure_kibetu_purchase_info(self.request, selected_kibetu, period):
+            insert_empty_bonus_history_on_display(
+                self.request,
+                "title_bonus",
+                selected_kibetu,
+            )
+            return ctx
+
+        if not has_month_title_rows(selected_kibetu):
+            warn_month_title_required(self.request)
             return ctx
 
         ctx["rows"] = self._get_title_bonus_rows(
             selected_kibetu,
             period
         )
+        if not ctx["rows"]:
+            insert_empty_bonus_history_on_display(
+                self.request,
+                "title_bonus",
+                selected_kibetu,
+            )
 
         return ctx
 
@@ -4803,6 +5029,10 @@ class TitleDiffBonusView(generic.ListView):
             messages.error(request, "選択された期別が存在しません。")
             return redirect("connect:title_diff_bonus")
 
+        if not has_month_title_rows(selected_kibetu):
+            warn_month_title_required(request, "登録")
+            return redirect(f"/title_diff_bonus/?kibetu={selected_kibetu}")
+
         try:
             title_diff_bonus_rows = self._get_title_diff_bonus_rows(
                 selected_kibetu,
@@ -4810,7 +5040,14 @@ class TitleDiffBonusView(generic.ListView):
             )
 
             if not title_diff_bonus_rows:
-                messages.warning(request, "登録対象データがありません。")
+                with transaction.atomic(using="rds"):
+                    insert_bonus_register_history(
+                        "title_diff_bonus",
+                        selected_kibetu,
+                        request.user.username,
+                        "0件登録（対象データなし）",
+                    )
+                messages.warning(request, "登録対象データはありませんが、登録履歴を残しました。")
                 return redirect(f"/title_diff_bonus/?kibetu={selected_kibetu}")
 
             insert_sql, insert_params = (
@@ -4868,6 +5105,8 @@ class TitleDiffBonusView(generic.ListView):
         selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
 
         ctx["selected_kibetu"] = selected_kibetu
+        ctx["history_rows"] = get_month_bonus_history_rows()
+        ctx["history_target_url_name"] = "connect:title_diff_bonus"
         ctx["rows"] = []
         ctx["selected_period"] = None
 
@@ -4885,12 +5124,27 @@ class TitleDiffBonusView(generic.ListView):
 
         ctx["selected_period"] = period
         if not ensure_kibetu_purchase_info(self.request, selected_kibetu, period):
+            insert_empty_bonus_history_on_display(
+                self.request,
+                "title_diff_bonus",
+                selected_kibetu,
+            )
+            return ctx
+
+        if not has_month_title_rows(selected_kibetu):
+            warn_month_title_required(self.request)
             return ctx
 
         ctx["rows"] = self._get_title_diff_bonus_rows(
             selected_kibetu,
             period
         )
+        if not ctx["rows"]:
+            insert_empty_bonus_history_on_display(
+                self.request,
+                "title_diff_bonus",
+                selected_kibetu,
+            )
 
         return ctx
 
@@ -5100,6 +5354,10 @@ class RepurchaseOverBonusView(generic.ListView):
             messages.error(request, "選択された期別が存在しません。")
             return redirect("connect:repurchase_over_bonus")
 
+        if not has_month_title_rows(selected_kibetu):
+            warn_month_title_required(request, "登録")
+            return redirect(f"/repurchase_over_bonus/?kibetu={selected_kibetu}")
+
         try:
             repurchase_over_bonus_rows = self._get_repurchase_over_bonus_rows(
                 selected_kibetu=selected_kibetu,
@@ -5107,7 +5365,14 @@ class RepurchaseOverBonusView(generic.ListView):
             )
 
             if not repurchase_over_bonus_rows:
-                messages.warning(request, "登録対象データがありません。")
+                with transaction.atomic(using="rds"):
+                    insert_bonus_register_history(
+                        "repurchase_over_bonus",
+                        selected_kibetu,
+                        request.user.username,
+                        "0件登録（対象データなし）",
+                    )
+                messages.warning(request, "登録対象データはありませんが、登録履歴を残しました。")
                 return redirect(f"/repurchase_over_bonus/?kibetu={selected_kibetu}")
 
             insert_sql, insert_params = (
@@ -5118,7 +5383,14 @@ class RepurchaseOverBonusView(generic.ListView):
             )
 
             if not insert_params:
-                messages.warning(request, "登録対象データがありません。")
+                with transaction.atomic(using="rds"):
+                    insert_bonus_register_history(
+                        "repurchase_over_bonus",
+                        selected_kibetu,
+                        request.user.username,
+                        "0件登録（登録対象なし）",
+                    )
+                messages.warning(request, "登録対象データはありませんが、登録履歴を残しました。")
                 return redirect(f"/repurchase_over_bonus/?kibetu={selected_kibetu}")
 
             with transaction.atomic(using="rds"):
@@ -5171,6 +5443,8 @@ class RepurchaseOverBonusView(generic.ListView):
         down_code = self.request.GET.get("down_code", "").strip()
 
         ctx["selected_kibetu"] = selected_kibetu
+        ctx["history_rows"] = get_month_bonus_history_rows()
+        ctx["history_target_url_name"] = "connect:repurchase_over_bonus"
         ctx["root_code"] = root_code
         ctx["down_code"] = down_code
         ctx["rows"] = []
@@ -5190,6 +5464,15 @@ class RepurchaseOverBonusView(generic.ListView):
 
         ctx["selected_period"] = period
         if not ensure_kibetu_purchase_info(self.request, selected_kibetu, period):
+            insert_empty_bonus_history_on_display(
+                self.request,
+                "repurchase_over_bonus",
+                selected_kibetu,
+            )
+            return ctx
+
+        if not has_month_title_rows(selected_kibetu):
+            warn_month_title_required(self.request)
             return ctx
 
         ctx["rows"] = self._get_repurchase_over_bonus_rows(
@@ -5198,6 +5481,12 @@ class RepurchaseOverBonusView(generic.ListView):
             root_code=root_code,
             down_code=down_code,
         )
+        if not ctx["rows"]:
+            insert_empty_bonus_history_on_display(
+                self.request,
+                "repurchase_over_bonus",
+                selected_kibetu,
+            )
 
         return ctx
 
@@ -6044,6 +6333,10 @@ class ThreeStarGlobalBonusView(generic.ListView):
             messages.error(request, "選択された期別が存在しません。")
             return redirect("connect:three_star_global_bonus")
 
+        if not has_month_title_rows(selected_kibetu):
+            warn_month_title_required(request, "登録")
+            return redirect(f"/three_star_global_bonus/?kibetu={selected_kibetu}")
+
         try:
             three_star_global_bonus_rows = self._get_three_star_global_bonus_rows(
                 selected_kibetu=selected_kibetu,
@@ -6051,7 +6344,14 @@ class ThreeStarGlobalBonusView(generic.ListView):
             )
 
             if not three_star_global_bonus_rows:
-                messages.warning(request, "登録対象データがありません。")
+                with transaction.atomic(using="rds"):
+                    insert_bonus_register_history(
+                        "three_star_global_bonus",
+                        selected_kibetu,
+                        request.user.username,
+                        "0件登録（対象データなし）",
+                    )
+                messages.warning(request, "登録対象データはありませんが、登録履歴を残しました。")
                 return redirect(
                     f"/three_star_global_bonus_rows/?kibetu={selected_kibetu}"
                 )
@@ -6064,7 +6364,14 @@ class ThreeStarGlobalBonusView(generic.ListView):
             )
 
             if not insert_params:
-                messages.warning(request, "登録対象データがありません。")
+                with transaction.atomic(using="rds"):
+                    insert_bonus_register_history(
+                        "three_star_global_bonus",
+                        selected_kibetu,
+                        request.user.username,
+                        "0件登録（登録対象なし）",
+                    )
+                messages.warning(request, "登録対象データはありませんが、登録履歴を残しました。")
                 return redirect(
                     f"/three_star_global_bonus/?kibetu={selected_kibetu}"
                 )
@@ -6121,6 +6428,8 @@ class ThreeStarGlobalBonusView(generic.ListView):
         selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
 
         ctx["selected_kibetu"] = selected_kibetu
+        ctx["history_rows"] = get_month_bonus_history_rows()
+        ctx["history_target_url_name"] = "connect:three_star_global_bonus"
         ctx["rows"] = []
         ctx["selected_period"] = None
 
@@ -6138,12 +6447,27 @@ class ThreeStarGlobalBonusView(generic.ListView):
 
         ctx["selected_period"] = period
         if not ensure_kibetu_purchase_info(self.request, selected_kibetu, period):
+            insert_empty_bonus_history_on_display(
+                self.request,
+                "three_star_global_bonus",
+                selected_kibetu,
+            )
+            return ctx
+
+        if not has_month_title_rows(selected_kibetu):
+            warn_month_title_required(self.request)
             return ctx
 
         ctx["rows"] = self._get_three_star_global_bonus_rows(
             selected_kibetu=selected_kibetu,
             period=period,
         )
+        if not ctx["rows"]:
+            insert_empty_bonus_history_on_display(
+                self.request,
+                "three_star_global_bonus",
+                selected_kibetu,
+            )
 
         return ctx
 
@@ -6892,7 +7216,14 @@ class WeekBonusView(generic.ListView):
             rows = self._get_week_bonus_rows(selected_kibetu, period)
 
             if not rows:
-                messages.warning(request, "登録対象データがありません。")
+                with transaction.atomic(using="rds"):
+                    insert_bonus_register_history(
+                        "week_bonus",
+                        selected_kibetu,
+                        request.user.username,
+                        "0件登録（対象データなし）",
+                    )
+                messages.warning(request, "登録対象データはありませんが、登録履歴を残しました。")
                 return redirect(f"/week_bonus/?kibetu={selected_kibetu}")
 
             insert_sql = """
@@ -6985,6 +7316,8 @@ class WeekBonusView(generic.ListView):
         ctx["selected_kibetu"] = selected_kibetu
         ctx["pre_register_targets"] = pre_register_targets
         ctx["pre_register_options"] = self.PRE_REGISTER_OPTIONS
+        ctx["history_rows"] = get_week_bonus_history_rows()
+        ctx["history_target_url_name"] = "connect:week_bonus"
         ctx["rows"] = []
         ctx["selected_period"] = None
 
@@ -7004,6 +7337,12 @@ class WeekBonusView(generic.ListView):
             return ctx
 
         ctx["rows"] = self._get_week_bonus_rows(selected_kibetu, period)
+        if not ctx["rows"]:
+            insert_empty_bonus_history_on_display(
+                self.request,
+                "week_bonus",
+                selected_kibetu,
+            )
 
         return ctx
 
@@ -7022,9 +7361,16 @@ class WeekBonusView(generic.ListView):
 
         registered_labels = []
         warning_labels = []
+        target_bonus_names = []
+        current_label = "事前登録"
+        current_key = ""
+        started_at = get_rds_jst_now()
 
         try:
             if "drive" in targets:
+                current_label = "ドライブボーナス"
+                current_key = "drive_bonus"
+                target_bonus_names.append(current_key)
                 count = self._register_drive_bonus(selected_kibetu, period)
                 if count:
                     registered_labels.append("ドライブ")
@@ -7032,6 +7378,9 @@ class WeekBonusView(generic.ListView):
                     warning_labels.append("ドライブ")
 
             if "basic" in targets:
+                current_label = "ベーシックボーナス"
+                current_key = "basic_bonus"
+                target_bonus_names.append(current_key)
                 count = self._register_basic_bonus(selected_kibetu, period)
                 if count:
                     registered_labels.append("ベーシック")
@@ -7039,6 +7388,9 @@ class WeekBonusView(generic.ListView):
                     warning_labels.append("ベーシック")
 
             if "matching" in targets:
+                current_label = "マッチングボーナス"
+                current_key = "matching_bonus"
+                target_bonus_names.append(current_key)
                 count = self._register_matching_bonus(selected_kibetu, period)
                 if count:
                     registered_labels.append("マッチング")
@@ -7046,21 +7398,44 @@ class WeekBonusView(generic.ListView):
                     warning_labels.append("マッチング")
 
         except Exception as e:
-            logger.exception("週ボーナス表示前の事前登録エラー")
-            messages.error(self.request, f"事前登録中にエラーが発生しました: {e}")
+            history_deleted = delete_auto_register_history_after(
+                selected_kibetu,
+                target_bonus_names,
+                self.request.user.username,
+                started_at,
+            )
+            logger.exception(
+                "週ボーナス表示前の事前登録エラー: kibetu=%s bonus_key=%s bonus_label=%s",
+                selected_kibetu,
+                current_key,
+                current_label,
+            )
+            cleanup_message = (
+                "登録履歴を削除しました"
+                if history_deleted
+                else "登録履歴の削除に失敗しました。管理者に確認してください"
+            )
+            messages.error(
+                self.request,
+                f"{current_label}の事前登録中にエラーが発生しました。{cleanup_message}: {e}",
+            )
             return False
 
-        if registered_labels:
-            messages.success(
-                self.request,
-                f"同じ期別の{'・'.join(registered_labels)}ボーナスを事前登録しました。",
-            )
-
-        if warning_labels:
-            messages.warning(
-                self.request,
-                f"{'・'.join(warning_labels)}ボーナスは登録対象データがありませんでした。",
-            )
+        if registered_labels or warning_labels:
+            message_parts = []
+            if registered_labels:
+                message_parts.append(
+                    f"登録済み: {'・'.join(registered_labels)}"
+                )
+            if warning_labels:
+                message_parts.append(
+                    f"対象データなし: {'・'.join(warning_labels)}"
+                )
+            message_text = "事前登録結果 - " + " / ".join(message_parts)
+            if warning_labels:
+                messages.warning(self.request, message_text)
+            else:
+                messages.success(self.request, message_text)
 
         return True
 
@@ -7092,10 +7467,26 @@ class WeekBonusView(generic.ListView):
 
     def _register_drive_bonus(self, selected_kibetu, period):
         if not ensure_week_purchase_info(self.request, selected_kibetu, period):
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    self._insert_auto_register_history(
+                        cursor,
+                        "drive_bonus",
+                        selected_kibetu,
+                        0,
+                    )
             return 0
 
         rows = DriveBonusView()._get_drive_bonus_rows(selected_kibetu, period)
         if not rows:
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    self._insert_auto_register_history(
+                        cursor,
+                        "drive_bonus",
+                        selected_kibetu,
+                        0,
+                    )
             return 0
 
         insert_sql = """
@@ -7156,6 +7547,14 @@ class WeekBonusView(generic.ListView):
         basic_bonus_rows = basic_view._get_basic_bonus_rows(selected_kibetu, period)
         basic_bv_line_rows = basic_view._get_basic_bv_line_rows(selected_kibetu, period)
         if not basic_bonus_rows:
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    self._insert_auto_register_history(
+                        cursor,
+                        "basic_bonus",
+                        selected_kibetu,
+                        0,
+                    )
             return 0
 
         insert_sql, insert_params = register_sql.get_basic_bonus_insert_data(
@@ -7189,6 +7588,14 @@ class WeekBonusView(generic.ListView):
     def _register_matching_bonus(self, selected_kibetu, period):
         rows = MatchingBonusView()._get_basic_bonus_rows(selected_kibetu, period)
         if not rows:
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    self._insert_auto_register_history(
+                        cursor,
+                        "matching_bonus",
+                        selected_kibetu,
+                        0,
+                    )
             return 0
 
         insert_sql = """
@@ -7548,7 +7955,14 @@ class MonthTitleView(generic.ListView):
             rows = self._get_month_title_rows(period)
 
             if not rows:
-                messages.warning(request, "登録対象データがありません。")
+                with transaction.atomic(using="rds"):
+                    insert_bonus_register_history(
+                        "month_title",
+                        selected_kibetu,
+                        request.user.username,
+                        "0件登録（対象データなし）",
+                    )
+                messages.warning(request, "登録対象データはありませんが、登録履歴を残しました。")
                 return redirect(f"/month_title/?kibetu={selected_kibetu}")
 
             delete_sql, delete_params, insert_sql, insert_params = (
@@ -7609,6 +8023,8 @@ class MonthTitleView(generic.ListView):
 
         selected_kibetu = self.request.GET.get("kibetu", "").strip()
         ctx["selected_kibetu"] = selected_kibetu
+        ctx["history_rows"] = get_month_bonus_history_rows()
+        ctx["history_target_url_name"] = "connect:month_title"
         ctx["selected_period"] = None
         ctx["rows"] = []
 
@@ -7622,6 +8038,12 @@ class MonthTitleView(generic.ListView):
             return ctx
 
         ctx["rows"] = self._get_month_title_rows(period)
+        if not ctx["rows"]:
+            insert_empty_bonus_history_on_display(
+                self.request,
+                "month_title",
+                selected_kibetu,
+            )
 
         return ctx
 
@@ -7645,10 +8067,11 @@ class MonthBonusView(generic.ListView):
     context_object_name = "object_list"
     model = MonthlyPeriod
     PRE_REGISTER_OPTIONS = (
+        ("month_title", "月タイトル"),
         ("title", "タイトルボーナス"),
-        ("title_diff", "タイトル差額ボーナス"),
+        ("title_diff", "差額ボーナス"),
         ("repurchase_over", "再購入オーバーボーナス"),
-        ("three_star", "3スターダイヤグローバル配当"),
+        ("three_star", "3スター配当"),
     )
 
     def get_queryset(self):
@@ -7677,11 +8100,25 @@ class MonthBonusView(generic.ListView):
             messages.error(request, "選択された期別が存在しません。")
             return redirect("connect:month_bonus")
 
+        if not has_month_title_rows(selected_kibetu):
+            messages.warning(
+                request,
+                "月ボーナスを登録するには、同じ期別の月タイトルを先に計算・登録してください。",
+            )
+            return redirect(f"/month_bonus/?kibetu={selected_kibetu}")
+
         try:
             rows = self._get_month_bonus_rows(selected_kibetu)
 
             if not rows:
-                messages.warning(request, "登録対象データがありません。")
+                with transaction.atomic(using="rds"):
+                    insert_bonus_register_history(
+                        "month_bonus",
+                        selected_kibetu,
+                        request.user.username,
+                        "0件登録（対象データなし）",
+                    )
+                messages.warning(request, "登録対象データはありませんが、登録履歴を残しました。")
                 return redirect(f"/month_bonus/?kibetu={selected_kibetu}")
 
             insert_sql = """
@@ -7775,6 +8212,8 @@ class MonthBonusView(generic.ListView):
         ctx["selected_kibetu"] = selected_kibetu
         ctx["pre_register_targets"] = pre_register_targets
         ctx["pre_register_options"] = self.PRE_REGISTER_OPTIONS
+        ctx["history_rows"] = get_month_bonus_history_rows()
+        ctx["history_target_url_name"] = "connect:month_bonus"
         ctx["rows"] = []
         ctx["selected_period"] = None
 
@@ -7788,6 +8227,21 @@ class MonthBonusView(generic.ListView):
 
         ctx["selected_period"] = period
         if not ensure_kibetu_purchase_info(self.request, selected_kibetu, period):
+            insert_empty_bonus_history_on_display(
+                self.request,
+                "month_bonus",
+                selected_kibetu,
+            )
+            return ctx
+
+        if (
+            "month_title" not in pre_register_targets
+            and not has_month_title_rows(selected_kibetu)
+        ):
+            messages.warning(
+                self.request,
+                "月ボーナスを計算するには、同じ期別の月タイトルを先に計算・登録してください。",
+            )
             return ctx
 
         if not self._pre_register_selected_bonuses(
@@ -7797,7 +8251,16 @@ class MonthBonusView(generic.ListView):
         ):
             return ctx
 
+        if not has_month_title_rows(selected_kibetu):
+            return ctx
+
         ctx["rows"] = self._get_month_bonus_rows(selected_kibetu)
+        if not ctx["rows"]:
+            insert_empty_bonus_history_on_display(
+                self.request,
+                "month_bonus",
+                selected_kibetu,
+            )
 
         return ctx
 
@@ -7816,9 +8279,26 @@ class MonthBonusView(generic.ListView):
 
         registered_labels = []
         warning_labels = []
+        target_bonus_names = []
+        current_label = "事前登録"
+        current_key = ""
+        started_at = get_rds_jst_now()
 
         try:
+            if "month_title" in targets:
+                current_label = "月タイトル"
+                current_key = "month_title"
+                target_bonus_names.append(current_key)
+                count = self._register_month_title(selected_kibetu, period)
+                if count:
+                    registered_labels.append("月タイトル")
+                else:
+                    warning_labels.append("月タイトル")
+
             if "title" in targets:
+                current_label = "タイトルボーナス"
+                current_key = "title_bonus"
+                target_bonus_names.append(current_key)
                 count = self._register_title_bonus(selected_kibetu, period)
                 if count:
                     registered_labels.append("タイトル")
@@ -7826,13 +8306,19 @@ class MonthBonusView(generic.ListView):
                     warning_labels.append("タイトル")
 
             if "title_diff" in targets:
+                current_label = "差額ボーナス"
+                current_key = "title_diff_bonus"
+                target_bonus_names.append(current_key)
                 count = self._register_title_diff_bonus(selected_kibetu, period)
                 if count:
-                    registered_labels.append("タイトル差額")
+                    registered_labels.append("差額")
                 else:
-                    warning_labels.append("タイトル差額")
+                    warning_labels.append("差額")
 
             if "repurchase_over" in targets:
+                current_label = "再購入オーバーボーナス"
+                current_key = "repurchase_over_bonus"
+                target_bonus_names.append(current_key)
                 count = self._register_repurchase_over_bonus(selected_kibetu, period)
                 if count:
                     registered_labels.append("再購入オーバー")
@@ -7840,28 +8326,54 @@ class MonthBonusView(generic.ListView):
                     warning_labels.append("再購入オーバー")
 
             if "three_star" in targets:
+                current_label = "3スター配当"
+                current_key = "three_star_global_bonus"
+                target_bonus_names.append(current_key)
                 count = self._register_three_star_global_bonus(selected_kibetu, period)
                 if count:
-                    registered_labels.append("3スターダイヤ")
+                    registered_labels.append("3スター")
                 else:
-                    warning_labels.append("3スターダイヤ")
+                    warning_labels.append("3スター")
 
         except Exception as e:
-            logger.exception("月ボーナス表示前の事前登録エラー")
-            messages.error(self.request, f"事前登録中にエラーが発生しました: {e}")
+            history_deleted = delete_auto_register_history_after(
+                selected_kibetu,
+                target_bonus_names,
+                self.request.user.username,
+                started_at,
+            )
+            logger.exception(
+                "月ボーナス表示前の事前登録エラー: kibetu=%s bonus_key=%s bonus_label=%s",
+                selected_kibetu,
+                current_key,
+                current_label,
+            )
+            cleanup_message = (
+                "登録履歴を削除しました"
+                if history_deleted
+                else "登録履歴の削除に失敗しました。管理者に確認してください"
+            )
+            messages.error(
+                self.request,
+                f"{current_label}の事前登録中にエラーが発生しました。{cleanup_message}: {e}",
+            )
             return False
 
-        if registered_labels:
-            messages.success(
-                self.request,
-                f"同じ期別の{'・'.join(registered_labels)}ボーナスを事前登録しました。",
-            )
-
-        if warning_labels:
-            messages.warning(
-                self.request,
-                f"{'・'.join(warning_labels)}ボーナスは登録対象データがありませんでした。",
-            )
+        if registered_labels or warning_labels:
+            message_parts = []
+            if registered_labels:
+                message_parts.append(
+                    f"登録済み: {'・'.join(registered_labels)}"
+                )
+            if warning_labels:
+                message_parts.append(
+                    f"対象データなし: {'・'.join(warning_labels)}"
+                )
+            message_text = "事前登録結果 - " + " / ".join(message_parts)
+            if warning_labels:
+                messages.warning(self.request, message_text)
+            else:
+                messages.success(self.request, message_text)
 
         return True
 
@@ -7891,9 +8403,52 @@ class MonthBonusView(generic.ListView):
             ],
         )
 
+    def _register_month_title(self, selected_kibetu, period):
+        rows = MonthTitleView()._get_month_title_rows(period)
+        if not rows:
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    self._insert_auto_register_history(
+                        cursor,
+                        "month_title",
+                        selected_kibetu,
+                        0,
+                    )
+            return 0
+
+        delete_sql, delete_params, insert_sql, insert_params = (
+            register_sql.get_month_title_delete_insert_data(
+                selected_kibetu,
+                rows,
+            )
+        )
+
+        with transaction.atomic(using="rds"):
+            with connections["rds"].cursor() as cursor:
+                logger.info("月ボーナス事前登録: 月タイトル削除SQLを実行します。kibetu=%s", selected_kibetu)
+                cursor.execute(delete_sql, delete_params)
+                logger.info("月ボーナス事前登録: 月タイトルINSERT SQLを実行します。kibetu=%s", selected_kibetu)
+                cursor.executemany(insert_sql, insert_params)
+                self._insert_auto_register_history(
+                    cursor,
+                    "month_title",
+                    selected_kibetu,
+                    len(rows),
+                )
+
+        return len(rows)
+
     def _register_title_bonus(self, selected_kibetu, period):
         rows = TitleBonusView()._get_title_bonus_rows(selected_kibetu, period)
         if not rows:
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    self._insert_auto_register_history(
+                        cursor,
+                        "title_bonus",
+                        selected_kibetu,
+                        0,
+                    )
             return 0
 
         insert_sql, insert_params = register_sql.get_title_bonus_insert_data(
@@ -7916,6 +8471,14 @@ class MonthBonusView(generic.ListView):
     def _register_title_diff_bonus(self, selected_kibetu, period):
         rows = TitleDiffBonusView()._get_title_diff_bonus_rows(selected_kibetu, period)
         if not rows:
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    self._insert_auto_register_history(
+                        cursor,
+                        "title_diff_bonus",
+                        selected_kibetu,
+                        0,
+                    )
             return 0
 
         insert_sql, insert_params = register_sql.get_title_diff_bonus_insert_data(
@@ -7941,6 +8504,14 @@ class MonthBonusView(generic.ListView):
             period=period,
         )
         if not rows:
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    self._insert_auto_register_history(
+                        cursor,
+                        "repurchase_over_bonus",
+                        selected_kibetu,
+                        0,
+                    )
             return 0
 
         insert_sql, insert_params = register_sql.get_repurchase_over_bonus_insert_data(
@@ -7948,6 +8519,14 @@ class MonthBonusView(generic.ListView):
             rows,
         )
         if not insert_params:
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    self._insert_auto_register_history(
+                        cursor,
+                        "repurchase_over_bonus",
+                        selected_kibetu,
+                        0,
+                    )
             return 0
 
         with transaction.atomic(using="rds"):
@@ -7968,6 +8547,14 @@ class MonthBonusView(generic.ListView):
             period=period,
         )
         if not rows:
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    self._insert_auto_register_history(
+                        cursor,
+                        "three_star_global_bonus",
+                        selected_kibetu,
+                        0,
+                    )
             return 0
 
         insert_sql, insert_params = register_sql.get_three_star_global_bonus_insert_data(
@@ -7975,6 +8562,14 @@ class MonthBonusView(generic.ListView):
             rows,
         )
         if not insert_params:
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    self._insert_auto_register_history(
+                        cursor,
+                        "three_star_global_bonus",
+                        selected_kibetu,
+                        0,
+                    )
             return 0
 
         with transaction.atomic(using="rds"):
@@ -8145,34 +8740,62 @@ class BonusHistryView(generic.TemplateView):
         return ctx
 
     def _get_history_rows(self):
-        from connect.sql.bonus_histry_sql import WEEK_BONUS_HISTORY_SQL
+        return get_week_bonus_history_rows()
 
-        logger.info("登録履歴（週）SQL実行")
 
-        with connections["rds"].cursor() as cursor:
-            cursor.execute(WEEK_BONUS_HISTORY_SQL)
+def get_week_bonus_history_rows():
+    from connect.sql.bonus_histry_sql import WEEK_BONUS_HISTORY_SQL
 
-            cols = [c[0] for c in cursor.description]
-            rows = [
-                dict(zip(cols, row))
-                for row in cursor.fetchall()
-            ]
+    logger.info("登録履歴（週）SQL実行")
 
-        today = date.today()
-        next_completion_date = min(
-            (
-                row["completion_date"]
-                for row in rows
-                if row["completion_date"] and row["completion_date"] >= today
-            ),
-            default=None,
+    with connections["rds"].cursor() as cursor:
+        cursor.execute(WEEK_BONUS_HISTORY_SQL)
+
+        cols = [c[0] for c in cursor.description]
+        rows = [
+            dict(zip(cols, row))
+            for row in cursor.fetchall()
+        ]
+
+    today = date.today()
+    next_completion_date = min(
+        (
+            row["completion_date"]
+            for row in rows
+            if row["completion_date"] and row["completion_date"] >= today
+        ),
+        default=None,
+    )
+    for row in rows:
+        row["is_next_completion_date"] = (
+            row["completion_date"] == next_completion_date
         )
-        for row in rows:
-            row["is_next_completion_date"] = (
-                row["completion_date"] == next_completion_date
-            )
 
-        return rows
+    return normalize_bonus_histry_rows(rows)
+
+
+def get_month_bonus_history_rows():
+    from connect.sql.bonus_histry_sql import MONTH_BONUS_HISTORY_SQL
+
+    logger.info("登録履歴（月）SQL実行")
+
+    with connections["rds"].cursor() as cursor:
+        cursor.execute(MONTH_BONUS_HISTORY_SQL)
+
+        cols = [c[0] for c in cursor.description]
+        rows = [
+            dict(zip(cols, row))
+            for row in cursor.fetchall()
+        ]
+
+    previous_month = date.today() - relativedelta(months=1)
+    for row in rows:
+        row["is_previous_month"] = (
+            row.get("year") == previous_month.year
+            and row.get("month") == previous_month.month
+        )
+
+    return normalize_bonus_histry_rows(rows)
 
 
 class BonusHistryMonthView(generic.TemplateView):
@@ -8184,27 +8807,7 @@ class BonusHistryMonthView(generic.TemplateView):
         return ctx
 
     def _get_history_rows(self):
-        from connect.sql.bonus_histry_sql import MONTH_BONUS_HISTORY_SQL
-
-        logger.info("登録履歴（月）SQL実行")
-
-        with connections["rds"].cursor() as cursor:
-            cursor.execute(MONTH_BONUS_HISTORY_SQL)
-
-            cols = [c[0] for c in cursor.description]
-            rows = [
-                dict(zip(cols, row))
-                for row in cursor.fetchall()
-            ]
-
-        previous_month = date.today() - relativedelta(months=1)
-        for row in rows:
-            row["is_previous_month"] = (
-                row.get("year") == previous_month.year
-                and row.get("month") == previous_month.month
-            )
-
-        return rows
+        return get_month_bonus_history_rows()
 
 
 class CoolingOffView(generic.TemplateView):
