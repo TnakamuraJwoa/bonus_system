@@ -1,0 +1,32 @@
+<div class="bonus-calc-kibetu-field business-search-kibetu-field">
+  <label class="form-label mb-0 small text-muted">期別</label>
+  <div class="bonus-calc-kibetu-select" data-kibetu-dropdown>
+    <input type="text"
+           name="q_kibetu"
+           class="form-control bonus-calc-kibetu-input"
+           value="{{ q_kibetu|default:'' }}"
+           placeholder="{{ placeholder|default:'期別を入力または選択' }}"
+           autocomplete="off"
+           aria-expanded="false">
+    <button type="button"
+            class="bonus-calc-kibetu-toggle"
+            aria-label="期別候補を開く"
+            tabindex="-1">
+      ▾
+    </button>
+    <div class="bonus-calc-kibetu-options" role="listbox">
+      {% for kibetu in kibetu_options %}
+        <button type="button"
+                class="bonus-calc-kibetu-option"
+                data-kibetu-value="{{ kibetu }}"
+                data-kibetu-search="{{ kibetu }}">
+          <span class="bonus-calc-kibetu-option__main">
+            <span class="bonus-calc-kibetu-option__text">
+              <span class="bonus-calc-kibetu-option__title">{{ kibetu }}</span>
+            </span>
+          </span>
+        </button>
+      {% endfor %}
+    </div>
+  </div>
+</div>

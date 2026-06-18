@@ -486,6 +486,19 @@ html, body {
     margin-bottom: 0;
 }
 
+/* 業務検索フォーム：期別ドロップダウンは他項目と同幅に固定 */
+.business-performance-filter .business-search-kibetu-field {
+    flex: 0 0 180px;
+    width: 180px;
+    max-width: 180px;
+}
+
+.business-performance-filter .business-search-kibetu-field .bonus-calc-kibetu-select,
+.business-performance-filter .business-search-kibetu-field .bonus-calc-kibetu-input {
+    max-width: 100%;
+    min-width: 0;
+}
+
 .bonus-calc-kibetu-field .form-label {
     font-size: 0.8125rem;
     font-weight: 600;

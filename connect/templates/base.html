@@ -329,15 +329,20 @@ document.addEventListener("DOMContentLoaded", function(){
 
 });
 </script>
+<script src="{% static 'js/kibetu-dropdown.js' %}"></script>
 <script>
 $(function () {
+  function closeAllFilterDropdowns() {
+    $('.filter-dropdown.is-open').removeClass('is-open');
+    $('.filter-dropdown__toggle').attr('aria-expanded', 'false');
+  }
+
   $(document).on('click', '.filter-dropdown__toggle', function (e) {
     e.preventDefault();
     e.stopPropagation();
     var $dropdown = $(this).closest('.filter-dropdown');
     var isOpen = $dropdown.hasClass('is-open');
-    $('.filter-dropdown.is-open').removeClass('is-open');
-    $('.filter-dropdown__toggle').attr('aria-expanded', 'false');
+    closeAllFilterDropdowns();
     if (!isOpen) {
       $dropdown.addClass('is-open');
       $(this).attr('aria-expanded', 'true');
@@ -348,9 +353,12 @@ $(function () {
     e.stopPropagation();
   });
 
+  $(document).on('change', '.filter-dropdown__menu input, .filter-dropdown__menu select', function () {
+    closeAllFilterDropdowns();
+  });
+
   $(document).on('click', function () {
-    $('.filter-dropdown.is-open').removeClass('is-open');
-    $('.filter-dropdown__toggle').attr('aria-expanded', 'false');
+    closeAllFilterDropdowns();
   });
 });
 </script>
