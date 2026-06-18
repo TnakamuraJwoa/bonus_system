@@ -6,6 +6,7 @@ from django.urls import reverse
 from django.utils.html import format_html
 from dateutil.relativedelta import relativedelta
 
+from connect.bonus_help import get_bonus_help
 from connect.models import MonthlyPeriod, PeriodMaster
 
 register = template.Library()
@@ -73,6 +74,11 @@ def paired_bonus_url(current_url_name, target_mode, bonus_group):
         )[pair_index]
 
     return reverse(f"connect:{url_name}")
+
+
+@register.simple_tag
+def bonus_help(help_key, fallback_title=""):
+    return get_bonus_help(help_key, fallback_title)
 
 @register.filter
 def is_different_from_previous(value, previous_value):

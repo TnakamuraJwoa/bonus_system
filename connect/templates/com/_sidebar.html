@@ -21,6 +21,11 @@
            href="{% url 'connect:settings' %}">設定</a>
         {% endif %}
 
+        {% if user_access|can_menu:"help_text" %}
+        <a class="list-group-item list-group-item-action {% if active_menu == 'help_text' %}active{% endif %}"
+           href="{% url 'connect:help_text' %}">ヘルプテキスト</a>
+        {% endif %}
+
         {% if user_access|can_menu:"user_target_rank" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'user_target_rank' %}active{% endif %}"
            href="{% url 'connect:user_target_rank' %}">ユーザーランク(指定月)</a>

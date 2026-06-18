@@ -47,6 +47,8 @@ from connect.sql.basic_bv_line_sql import BASIC_BV_LINE_SQL
 
 from connect.sql import register_sql
 
+from accounts.access import get_user_access
+from connect.bonus_help import list_bonus_help, save_bonus_help
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +100,36 @@ def _build_kibetu_filter_redirect(request, url_name):
     if params:
         url += "?" + urlencode(params)
     return url
+
+
+class BonusHelpTextView(generic.TemplateView):
+    template_name = "help_text.html"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["rows"] = list_bonus_help()
+        ctx["total_count"] = len(ctx["rows"])
+        return ctx
+
+    def post(self, request, *args, **kwargs):
+        user_access = get_user_access(request.user)
+        if not user_access.can_menu("help_text") or not user_access.can_update:
+            return HttpResponse("権限がありません。", status=403)
+
+        help_key = (request.POST.get("help_key") or "").strip()
+        title = (request.POST.get("title") or "").strip()
+        content = request.POST.get("content") or ""
+
+        try:
+            save_bonus_help(help_key, title, content)
+            messages.success(request, "ヘルプテキストを保存しました。")
+        except ValueError as exc:
+            messages.error(request, str(exc))
+        except Exception:
+            logger.exception("ヘルプテキストの保存に失敗しました。help_key=%s", help_key)
+            messages.error(request, "ヘルプテキストの保存に失敗しました。")
+
+        return redirect("connect:help_text")
 
 
 def get_week_purchase_check_months(selected_kibetu, period=None):
