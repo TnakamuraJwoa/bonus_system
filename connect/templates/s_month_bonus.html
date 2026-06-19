@@ -19,6 +19,9 @@
           <form method="get" class="bonus-search-form">
             <div class="bonus-search-header">
               <h5 class="page-title mb-0">【ボーナス検索 - 月ボーナス】</h5>
+              {% if user_access.can_export %}
+                {% include "com/_excel_export_icon_button.html" %}
+              {% endif %}
             </div>
 
             <div class="bonus-search-filters">
@@ -51,11 +54,6 @@
             <div class="bonus-search-actions">
               <button type="submit" class="btn btn-primary">表示</button>
               <a class="btn btn-outline-secondary" href="{% url 'connect:s_month_bonus' %}">リセット</a>
-              {% if user_access.can_export %}
-              <button type="submit" name="export" value="excel" class="btn btn-success">
-                Excel出力
-              </button>
-              {% endif %}
             </div>
             </div>
           </form>

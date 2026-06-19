@@ -27,7 +27,7 @@
     <main class="col-12 col-md-9 col-lg-10 list-page-main">
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          {% include "com/_bonus_calc_help.html" with title="【繰り越し照会 - 繰り越し業績照会】" help_title="繰り越し業績照会" help_key="business_carry_over_performance" history_modal_id=registration_history_modal_id history_title="登録履歴を表示" %}
+          {% include "com/_bonus_calc_help.html" with title="【繰り越し照会 - 繰り越し業績照会】" help_title="繰り越し業績照会" help_key="business_carry_over_performance" history_modal_id=registration_history_modal_id history_title="登録履歴を表示" import_modal_id="carryOverImportModal" import_title="CSV/Excel取込" %}
 
           <form method="get" class="business-performance-filter mb-0" autocomplete="off">
             {% business_search_kibetu_input q_kibetu period_type="weekly" %}
@@ -65,6 +65,7 @@
             <button type="submit" class="btn btn-primary">検索</button>
             <a href="{% url 'connect:business_carry_over_performance' %}" class="btn btn-outline-secondary">リセット</a>
           </form>
+
         </div>
       </div>
 
@@ -109,6 +110,49 @@
     </main>
   </div>
 </div>
+
+{% if user_access.can_execute %}
+<div class="modal fade bonus-import-modal" id="carryOverImportModal" tabindex="-1" role="dialog" aria-labelledby="carryOverImportModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <form method="post"
+            enctype="multipart/form-data"
+            data-confirm="選択したファイルで繰り越しBVを一括登録します。同じ期別・上位者コード・会員コードは更新されます。よろしいですか？">
+        {% csrf_token %}
+        <div class="modal-header">
+          <div>
+            <h5 class="modal-title" id="carryOverImportModalLabel">CSV/Excel取込</h5>
+            <div class="small text-muted">basic_bv_line に繰り越しBVを一括登録します。</div>
+          </div>
+          <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group mb-3">
+            <label class="form-label small text-muted">取込ファイル</label>
+            <input type="file"
+                   name="carry_over_file"
+                   class="form-control"
+                   accept=".csv,.txt,.xlsx,.xlsm"
+                   required>
+          </div>
+          <div class="small text-muted">
+            必須列: 期別、上位者コード、会員コード、BV、繰り越しBV
+          </div>
+          <div class="small text-muted mt-1">
+            同じ期別・上位者コード・会員コードが既にある場合は更新されます。
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
+          <button type="submit" class="btn btn-success">一括登録</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 {% include "com/_business_search_registration_modal.html" with modal_id=registration_history_modal_id modal_title=registration_modal_title selected_q_kibetu=q_kibetu registration_target_url_name=registration_target_url_name %}
 {% endblock %}
