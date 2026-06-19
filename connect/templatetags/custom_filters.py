@@ -70,6 +70,7 @@ BONUS_HISTORY_FIELD_BY_URL_NAME = {
     "repurchase_over_bonus": "repurchase_over_bonus",
     "three_star_global_bonus": "three_star_global_bonus",
     "month_bonus": "month_bonus",
+    "title_registration": "title_registration",
 }
 
 
@@ -112,6 +113,21 @@ def get_item(d, key):
     if d is None:
         return ""
     return d.get(key, "")
+
+
+@register.filter
+def rank_label(value):
+    labels = {
+        "1": "シルバー",
+        "2": "ゴールド",
+        "3": "プラチナ",
+        "4": "ダイヤ",
+        "9": "一般会員",
+    }
+    if value in (None, ""):
+        return "-"
+    key = str(value).strip()
+    return labels.get(key, key)
 
 
 @register.filter

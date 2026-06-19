@@ -20,6 +20,9 @@
           <form method="get" class="bonus-search-form">
             <div class="bonus-search-header">
               <h5 class="page-title mb-0">【ボーナス検索 - タイトル差額ボーナス】</h5>
+              {% if user_access.can_export %}
+                {% include "com/_excel_export_icon_button.html" %}
+              {% endif %}
             </div>
 
             <div class="bonus-search-filters">
@@ -106,14 +109,6 @@
                 リセット
               </a>
 
-              {% if user_access.can_export %}
-              <button type="submit"
-                      name="export"
-                      value="excel"
-                      class="btn btn-success">
-                Excel出力
-              </button>
-              {% endif %}
             </div>
             </div>
 

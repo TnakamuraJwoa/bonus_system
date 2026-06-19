@@ -1,12 +1,11 @@
 ﻿{% extends 'base.html' %}
 {% load static custom_filters %}
 
-{% block contents %}
-
 {% block head %}
-  <link href="{% static 'css/common.css' %}" rel="stylesheet">
+  <link href="{% static 'css/common.css' %}?v=51" rel="stylesheet">
 {% endblock %}
 
+{% block contents %}
 <div class="container-fluid mt-3 list-page-viewport">
   <div class="row g-1 h-100">
 
@@ -16,97 +15,110 @@
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <h5 class="page-title mb-2">【設定 - ユーザーランク】</h5>
-          <p class="text-muted mb-3">※指定月のランクを登録</p>
-
-          <div class="mb-2">
-            <span class="fw-bold">対象年月を選択</span>
-            <span>　登録月: {{ select_month }}</span>
+          <div class="d-flex justify-content-between align-items-start flex-wrap mb-3">
+            <div>
+              <h5 class="page-title mb-2">【設定 - ユーザーランク】</h5>
+              <p class="text-muted small mb-0">指定月時点のランクを確認し、ボーナス計算用のユーザーランクとして登録します。</p>
+            </div>
+            {% if select_month %}
+              <div class="text-muted small mt-1">
+                登録月：
+                <span class="badge badge-info">{{ select_month }}</span>
+              </div>
+            {% endif %}
           </div>
 
-          <!-- 月選択 -->
-          <form method="get" class="d-flex gap-2 align-items-end mb-3 flex-wrap">
-            <div style="min-width: 220px;">
-              <select name="prev_month" class="form-select">
-                <option value="">-- 選択 --</option>
-                {% for obj in month_list %}
-                  <option value="{{ obj.value }}"
-                    {% if obj.value == selected_prev_month %}selected{% endif %}>
-                    【{{ obj.year }}年{{ obj.month }}月】
-                  </option>
-                {% endfor %}
-              </select>
+          <div class="bonus-calc-form">
+            <form method="get" id="userTargetRankSearchForm" class="mb-0">
+              <div class="d-flex align-items-end flex-wrap">
+                <div class="mr-2 mb-2" style="min-width: 220px;">
+                  <label class="form-label mb-0 small text-muted">対象年月</label>
+                  <select name="prev_month" class="form-control">
+                    <option value="">-- 選択 --</option>
+                    {% for obj in month_list %}
+                      <option value="{{ obj.value }}"
+                        {% if obj.value == selected_prev_month %}selected{% endif %}>
+                        {{ obj.year }}年{{ obj.month }}月
+                        {% if obj.value == select_month_value %}（登録済）{% endif %}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </div>
+
+                <div class="mr-2 mb-2">
+                  <label class="form-label mb-0 small text-muted">会員番号</label>
+                  <input type="text" name="q_code" class="form-control"
+                         value="{{ q_code|default:'' }}" placeholder="例: JP0416">
+                </div>
+
+                <div class="mr-2 mb-2">
+                  <label class="form-label mb-0 small text-muted">会員名</label>
+                  <input type="text" name="q_name" class="form-control"
+                         value="{{ q_name|default:'' }}" placeholder="例: 野口">
+                </div>
+
+                <div class="mr-2 mb-2" style="width: 140px;">
+                  <label class="form-label mb-0 small text-muted">新ランク</label>
+                  <input type="text" name="q_new_rank" class="form-control"
+                         value="{{ q_new_rank|default:'' }}" placeholder="例: 9">
+                </div>
+
+                <div class="mr-2 mb-2" style="width: 110px;">
+                  <label class="form-label mb-0 small text-muted">表示件数</label>
+                  <select name="per_page" class="form-control">
+                    <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                    <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                    <option value="300" {% if per_page == 300 %}selected{% endif %}>300</option>
+                    <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+                  </select>
+                </div>
+              </div>
+            </form>
+
+            <div class="bonus-calc-selection-status">
+              {% if selected_period %}
+                {% jp_year_month_label selected_period.year selected_period.month as period_label %}
+                {% include "com/_selection_indicator.html" with date_text=period_label %}
+              {% else %}
+                <span class="text-muted small">対象年月を選択してください</span>
+              {% endif %}
             </div>
 
-            <div>
-              <label class="form-label mb-0 small text-muted">会員番号</label>
-              <input type="text" name="q_code" class="form-control"
-                     value="{{ q_code|default:'' }}" placeholder="例: JP0416">
+            <div class="bonus-calc-action-row">
+              <button type="submit" form="userTargetRankSearchForm" class="btn btn-primary">検索</button>
+              <a class="btn btn-outline-secondary" href="{% url 'connect:user_target_rank' %}">
+                リセット
+              </a>
+
+              {% if user_access.can_execute %}
+                <form method="post"
+                      class="mb-0"
+                      id="registerForm"
+                      data-confirm="選択した対象年月でユーザーランクを全件登録します。既存の users_target_rank は入れ替わります。よろしいですか？">
+                  {% csrf_token %}
+                  <input type="hidden" name="prev_month" value="{{ selected_prev_month }}">
+                  <button type="submit"
+                          class="btn btn-success"
+                          {% if not selected_prev_month %}disabled{% endif %}>
+                    全件登録
+                  </button>
+                </form>
+              {% endif %}
             </div>
-
-            <div>
-              <label class="form-label mb-0 small text-muted">会員名</label>
-              <input type="text" name="q_name" class="form-control"
-                     value="{{ q_name|default:'' }}" placeholder="例: 野口">
-            </div>
-
-            <div style="width: 140px;">
-              <label class="form-label mb-0 small text-muted">new_rank</label>
-              <input type="text" name="q_new_rank" class="form-control"
-                     value="{{ q_new_rank|default:'' }}" placeholder="例: 9">
-            </div>
-
-            <div style="width: 110px;">
-              <label class="form-label mb-0 small text-muted">表示件数</label>
-              <select name="per_page" class="form-select">
-                <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
-                <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
-                <option value="300" {% if per_page == 300 %}selected{% endif %}>300</option>
-                <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
-              </select>
-            </div>
-
-            <button type="submit" class="btn btn-primary">検索</button>
-
-            <a class="btn btn-outline-secondary"
-               href="{% url 'connect:user_target_rank' %}">
-              リセット
-            </a>
-          </form>
-
-          {% if user_access.can_execute %}
-          <!-- POST：全件登録 -->
-          <form method="post"
-                class="mb-0"
-                id="registerForm"
-                data-confirm="全件登録します。よろしいですか？">
-            {% csrf_token %}
-            <input type="hidden" name="prev_month" value="{{ selected_prev_month }}">
-            <button type="submit"
-                    class="btn btn-success"
-                    {% if not selected_prev_month %}disabled{% endif %}>
-              全件登録
-            </button>
-          </form>
-          {% endif %}
-
-          {% if selected_period %}
-            {% jp_year_month_label selected_period.year selected_period.month as period_label %}
-            {% include "com/_selection_indicator.html" with date_text=period_label %}
-          {% endif %}
+          </div>
         </div>
       </div>
 
-      <div class="card shadow-sm">
-        <div class="card-body">
+      <div class="card shadow-sm flex-grow-1" style="min-height: 0;">
+        <div class="card-body d-flex flex-column" style="min-height: 0; overflow: hidden;">
 
           {% if selected_prev_month %}
             {% if rows %}
               {% include "com/_list_summary.html" with list_title="ユーザー一覧" %}
 
-              <div class="table-responsive" style="overflow-x:auto; max-height:650px;">
+              <div class="table-responsive flex-grow-1" style="min-height: 0; overflow-x:auto; overflow-y:auto;">
                 <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
-                  <thead class="table-light sticky-top">
+                  <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                     <tr>
                       {% for col in columns %}
                         <th>{{ col }}</th>

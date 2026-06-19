@@ -29,6 +29,21 @@
       </svg>
     </button>
   {% endif %}
+  {% if import_modal_id and user_access.can_execute %}
+    <button
+      type="button"
+      class="btn btn-sm btn-outline-success rounded-circle bonus-import-button"
+      data-toggle="modal"
+      data-target="#{{ import_modal_id }}"
+      aria-label="{{ import_title|default:'一括登録' }}"
+      title="{{ import_title|default:'一括登録' }}"
+      style="width: 1.65rem; height: 1.65rem; padding: 0; line-height: 1;"
+    >
+      <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+        <path fill="currentColor" d="M8 1a.5.5 0 0 1 .5.5v7.3l2.15-2.15a.5.5 0 0 1 .7.7l-3 3a.5.5 0 0 1-.7 0l-3-3a.5.5 0 1 1 .7-.7L7.5 8.8V1.5A.5.5 0 0 1 8 1ZM2.5 10a.5.5 0 0 1 .5.5V13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0V13a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5Z"/>
+      </svg>
+    </button>
+  {% endif %}
 </div>
 
 <div
@@ -61,7 +76,7 @@
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {
-  document.querySelectorAll(".bonus-help-modal, .bonus-history-modal").forEach(function(modal) {
+  document.querySelectorAll(".bonus-help-modal, .bonus-history-modal, .bonus-import-modal").forEach(function(modal) {
     if (modal.parentElement !== document.body) {
       document.body.appendChild(modal);
     }

@@ -1,4 +1,72 @@
 
+USERS_TARGET_RANK_INSERT_SQL = """
+INSERT INTO bonus_db.users_target_rank
+(
+  `jmoa_code`,
+  `introducer_code`,
+  `placement_code`,
+  `group_code`,
+  `send_bv_name`,
+  `status_code`,
+  `rank`,
+  `salon_administrator`,
+  `salon_name`,
+  `interim_at`,
+  `activated_at`,
+  `created_at`,
+  `target_rank`,
+  `max_up_at`,
+  `new_rank`
+)
+SELECT
+  t.jmoa_code,
+  t.introducer_code,
+  t.placement_code,
+  t.group_code,
+  t.send_bv_name,
+  t.status_code,
+  t.`rank`,
+  t.salon_administrator,
+  t.salon_name,
+  t.interim_at,
+  t.activated_at,
+  t.created_at,
+
+  CASE
+    WHEN x.fluctuation_name REGEXP '^[0-9]+$' THEN CAST(x.fluctuation_name AS UNSIGNED)
+    ELSE NULL
+  END AS target_rank,
+
+  x.created_at AS max_up_at,
+
+  CASE
+    WHEN t.status_code <> 1 THEN 9
+    WHEN x.fluctuation_name REGEXP '^[0-9]+$' THEN CAST(x.fluctuation_name AS UNSIGNED)
+    ELSE t.`rank`
+  END AS new_rank
+
+FROM bonus_db.users t
+LEFT JOIN (
+  SELECT user_id, fluctuation_name, created_at
+  FROM (
+    SELECT
+      user_id,
+      fluctuation_name,
+      created_at,
+      id,
+      ROW_NUMBER() OVER (
+        PARTITION BY user_id
+        ORDER BY created_at DESC, id DESC
+      ) AS rn
+    FROM bonus_db.users_rank_up_history
+    WHERE created_at <= %s
+  ) r
+  WHERE rn = 1
+) x
+  ON t.jmoa_code = x.user_id
+"""
+
+
 ## ベーシックボーナス
 def get_basic_bonus_insert_data(selected_kibetu, rows):
 

@@ -38,8 +38,8 @@ MENU_FEATURES = (
         ("orders_distribution_bv",),
     ),
     MenuFeature("api_users_bv", "会員BV特別反映情報", "orders", ("api_users_bv",)),
-    MenuFeature("repurchase_last_month", "購入情報登録", "orders", ("repurchase_last_month",)),
-    MenuFeature("repurchase_list", "購入情報一覧", "orders", ("repurchase_list",)),
+    MenuFeature("repurchase_last_month", "ボーナス購入情報登録", "orders", ("repurchase_last_month",)),
+    MenuFeature("repurchase_list", "ボーナス購入情報一覧", "orders", ("repurchase_list",)),
     MenuFeature("bonus_payment_date", "注文別ボーナス支払日", "orders", ("bonus_payment_date",)),
     MenuFeature("cooling_off", "クーリングオフ", "orders", ("cooling_off",)),
     # --- ボーナス検索（個人） ---
@@ -126,6 +126,12 @@ MENU_FEATURES = (
         "週別 チーム業績",
         "business_search",
         ("business_team_week_performance",),
+    ),
+    MenuFeature(
+        "business_carry_over_performance",
+        "繰り越し業績照会",
+        "business_search",
+        ("business_carry_over_performance",),
     ),
     # --- 設定・マスタ ---
     MenuFeature("kibetu", "期別（週）", "settings", ("kibetu",)),
