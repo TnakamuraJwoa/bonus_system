@@ -1,0 +1,98 @@
+{% load humanize custom_filters %}
+<div
+  class="modal fade bonus-history-modal"
+  id="{{ modal_id }}"
+  tabindex="-1"
+  role="dialog"
+  aria-labelledby="{{ modal_id }}Label"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title" id="{{ modal_id }}Label">{{ modal_title|default:"登録履歴" }}</h5>
+          <div class="small text-muted">登録済みの期別を確認して、表示したい期別を選択できます。</div>
+        </div>
+        <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        {% if registration_history_rows %}
+          <div class="business-history-summary mb-3">
+            <div>
+              <div class="fw-bold">登録履歴一覧</div>
+              <div class="small text-muted">期別・期間・明細件数を確認できます。</div>
+            </div>
+            <div class="business-history-summary__count">
+              {{ registration_history_rows|length }} 件
+            </div>
+          </div>
+
+          <div class="table-responsive business-history-table-wrap">
+            <table class="table table-hover table-sm align-middle mb-0 business-history-table">
+              <thead>
+                <tr>
+                  <th>期別</th>
+                  <th>期間 / 支払日</th>
+                  <th class="text-end">明細件数</th>
+                  <th>登録日時</th>
+                  <th class="text-center">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for h in registration_history_rows %}
+                  <tr class="{% if h.kibetu == selected_q_kibetu %}business-history-table__selected{% endif %}">
+                    <td>
+                      <div class="business-history-kibetu">
+                        {{ h.kibetu }}
+                        {% if h.kibetu == selected_q_kibetu %}
+                          <span class="business-history-badge">選択中</span>
+                        {% endif %}
+                      </div>
+                    </td>
+                    <td>
+                      <div class="business-history-period">
+                        {% if h.st_date %}
+                          {{ h.st_date|jp_date }} ～ {{ h.end_date|jp_date }}
+                          {% if h.completion_date %}
+                            <span class="business-history-period__sub">完成日：{{ h.completion_date|jp_date }}</span>
+                          {% endif %}
+                        {% elif h.payment_date %}
+                          支払日：{{ h.payment_date|jp_date }}
+                        {% elif h.year and h.month %}
+                          {% jp_year_month_label h.year h.month %}
+                        {% else %}
+                          <span class="text-muted">日付未設定</span>
+                        {% endif %}
+                      </div>
+                    </td>
+                    <td class="text-end">
+                      <span class="business-history-count">{{ h.row_count|intcomma }}</span>
+                    </td>
+                    <td>
+                      <div>{{ h.created_at|date:"Y-m-d H:i:s" }}</div>
+                      {% if h.updated_at and h.updated_at != h.created_at %}
+                        <div class="small text-muted">更新：{{ h.updated_at|date:"Y-m-d H:i:s" }}</div>
+                      {% endif %}
+                    </td>
+                    <td class="text-center">
+                      <a class="btn btn-primary btn-sm"
+                         href="{% url registration_target_url_name %}?q_kibetu={{ h.kibetu|urlencode }}">表示</a>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="mb-0 text-muted">登録履歴はありません。</p>
+        {% endif %}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">閉じる</button>
+      </div>
+    </div>
+  </div>
+</div>

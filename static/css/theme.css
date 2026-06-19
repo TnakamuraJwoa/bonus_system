@@ -75,18 +75,48 @@ body {
 .app-navbar .navbar-brand.brand-saas {
     color: #f8fafc !important;
     font-weight: 700;
-    font-size: 1.25rem !important;
-    letter-spacing: 0.02em;
-    gap: 0.65rem;
+    font-size: 1.35rem !important;
+    letter-spacing: 0.01em;
+    gap: 0.75rem;
+}
+
+.brand-title {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    line-height: 1;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    color: #f8fafc;
+    text-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.12),
+        0 8px 22px rgba(56, 189, 248, 0.16);
+}
+
+.brand-title::after {
+    content: "";
+    position: absolute;
+    left: 2px;
+    right: 2px;
+    bottom: -7px;
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.75), rgba(99, 102, 241, 0.55), transparent);
+    opacity: 0.65;
 }
 
 .logo-box {
-    display: inline-block;
-    width: 34px;
-    height: 34px;
-    border-radius: 10px;
-    background: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
-    box-shadow: 0 2px 10px rgba(99, 102, 241, 0.45);
+    display: block;
+    width: 42px;
+    height: 42px;
+    padding: 3px;
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.72);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    object-fit: contain;
+    box-shadow:
+        0 4px 14px rgba(15, 23, 42, 0.35),
+        0 0 18px rgba(56, 189, 248, 0.16);
     flex-shrink: 0;
 }
 

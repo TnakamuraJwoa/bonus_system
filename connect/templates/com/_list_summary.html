@@ -1,15 +1,30 @@
-{% load humanize %}
-<div class="list-summary mb-3">
-  <div class="list-summary__title">
-    <span class="list-summary__marker" aria-hidden="true"></span>
-    <span class="list-summary__text">{{ list_title|default:"一覧" }}</span>
-  </div>
-  <p class="list-summary__count mb-0">
-    <span class="list-summary__label">件数</span>
-    {% if display_from %}
-      <span class="list-summary__num">{{ display_from|intcomma }}</span><span class="list-summary__range">–</span><span class="list-summary__num">{{ display_to|intcomma }}</span><span class="list-summary__sep"> / </span><span class="list-summary__num">{{ total_count|intcomma }}</span><span class="list-summary__unit"> 件</span>
-    {% else %}
-      <span class="list-summary__num">{{ total_count|intcomma }}</span><span class="list-summary__unit"> 件</span>
-    {% endif %}
-  </p>
-</div>
+{% load humanize %}
+
+<div class="list-summary mb-3">
+
+  <div class="list-summary__title">
+
+    <span class="list-summary__marker" aria-hidden="true"></span>
+
+    <span class="list-summary__text">{{ list_title|default:"一覧" }}</span>
+
+  </div>
+
+  <p class="list-summary__count mb-0">
+
+    <span class="list-summary__label">件数</span>
+
+    {% if display_from %}
+
+      <span class="list-summary__num">{{ display_from|intcomma }}</span><span class="list-summary__range">–</span><span class="list-summary__num">{{ display_to|intcomma }}</span><span class="list-summary__sep"> / </span><span class="list-summary__num">{{ total_count|intcomma }}</span><span class="list-summary__unit"> 件</span>
+
+    {% else %}
+
+      <span class="list-summary__num">{{ total_count|intcomma }}</span><span class="list-summary__unit"> 件</span>
+
+    {% endif %}
+
+  </p>
+
+</div>
+

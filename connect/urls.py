@@ -1,5 +1,9 @@
 from django.urls import path
 from . import views
+from .business_team_performance import (
+    BusinessTeamMonthPerformanceView,
+    BusinessTeamWeekPerformanceView,
+)
 
 
 
@@ -18,11 +22,32 @@ urlpatterns = [
     path('user_target_rank/', views.UserTargetRankView.as_view(), name = "user_target_rank"),
     path('title_registration/', views.TitleRegistrationView.as_view(), name = "title_registration"),
     path("bonus_payment_date/", views.BonusPaymentDateView.as_view(), name="bonus_payment_date"),
+    path("bonus_payment_date/template/", views.BonusPaymentDateTemplateView.as_view(), name="bonus_payment_date_template"),
     path("active_users/", views.ActiveUsersView.as_view(), name="active_users"),
     path("cooling_off/", views.CoolingOffView.as_view(), name="cooling_off"),
 
     path('users/', views.UsersView.as_view(), name = "users"),
     path('title_user/', views.TitleUserView.as_view(), name = "title_user"),
+    path(
+        "business_personal_performance/",
+        views.BusinessPersonalMonthPerformanceView.as_view(),
+        name="business_personal_performance",
+    ),
+    path(
+        "business_team_performance/",
+        BusinessTeamMonthPerformanceView.as_view(),
+        name="business_team_performance",
+    ),
+    path(
+        "business_personal_week_performance/",
+        views.BusinessPersonalWeekPerformanceView.as_view(),
+        name="business_personal_week_performance",
+    ),
+    path(
+        "business_team_week_performance/",
+        BusinessTeamWeekPerformanceView.as_view(),
+        name="business_team_week_performance",
+    ),
 
     path('orders/', views.OrdersView.as_view(), name = "orders"),
     path("orders/<int:pk>/", views.OrderDetailView.as_view(), name="order_detail"),
@@ -38,12 +63,16 @@ urlpatterns = [
     path('three_star_global_bonus/', views.ThreeStarGlobalBonusView.as_view(), name = "three_star_global_bonus"),
 
     path('week_bonus/', views.WeekBonusView.as_view(), name = "week_bonus"),
+    path('month_title/', views.MonthTitleView.as_view(), name = "month_title"),
     path('month_bonus/', views.MonthBonusView.as_view(), name = "month_bonus"),
+    path("help_text/", views.BonusHelpTextView.as_view(), name="help_text"),
     path('bonus_histry/', views.BonusHistryView.as_view(), name = "bonus_histry"),
+    path('bonus_histry_month/', views.BonusHistryMonthView.as_view(), name = "bonus_histry_month"),
 
     path('s_drive_bonus/', views.S_DriveBonusView.as_view(), name = "s_drive_bonus"),
     path('s_basic_bonus/', views.S_BasicBonusView.as_view(), name = "s_basic_bonus"),
     path('s_matching_bonus/', views.S_MatchingBonusView.as_view(), name = "s_matching_bonus"),
+    path('s_month_title/', views.S_MonthTitleView.as_view(), name = "s_month_title"),
     path('s_title_bonus/', views.S_TitleBonusView.as_view(), name = "s_title_bonus"),
     path('s_title_diff_bonus/', views.S_TitleDiffBonusView.as_view(), name = "s_title_diff_bonus"),
     path('s_repurchase_over_bonus/', views.S_RepurchaseOverBonusView.as_view(), name = "s_repurchase_over_bonus"),

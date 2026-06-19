@@ -16,7 +16,7 @@
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <h5 class="page-title mb-0">【ボーナス計算 - 登録履歴】</h5>
+          <h5 class="page-title mb-0">【ボーナス計算 - 登録履歴（週）】</h5>
         </div>
       </div>
 
@@ -27,7 +27,10 @@
           {% if rows %}
 
             <div class="d-flex justify-content-between align-items-center mb-2">
-              <div class="fw-bold">登録履歴一覧</div>
+              <div class="d-flex align-items-center gap-3">
+                <div class="fw-bold">登録履歴一覧（週次）</div>
+                {% include "com/_bonus_histry_legend.html" %}
+              </div>
               <div class="text-end">
                 <strong>件数：{{ rows|length }} 件</strong>
               </div>
@@ -43,19 +46,23 @@
                        style="position: sticky; top: 0; z-index: 1;">
                   <tr>
                     <th class="text-center" style="width:170px;">期別</th>
+                    <th class="text-center">完成日</th>
                     <th class="text-center">ドライブボーナス</th>
                     <th class="text-center">ベーシックボーナス</th>
-                    <th class="text-center">タイトルボーナス</th>
+                    <th class="text-center">マッチングボーナス</th>
+                    <th class="text-center bonus-histry-col bonus-histry-col--week">週ボーナス</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {% for r in rows %}
-                    <tr>
+                    <tr class="{% if r.is_next_completion_date %}table-primary{% endif %}">
                       <td class="text-center">{{ r.kibetu }}</td>
-                      <td class="text-center">{{ r.drive_bonus|default:"" }}</td>
-                      <td class="text-center">{{ r.basic_bonus|default:"" }}</td>
-                      <td class="text-center">{{ r.title_bonus|default:"" }}</td>
+                      <td class="text-center">{{ r.completion_date|default:"" }}</td>
+                      <td class="text-center{% if r.drive_bonus_is_empty %} bonus-histry-cell--empty{% endif %}">{{ r.drive_bonus|default:"" }}</td>
+                      <td class="text-center{% if r.basic_bonus_is_empty %} bonus-histry-cell--empty{% endif %}">{{ r.basic_bonus|default:"" }}</td>
+                      <td class="text-center{% if r.matching_bonus_is_empty %} bonus-histry-cell--empty{% endif %}">{{ r.matching_bonus|default:"" }}</td>
+                      <td class="text-center bonus-histry-col bonus-histry-col--week{% if r.week_bonus_is_empty %} bonus-histry-cell--empty{% endif %}">{{ r.week_bonus|default:"" }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

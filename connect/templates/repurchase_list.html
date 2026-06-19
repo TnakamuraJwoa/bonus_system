@@ -3,6 +3,36 @@
 
 {% block head %}
 <link href="{% static 'css/common.css' %}" rel="stylesheet">
+<style>
+  .repurchase-list-filter .form-control,
+  .repurchase-list-filter .form-select,
+  .repurchase-list-filter .btn {
+    min-height: 34px;
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+    font-size: 0.875rem;
+  }
+
+  .repurchase-list-filter .form-label {
+    line-height: 1.1;
+  }
+
+  .repurchase-list-bv-form {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    flex-wrap: nowrap;
+  }
+
+  .repurchase-list-bv-form .form-control {
+    width: 70px;
+    min-height: 30px;
+    padding: 0.25rem 0.4rem;
+    font-size: 0.875rem;
+  }
+
+</style>
 {% endblock %}
 
 {% block contents %}
@@ -10,80 +40,75 @@
 <div class="container-fluid mt-3 list-page-viewport">
   <div class="row g-1 h-100">
 
-    {% include "com/_sidebar.html" with active_menu="repurchase_list" %}
+    {% include "com/_sidebar_orders.html" with active_menu="repurchase_list" %}
 
     <main class="col-12 col-md-9 col-lg-10 list-page-main">
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
 
-          <h5 class="page-title mb-3">【設定 - 購入情報登録一覧】</h5>
+          <h5 class="page-title mb-3">【注文管理 - 購入情報登録一覧】</h5>
           <div class="fw-bold mb-2">全件表示</div>
 
-          <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+          <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap repurchase-list-filter">
 
-            <div style="min-width: 220px;">
+            <div style="width: 130px;">
               <select name="target_month" class="form-select">
                 <option value="">全件表示</option>
 
                 {% for obj in month_choices %}
                   <option value="{{ obj.value }}"
                     {% if obj.value == selected_month %}selected{% endif %}>
-
-                    {% if obj.value in registered_months %}
-                      ★ {{ obj.year }}年{{ obj.month }}月
-                    {% else %}
-                      　{{ obj.year }}年{{ obj.month }}月
-                    {% endif %}
+                    {{ obj.year }}年{{ obj.month }}月
                   </option>
                 {% endfor %}
               </select>
             </div>
 
-            <div>
+            <div style="width: 145px;">
               <label class="form-label mb-0 small text-muted">注文番号</label>
               <input type="text"
                      name="q_order_code"
                      class="form-control"
                      value="{{ q_order_code|default:'' }}"
-                     placeholder="例: MF05621663365">
+                     placeholder="">
             </div>
 
-            <div>
+            <div style="width: 115px;">
               <label class="form-label mb-0 small text-muted">会員番号</label>
               <input type="text"
                      name="q_code"
                      class="form-control"
                      value="{{ q_code|default:'' }}"
-                     placeholder="例: JP0416">
+                     placeholder="">
             </div>
 
-            <div>
+            <div style="width: 125px;">
               <label class="form-label mb-0 small text-muted">会員名</label>
               <input type="text"
                      name="q_name"
                      class="form-control"
                      value="{{ q_name|default:'' }}"
-                     placeholder="例: 野口">
+                     placeholder="">
             </div>
 
-            <div>
-              <label class="form-label mb-0 small text-muted">ボーナス支払日（FROM）</label>
+            <div style="width: 130px;">
+              <label class="form-label mb-0 small text-muted">支払日FROM</label>
               <input type="date"
                      name="q_bonus_date_from"
-                     class="form-control"
+                     class="form-control js-date-paste-normalize"
                      value="{{ q_bonus_date_from|default:'' }}">
             </div>
 
-            <div>
-              <label class="form-label mb-0 small text-muted">ボーナス支払日（TO）</label>
+            <div style="width: 130px;">
+              <label class="form-label mb-0 small text-muted">支払日TO</label>
               <input type="date"
                      name="q_bonus_date_to"
-                     class="form-control"
+                     class="form-control js-date-paste-normalize"
                      value="{{ q_bonus_date_to|default:'' }}">
             </div>
 
-            <div>
+            <div style="width: 150px;">
               <label class="form-label mb-0 small text-muted">注文区分</label>
 
               <div class="filter-dropdown">
@@ -91,7 +116,7 @@
                         type="button"
                         aria-haspopup="true"
                         aria-expanded="false"
-                        style="min-width: 220px; text-align: left;">
+                        style="width: 150px; text-align: left;">
                   {% if q_order_types %}
                     注文区分（{{ q_order_types|length }}件）
                   {% else %}
@@ -191,6 +216,21 @@
 
           </form>
 
+          {% if user_access.can_delete %}
+            <form method="post"
+                  class="mt-2"
+                  data-confirm="{{ selected_period.year }}年{{ selected_period.month }}月 の購入情報をすべて削除しますか？この操作は元に戻せません。">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="delete_registered_month">
+              <input type="hidden" name="target_month" value="{{ selected_month }}">
+              <button type="submit"
+                      class="btn btn-danger btn-sm"
+                      {% if not selected_period %}disabled{% endif %}>
+                選択年月のデータを削除
+              </button>
+            </form>
+          {% endif %}
+
           {% if selected_period or q_order_types %}
             <div class="selection-indicator-group mt-3">
               <span class="selection-indicator__label mr-1">選択中：</span>
@@ -263,7 +303,28 @@
                       <td>{{ r.jwoa_code }}</td>
                       <td>{{ r.send_bv_name }}</td>
                       <td>{{ r.total_bv }}</td>
-                      <td>{{ r.bv }}</td>
+                      <td>
+                        {% if user_access.can_update %}
+                          <form method="post"
+                                class="repurchase-list-bv-form js-bv-update-form mb-0"
+                                data-order-code="{{ r.order_code }}"
+                                data-current-bv="{{ r.bv }}">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="update_bv">
+                            <input type="hidden" name="row_id" value="{{ r.id }}">
+                            <input type="hidden" name="next_query" value="{{ request.GET.urlencode }}">
+                            <input type="text"
+                                   name="bv"
+                                   class="form-control form-control-sm text-end"
+                                   value="{{ r.bv }}"
+                                   inputmode="decimal"
+                                   required>
+                            <button type="submit" class="btn btn-warning btn-sm">更新</button>
+                          </form>
+                        {% else %}
+                          {{ r.bv }}
+                        {% endif %}
+                      </td>
                       <td>{{ r.deposit_at }}</td>
                       <td>{{ r.order_at }}</td>
                       <td>{{ r.bonus_payment_date }}</td>
@@ -291,4 +352,122 @@
   </div>
 </div>
 
+<div class="modal fade" id="bvUpdateConfirmModal" tabindex="-1" role="dialog" aria-labelledby="bvUpdateConfirmModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="bvUpdateConfirmModalLabel">BV更新確認</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">以下の内容でBVを更新します。</p>
+        <div class="border rounded p-3 bg-light">
+          <div class="mb-1">注文番号：<strong id="bvUpdateOrderCode"></strong></div>
+          <div class="mb-1">現在のBV：<strong id="bvUpdateCurrentValue"></strong></div>
+          <div>更新後のBV：<strong id="bvUpdateNewValue"></strong></div>
+        </div>
+        <p class="text-muted small mb-0 mt-2">同じ注文番号の total_bv も再計算されます。</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
+        <button type="button" class="btn btn-warning" id="bvUpdateConfirmButton">更新する</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block script %}
+<script>
+(function () {
+  var pendingForm = null;
+  var modal = $("#bvUpdateConfirmModal");
+
+  document.querySelectorAll(".js-bv-update-form").forEach(function (form) {
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+
+      var bvInput = form.querySelector('input[name="bv"]');
+      pendingForm = form;
+
+      document.getElementById("bvUpdateOrderCode").textContent = form.dataset.orderCode || "";
+      document.getElementById("bvUpdateCurrentValue").textContent = form.dataset.currentBv || "";
+      document.getElementById("bvUpdateNewValue").textContent = bvInput ? bvInput.value : "";
+
+      modal.modal("show");
+    });
+  });
+
+  document.getElementById("bvUpdateConfirmButton").addEventListener("click", function () {
+    if (!pendingForm) return;
+    modal.modal("hide");
+    pendingForm.submit();
+  });
+})();
+
+(function () {
+  function normalizeDateText(value) {
+    var text = (value || "").trim();
+    var match;
+
+    if (/^\d{8}$/.test(text)) {
+      match = [text, text.slice(0, 4), text.slice(4, 6), text.slice(6, 8)];
+    } else {
+      match = text.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/)
+        || text.match(/^(\d{4})年\s*(\d{1,2})月\s*(\d{1,2})日?$/);
+    }
+
+    if (!match) {
+      return "";
+    }
+
+    var year = Number(match[1]);
+    var month = Number(match[2]);
+    var day = Number(match[3]);
+    var date = new Date(year, month - 1, day);
+
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) {
+      return "";
+    }
+
+    return [
+      String(year).padStart(4, "0"),
+      String(month).padStart(2, "0"),
+      String(day).padStart(2, "0")
+    ].join("-");
+  }
+
+  document.querySelectorAll(".js-date-paste-normalize").forEach(function (input) {
+    input.addEventListener("paste", function (event) {
+      var pastedText = (event.clipboardData || window.clipboardData).getData("text");
+      var normalized = normalizeDateText(pastedText);
+
+      if (!normalized) {
+        return;
+      }
+
+      event.preventDefault();
+      input.value = normalized;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    input.addEventListener("copy", function (event) {
+      if (!input.value) {
+        return;
+      }
+
+      event.preventDefault();
+      event.clipboardData.setData("text/plain", input.value);
+    });
+  });
+})();
+</script>
 {% endblock %}

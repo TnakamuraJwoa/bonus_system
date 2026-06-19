@@ -2,7 +2,7 @@
 <nav class="col-12 col-md-3 col-lg-2">
   <div class="card shadow-sm position-sticky" style="top: 1rem;">
 
-    {% if user_access|can_menu:"s_drive_bonus" or user_access|can_menu:"s_basic_bonus" or user_access|can_menu:"s_matching_bonus" %}
+    {% if user_access|can_menu:"s_drive_bonus" or user_access|can_menu:"s_basic_bonus" or user_access|can_menu:"s_matching_bonus" or user_access|can_menu:"s_month_title" %}
     <div class="card-body">
       <div class="fw-bold mb-2">■ 週ボーナス</div>
 
@@ -22,10 +22,18 @@
            href="{% url 'connect:s_matching_bonus' %}">マッチングボーナス</a>
         {% endif %}
       </div>
+
+      {% if user_access|can_menu:"s_month_title" %}
+      <div class="fw-bold mt-4 mb-2">■ 月タイトル</div>
+      <div class="list-group">
+        <a class="list-group-item list-group-item-action {% if active_menu == 'month_title' %}active{% endif %}"
+           href="{% url 'connect:s_month_title' %}">月タイトル</a>
+      </div>
+      {% endif %}
     </div>
     {% endif %}
 
-    {% if user_access|can_menu:"s_title_bonus" or user_access|can_menu:"s_title_diff_bonus" or user_access|can_menu:"s_repurchase_over_bonus" %}
+    {% if user_access|can_menu:"s_title_bonus" or user_access|can_menu:"s_title_diff_bonus" or user_access|can_menu:"s_repurchase_over_bonus" or user_access|can_menu:"s_three_star_global_bonus" %}
     <div class="card-body">
       <div class="fw-bold mb-2">■ 月ボーナス</div>
 
@@ -44,17 +52,11 @@
         <a class="list-group-item list-group-item-action {% if active_menu == 'repurchase_over_bonus' %}active{% endif %}"
            href="{% url 'connect:s_repurchase_over_bonus' %}">再購入オーバーボーナス</a>
         {% endif %}
-      </div>
-    </div>
-    {% endif %}
 
-    {% if user_access|can_menu:"s_three_star_global_bonus" %}
-    <div class="card-body">
-      <div class="fw-bold mb-2">■ 特別ボーナス</div>
-
-      <div class="list-group">
+        {% if user_access|can_menu:"s_three_star_global_bonus" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'three_star_global_bonus' %}active{% endif %}"
-           href="{% url 'connect:s_three_star_global_bonus' %}">3スターダイヤグローバル配当(Q)</a>
+           href="{% url 'connect:s_three_star_global_bonus' %}">3スター配当</a>
+        {% endif %}
       </div>
     </div>
     {% endif %}

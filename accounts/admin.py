@@ -49,6 +49,7 @@ USER_ACCESS_FIELDSETS = (
     ("注文", {"fields": ("menu_group_orders",)}),
     ("ボーナス検索", {"fields": ("menu_group_bonus_search",)}),
     ("ボーナス計算", {"fields": ("menu_group_bonus_calc",)}),
+    ("業務検索", {"fields": ("menu_group_business_search",)}),
     ("設定・マスタ", {"fields": ("menu_group_settings",)}),
     (
         "操作権限",
@@ -74,6 +75,9 @@ class UserAccessProfileInline(admin.StackedInline):
     verbose_name = "操作権限"
     verbose_name_plural = "操作権限（画面・操作を細かく設定）"
 
+    class Media:
+        css = {"all": ("css/admin_user_access.css",)}
+
 
 @admin.register(UserAccessProfile)
 class UserAccessProfileAdmin(admin.ModelAdmin):
@@ -98,6 +102,9 @@ class UserAccessProfileAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {"fields": ("user",)}),
     ) + USER_ACCESS_FIELDSETS
+
+    class Media:
+        css = {"all": ("css/admin_user_access.css",)}
 
     @admin.display(description="閲覧画面")
     def menu_permissions_summary(self, obj):

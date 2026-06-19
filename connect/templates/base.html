@@ -12,8 +12,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <link href="{% static 'css/base_style.css' %}" rel="stylesheet"/>
-    <link href="{% static 'css/theme.css' %}?v=22" rel="stylesheet"/>
-    <link href="{% static 'css/common.css' %}?v=24" rel="stylesheet"/>
+    <link href="{% static 'css/theme.css' %}?v=26" rel="stylesheet"/>
+    <link href="{% static 'css/common.css' %}?v=51" rel="stylesheet"/>
     <!-- Bootstrap CSS (v4) -->
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap JS: jQuery → Popper 1 → Bootstrap 4 の順 -->
@@ -27,8 +27,8 @@
     <!-- Navigation-->
     <nav class="navbar navbar-expand-lg app-navbar px-3">
         <a class="navbar-brand brand-saas d-flex align-items-center" href="{% if user.is_authenticated %}{% url 'connect:users' %}{% else %}{% url 'account_login' %}{% endif %}">
-            <span class="logo-box"></span>
-            Bonus System
+            <img class="logo-box" src="{% static 'imgs/logo.png' %}" alt="Bonus System">
+            <span class="brand-title">Bonus System</span>
         </a>
 
         {% if user.is_authenticated %}
@@ -45,6 +45,7 @@
         <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav ml-auto">
                 {% if user.is_authenticated %}
+
                 {% if user_access|has_nav:"users" %}
                 <li class="nav-item{% nav_group_active 'users' as users_active %}{% if users_active %} nav-item--active{% endif %}">
                     <a class="nav-link{% if users_active %} nav-link--active{% endif %}" href="{% url 'connect:users' %}">会員検索 </a>
@@ -102,6 +103,16 @@
                             合計実績
                         </a>
                     </div>
+                </li>
+                {% endif %}
+
+                {% if user_access|has_nav:"business_search" %}
+                {% nav_group_active 'business_search' as business_search_active %}
+                <li class="nav-item{% if business_search_active %} nav-item--active{% endif %}">
+                    <a class="nav-link{% if business_search_active %} nav-link--active{% endif %}"
+                       href="{% if user_access|can_menu:'business_personal_week_performance' %}{% url 'connect:business_personal_week_performance' %}{% elif user_access|can_menu:'business_team_week_performance' %}{% url 'connect:business_team_week_performance' %}{% elif user_access|can_menu:'business_personal_performance' %}{% url 'connect:business_personal_performance' %}{% else %}{% url 'connect:business_team_performance' %}{% endif %}">
+                        業務検索
+                    </a>
                 </li>
                 {% endif %}
 
@@ -318,15 +329,20 @@ document.addEventListener("DOMContentLoaded", function(){
 
 });
 </script>
+<script src="{% static 'js/kibetu-dropdown.js' %}"></script>
 <script>
 $(function () {
+  function closeAllFilterDropdowns() {
+    $('.filter-dropdown.is-open').removeClass('is-open');
+    $('.filter-dropdown__toggle').attr('aria-expanded', 'false');
+  }
+
   $(document).on('click', '.filter-dropdown__toggle', function (e) {
     e.preventDefault();
     e.stopPropagation();
     var $dropdown = $(this).closest('.filter-dropdown');
     var isOpen = $dropdown.hasClass('is-open');
-    $('.filter-dropdown.is-open').removeClass('is-open');
-    $('.filter-dropdown__toggle').attr('aria-expanded', 'false');
+    closeAllFilterDropdowns();
     if (!isOpen) {
       $dropdown.addClass('is-open');
       $(this).attr('aria-expanded', 'true');
@@ -337,11 +353,122 @@ $(function () {
     e.stopPropagation();
   });
 
+  $(document).on('change', '.filter-dropdown__menu input, .filter-dropdown__menu select', function () {
+    closeAllFilterDropdowns();
+  });
+
   $(document).on('click', function () {
-    $('.filter-dropdown.is-open').removeClass('is-open');
-    $('.filter-dropdown__toggle').attr('aria-expanded', 'false');
+    closeAllFilterDropdowns();
   });
 });
+</script>
+<div class="modal fade" id="appConfirmModal" tabindex="-1" role="dialog" aria-labelledby="appConfirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="appConfirmModalLabel">確認</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0" id="appConfirmModalMessage"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">いいえ</button>
+                <button type="button" class="btn btn-primary" id="appConfirmModalYes">はい</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    var pendingConfirmAction = null;
+    var modal = $("#appConfirmModal");
+    var message = document.getElementById("appConfirmModalMessage");
+    var yesButton = document.getElementById("appConfirmModalYes");
+
+    function openConfirm(confirmMessage, onConfirm) {
+        pendingConfirmAction = onConfirm;
+        message.textContent = confirmMessage || "実行しますか？";
+        modal.modal("show");
+    }
+
+    function showFormLoading(form) {
+        var loadingMessage = form.getAttribute("data-loading-message");
+        if (!loadingMessage) {
+            return;
+        }
+
+        var overlaySelector = form.getAttribute("data-loading-target");
+        var overlay = overlaySelector ? document.querySelector(overlaySelector) : null;
+        if (overlay) {
+            var messageEl = overlay.querySelector("[data-loading-message]");
+            if (messageEl) {
+                messageEl.textContent = loadingMessage;
+            }
+            overlay.classList.add("is-active");
+            overlay.setAttribute("aria-hidden", "false");
+        }
+
+        form.querySelectorAll("button, input[type='submit']").forEach(function (button) {
+            button.disabled = true;
+        });
+
+        var loadingButton = form.querySelector("[data-loading-button]");
+        if (loadingButton) {
+            loadingButton.textContent = loadingMessage;
+        }
+    }
+
+    document.addEventListener("submit", function (event) {
+        var form = event.target;
+        if (!form.matches("form[data-confirm]")) {
+            return;
+        }
+
+        event.preventDefault();
+        openConfirm(form.getAttribute("data-confirm"), function () {
+            showFormLoading(form);
+            form.submit();
+        });
+    });
+
+    document.addEventListener("click", function (event) {
+        var trigger = event.target.closest("[data-confirm-submit]");
+        if (!trigger) {
+            return;
+        }
+
+        event.preventDefault();
+        openConfirm(trigger.getAttribute("data-confirm-submit"), function () {
+            var form = trigger.form;
+            if (!form) {
+                return;
+            }
+
+            if (trigger.name) {
+                var hidden = document.createElement("input");
+                hidden.type = "hidden";
+                hidden.name = trigger.name;
+                hidden.value = trigger.value;
+                form.appendChild(hidden);
+            }
+
+            showFormLoading(form);
+            form.submit();
+        });
+    });
+
+    yesButton.addEventListener("click", function () {
+        var action = pendingConfirmAction;
+        pendingConfirmAction = null;
+        modal.modal("hide");
+        if (action) {
+            action();
+        }
+    });
+})();
 </script>
 {% block script %}{% endblock %}
 </body>

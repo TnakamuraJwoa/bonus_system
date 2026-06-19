@@ -1,9 +1,12 @@
 from datetime import date, datetime
 
 from django import template
+from django.db.models import Q
 from django.urls import reverse
 from django.utils.html import format_html
+from dateutil.relativedelta import relativedelta
 
+from connect.bonus_help import get_bonus_help
 from connect.models import MonthlyPeriod, PeriodMaster
 
 register = template.Library()
@@ -37,6 +40,8 @@ INDIVIDUAL_BONUS_URL_PAIRS = {
     "s_basic_bonus": ("basic_bonus", "s_basic_bonus"),
     "matching_bonus": ("matching_bonus", "s_matching_bonus"),
     "s_matching_bonus": ("matching_bonus", "s_matching_bonus"),
+    "month_title": ("month_title", "s_month_title"),
+    "s_month_title": ("month_title", "s_month_title"),
     "title_bonus": ("title_bonus", "s_title_bonus"),
     "s_title_bonus": ("title_bonus", "s_title_bonus"),
     "title_diff_bonus": ("title_diff_bonus", "s_title_diff_bonus"),
@@ -52,6 +57,19 @@ TOTAL_BONUS_URL_PAIRS = {
     "s_week_bonus": ("week_bonus", "s_week_bonus"),
     "month_bonus": ("month_bonus", "s_month_bonus"),
     "s_month_bonus": ("month_bonus", "s_month_bonus"),
+}
+
+BONUS_HISTORY_FIELD_BY_URL_NAME = {
+    "drive_bonus": "drive_bonus",
+    "basic_bonus": "basic_bonus",
+    "matching_bonus": "matching_bonus",
+    "week_bonus": "week_bonus",
+    "month_title": "month_title",
+    "title_bonus": "title_bonus",
+    "title_diff_bonus": "title_diff_bonus",
+    "repurchase_over_bonus": "repurchase_over_bonus",
+    "three_star_global_bonus": "three_star_global_bonus",
+    "month_bonus": "month_bonus",
 }
 
 
@@ -71,6 +89,11 @@ def paired_bonus_url(current_url_name, target_mode, bonus_group):
         )[pair_index]
 
     return reverse(f"connect:{url_name}")
+
+
+@register.simple_tag
+def bonus_help(help_key, fallback_title=""):
+    return get_bonus_help(help_key, fallback_title)
 
 @register.filter
 def is_different_from_previous(value, previous_value):
@@ -114,10 +137,23 @@ def jp_year_month(value):
         return ""
 
     text = str(value).strip()
-    if len(text) >= 6:
-        year = text[:4]
-        month = int(text[4:6])
-        return f"{year}年{month}月"
+    try:
+        if len(text) >= 7 and text[4].upper() == "C":
+            year = text[:4]
+            month = int(text[5:7])
+            return f"{year}年{month}月"
+
+        if len(text) >= 7 and text[4] == "-":
+            year = text[:4]
+            month = int(text[5:7])
+            return f"{year}年{month}月"
+
+        if len(text) >= 6:
+            year = text[:4]
+            month = int(text[4:6])
+            return f"{year}年{month}月"
+    except ValueError:
+        return text
 
     return text
 
@@ -158,24 +194,128 @@ def selection_from_period(period, empty_message=""):
     }
 
 
-@register.inclusion_tag("com/_bonus_calc_kibetu_input.html")
-def bonus_calc_kibetu_input(selected_kibetu="", period_type="weekly"):
+def _resolve_kibetu_choice_mode(request):
+    if not request:
+        return "recent"
+    return request.GET.get("kibetu_choice_mode") or "recent"
+
+
+def _build_kibetu_period_choices(request, period_type, created_kibetu_set=None, zero_count_kibetu_set=None):
+    created_kibetu_set = created_kibetu_set or set()
+    zero_count_kibetu_set = zero_count_kibetu_set or set()
+    kibetu_choice_mode = _resolve_kibetu_choice_mode(request)
+
     if period_type == "monthly":
+        today = date.today()
         period_choices = (
-            MonthlyPeriod.objects.using("rds").all().order_by("-kibetu")
+            MonthlyPeriod.objects.using("rds")
+            .filter(Q(year__lt=today.year) | Q(year=today.year, month__lt=today.month))
+            .order_by("-kibetu")
         )
-        datalist_id = "bonus-calc-kibetu-monthly"
+        next_completion_kibetu = None
+        previous_month = date.today() - relativedelta(months=1)
+        previous_month_period = (
+            MonthlyPeriod.objects.using("rds")
+            .filter(year=previous_month.year, month=previous_month.month)
+            .first()
+        )
+        previous_month_kibetu = (
+            previous_month_period.kibetu if previous_month_period else None
+        )
     else:
-        period_choices = (
-            PeriodMaster.objects.using("rds").all().order_by("-kibetu")
+        period_choices = PeriodMaster.objects.using("rds").all()
+        today = date.today()
+        next_completion_period = (
+            period_choices
+            .filter(completion_date__gte=today)
+            .order_by("completion_date", "-kibetu")
+            .first()
         )
-        datalist_id = "bonus-calc-kibetu-weekly"
+        next_completion_kibetu = (
+            next_completion_period.kibetu if next_completion_period else None
+        )
+        previous_month_kibetu = None
+        if kibetu_choice_mode != "all":
+            recent_start = today - relativedelta(months=5)
+            recent_end = today + relativedelta(months=1)
+            period_choices = period_choices.filter(
+                completion_date__gte=recent_start,
+                completion_date__lte=recent_end,
+            )
+            kibetu_choice_mode = "recent"
+
+        period_choices = period_choices.order_by("-kibetu")
+
+    period_choices = list(period_choices)
+    for period in period_choices:
+        period.is_zero_count = period.kibetu in zero_count_kibetu_set
+        period.is_created = (
+            period.kibetu in created_kibetu_set
+            and period.kibetu not in zero_count_kibetu_set
+        )
+
+    return {
+        "period_choices": period_choices,
+        "period_type": period_type,
+        "kibetu_choice_mode": kibetu_choice_mode,
+        "next_completion_kibetu": next_completion_kibetu,
+        "previous_month_kibetu": previous_month_kibetu,
+    }
+
+
+@register.inclusion_tag("com/_bonus_calc_kibetu_input.html", takes_context=True)
+def bonus_calc_kibetu_input(context, selected_kibetu="", period_type="weekly"):
+    request = context.get("request")
+    history_target_url_name = str(context.get("history_target_url_name") or "")
+    history_target_url_name = history_target_url_name.split(":")[-1]
+    history_field = BONUS_HISTORY_FIELD_BY_URL_NAME.get(history_target_url_name)
+    created_kibetu_set = set()
+    zero_count_kibetu_set = set()
+    if history_field:
+        for row in context.get("history_rows") or []:
+            if row.get(history_field):
+                created_kibetu_set.add(row.get("kibetu"))
+            if row.get(f"{history_field}_is_empty"):
+                zero_count_kibetu_set.add(row.get("kibetu"))
+
+    period_context = _build_kibetu_period_choices(
+        request,
+        period_type,
+        created_kibetu_set=created_kibetu_set,
+        zero_count_kibetu_set=zero_count_kibetu_set,
+    )
+    datalist_id = (
+        "bonus-calc-kibetu-monthly"
+        if period_type == "monthly"
+        else "bonus-calc-kibetu-weekly"
+    )
 
     return {
         "selected_kibetu": selected_kibetu or "",
-        "period_choices": period_choices,
-        "period_type": period_type,
         "datalist_id": datalist_id,
+        **period_context,
+    }
+
+
+@register.inclusion_tag("com/_business_search_kibetu_input.html", takes_context=True)
+def business_search_kibetu_input(context, q_kibetu="", period_type="weekly", placeholder=""):
+    request = context.get("request")
+    created_kibetu_set = set()
+    for row in context.get("registration_history_rows") or []:
+        kibetu = row.get("kibetu")
+        if kibetu and (row.get("row_count") or 0) > 0:
+            created_kibetu_set.add(kibetu)
+
+    period_context = _build_kibetu_period_choices(
+        request,
+        period_type,
+        created_kibetu_set=created_kibetu_set,
+    )
+
+    return {
+        "q_kibetu": q_kibetu or "",
+        "placeholder": placeholder or "期別を入力または選択",
+        **period_context,
     }
 
 

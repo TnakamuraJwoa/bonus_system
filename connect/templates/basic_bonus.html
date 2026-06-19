@@ -2,7 +2,7 @@
 {% load static custom_filters %}
 
 {% block head %}
-    <link href="{% static 'css/common.css' %}" rel="stylesheet">
+    <link href="{% static 'css/common.css' %}?v=51" rel="stylesheet">
 {% endblock %}
 
 {% block contents %}
@@ -16,23 +16,28 @@
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <h5 class="page-title mb-3">【ボーナス計算 - ベーシックボーナス】</h5>
+          {% include "com/_bonus_calc_help.html" with title="【ボーナス計算 - ベーシックボーナス】" help_title="ベーシックボーナス" help_key="basic_bonus" history_modal_id="basicBonusHistoryModal" history_title="登録履歴を表示" %}
 
-          <div class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+          <div class="bonus-calc-form">
 
-            <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+            <form method="get" id="basicBonusSearchForm" class="mb-0">
               {% bonus_calc_kibetu_input selected_kibetu period_type="weekly" %}
+            </form>
 
-              <button type="submit" class="btn btn-primary">表示</button>
+            <div class="bonus-calc-selection-status">
+              {% bonus_calc_period_status empty_message="期別を選択してください" %}
+            </div>
 
+            <div class="bonus-calc-action-row">
+              <button type="submit" form="basicBonusSearchForm" class="btn btn-primary" data-bonus-calc-submit="basicBonusSearchForm">計算</button>
               <a class="btn btn-outline-secondary" href="{% url 'connect:basic_bonus' %}">
                 リセット
               </a>
-            </form>
 
-            {% if user_access.can_execute and selected_period and rows %}
-              <form method="post" class="mb-0"
-                    onsubmit="return confirm('表示中のベーシックボーナス結果を登録しますか？すでに登録済みの場合は上書き更新されます。');">
+              {% if user_access.can_execute and selected_period and rows %}
+              <form method="post"
+                    class="mb-0"
+                    data-confirm="表示中のベーシックボーナス結果を登録しますか？すでに登録済みの場合は上書き更新されます。">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="register_basic_bonus">
                 <input type="hidden" name="kibetu" value="{{ selected_kibetu }}">
@@ -41,11 +46,10 @@
                   この期別の結果を登録
                 </button>
               </form>
-            {% endif %}
+              {% endif %}
+            </div>
 
           </div>
-
-          {% bonus_calc_period_status empty_message="期別を選択してください" %}
         </div>
       </div>
 
@@ -98,7 +102,7 @@
             {% if selected_kibetu %}
               <p class="mb-0">この期間のデータはありません。</p>
             {% else %}
-              <p class="mb-0 text-muted">期別を選択して「表示」を押してください。</p>
+              <p class="mb-0 text-muted">期別を選択して「計算」を押してください。</p>
             {% endif %}
           {% endif %}
 
@@ -108,4 +112,6 @@
     </main>
   </div>
 </div>
+{% include "com/_bonus_histry_week_modal.html" with modal_id="basicBonusHistoryModal" %}
+{% include "com/_bonus_calc_progress_overlay.html" with form_id="basicBonusSearchForm" overlay_id="basicBonusProgressOverlay" progress_bar_id="basicBonusProgressBar" progress_text_id="basicBonusProgressText" %}
 {% endblock %}

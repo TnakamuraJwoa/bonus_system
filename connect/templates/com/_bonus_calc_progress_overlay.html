@@ -1,0 +1,72 @@
+<div class="bonus-calculating-overlay" id="{{ overlay_id }}" aria-live="polite" aria-hidden="true">
+  <div class="bonus-calculating-box">
+    <div class="bonus-calculating-spinner" aria-hidden="true"></div>
+    <div class="fw-bold mb-1">計算中です</div>
+    <div class="small text-muted">完了するまでこのままお待ちください。</div>
+    <div class="bonus-calculating-progress">
+      <div class="bonus-calculating-progress__track" aria-hidden="true">
+        <div class="bonus-calculating-progress__bar" id="{{ progress_bar_id }}"></div>
+      </div>
+      <div class="bonus-calculating-progress__text">
+        <span id="{{ progress_text_id }}">0%</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  var form = document.getElementById("{{ form_id }}");
+  var submitButton = document.querySelector("[data-bonus-calc-submit='{{ form_id }}']");
+  var overlay = document.getElementById("{{ overlay_id }}");
+  var progressBar = document.getElementById("{{ progress_bar_id }}");
+  var progressText = document.getElementById("{{ progress_text_id }}");
+  var progressTimer = null;
+  var progressValue = 0;
+
+  if (!form || !submitButton || !overlay || !progressBar || !progressText) {
+    return;
+  }
+
+  function updateProgress(value) {
+    progressValue = Math.max(0, Math.min(value, 95));
+    progressBar.style.width = progressValue + "%";
+    progressText.textContent = progressValue + "%";
+  }
+
+  function startEstimatedProgress() {
+    if (progressTimer) {
+      window.clearInterval(progressTimer);
+    }
+
+    updateProgress(0);
+
+    progressTimer = window.setInterval(function() {
+      var nextValue;
+      if (progressValue < 45) {
+        nextValue = progressValue + 7;
+      } else if (progressValue < 75) {
+        nextValue = progressValue + 4;
+      } else if (progressValue < 90) {
+        nextValue = progressValue + 2;
+      } else {
+        nextValue = progressValue + 1;
+      }
+
+      updateProgress(nextValue);
+
+      if (progressValue >= 95) {
+        window.clearInterval(progressTimer);
+      }
+    }, 650);
+  }
+
+  form.addEventListener("submit", function() {
+    submitButton.disabled = true;
+    submitButton.textContent = "計算中...";
+    overlay.classList.add("is-active");
+    overlay.setAttribute("aria-hidden", "false");
+    startEstimatedProgress();
+  });
+});
+</script>

@@ -24,13 +24,30 @@
     </div>
     {% endif %}
 
-    {% if user_access|can_menu:"cooling_off" %}
+    {% if user_access|can_menu:"cooling_off" or user_access|can_menu:"bonus_payment_date" or user_access|can_menu:"repurchase_last_month" or user_access|can_menu:"repurchase_list" %}
     <div class="card-body">
       <div class="fw-bold mb-2">■ BONUS SYSTEM</div>
 
       <div class="list-group">
+        {% if user_access|can_menu:"repurchase_last_month" %}
+        <a class="list-group-item list-group-item-action {% if active_menu == 'repurchase_last_month' %}active{% endif %}"
+           href="{% url 'connect:repurchase_last_month' %}">購入情報登録</a>
+        {% endif %}
+
+        {% if user_access|can_menu:"repurchase_list" %}
+        <a class="list-group-item list-group-item-action {% if active_menu == 'repurchase_list' %}active{% endif %}"
+           href="{% url 'connect:repurchase_list' %}">購入情報一覧</a>
+        {% endif %}
+
+        {% if user_access|can_menu:"bonus_payment_date" %}
+        <a class="list-group-item list-group-item-action {% if active_menu == 'bonus_payment_date' %}active{% endif %}"
+           href="{% url 'connect:bonus_payment_date' %}">ボーナス支払日(登録・更新)</a>
+        {% endif %}
+
+        {% if user_access|can_menu:"cooling_off" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'cooling_off' %}active{% endif %}"
            href="{% url 'connect:cooling_off' %}">クーリングオフ</a>
+        {% endif %}
       </div>
     </div>
     {% endif %}

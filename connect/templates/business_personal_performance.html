@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% load static %}
+
+{% block head %}
+  <link href="{% static 'css/common.css' %}" rel="stylesheet">
+  <style>
+    .business-performance-table {
+      min-width: 1100px;
+      white-space: nowrap;
+    }
+
+    .business-performance-filter {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 0.5rem;
+    }
+  </style>
+{% endblock %}
+
+{% block contents %}
+<div class="container-fluid mt-3 list-page-viewport">
+  <div class="row g-1 h-100">
+    {% include "com/_sidebar_business_search.html" with active_menu=active_menu %}
+
+    <main class="col-12 col-md-9 col-lg-10 list-page-main">
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <h5 class="page-title mb-3">【業務検索 - {{ period_label }} 個人業績】</h5>
+
+          <form method="get" class="business-performance-filter mb-0">
+            <div style="width: 180px;">
+              <label class="form-label mb-0 small text-muted">会員ID</label>
+              <input type="text"
+                     name="q_jmoa_code"
+                     class="form-control"
+                     value="{{ q_jmoa_code|default:'' }}"
+                     placeholder="例: JP00000000">
+            </div>
+
+            <div style="width: 260px;">
+              <label class="form-label mb-0 small text-muted">会員名</label>
+              <input type="text"
+                     name="q_name"
+                     class="form-control"
+                     value="{{ q_name|default:'' }}"
+                     placeholder="例: 山田">
+            </div>
+
+            <div style="width: 110px;">
+              <label class="form-label mb-0 small text-muted">表示件数</label>
+              <select name="per_page" class="form-select">
+                <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+              </select>
+            </div>
+
+            <button type="submit" class="btn btn-primary">検索</button>
+            <a href="{% url reset_url_name %}" class="btn btn-outline-secondary">リセット</a>
+          </form>
+        </div>
+      </div>
+
+      <div class="card shadow-sm flex-grow-1">
+        <div class="card-body d-flex flex-column">
+          {% if rows %}
+            {% include "com/_list_summary.html" with list_title=period_label|add:" 個人業績一覧" %}
+
+            <div class="table-responsive flex-grow-1">
+              <table class="table table-bordered table-sm align-middle mb-0 business-performance-table">
+                <thead class="table-light">
+                  <tr>
+                    <th class="text-center">会員ID</th>
+                    <th class="text-center">会員名</th>
+                    <th class="text-center">ランク</th>
+                    <th class="text-center">ステータス</th>
+                    <th class="text-center">注文件数</th>
+                    <th class="text-center">個人BV</th>
+                    <th class="text-center">個人売上</th>
+                    <th class="text-center">最終注文日</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for r in rows %}
+                  <tr>
+                    <td>{{ r.jmoa_code }}</td>
+                    <td>{{ r.send_bv_name }}</td>
+                    <td class="text-center">{{ r.rank|default:"-" }}</td>
+                    <td class="text-center">{{ r.status_code|default:"-" }}</td>
+                    <td class="text-end">{{ r.order_count|intcomma }}</td>
+                    <td class="text-end">{{ r.total_bv|floatformat:0|intcomma }}</td>
+                    <td class="text-end">{{ r.total_price|floatformat:0|intcomma }}</td>
+                    <td class="text-center">{{ r.last_order_at|date:"Y-m-d H:i:s"|default:"-" }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            {% include "com/_pagination.html" %}
+          {% else %}
+            <p class="mb-0 text-muted">該当データがありません。</p>
+          {% endif %}
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+{% endblock %}

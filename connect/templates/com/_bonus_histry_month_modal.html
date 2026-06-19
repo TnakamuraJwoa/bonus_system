@@ -1,0 +1,75 @@
+<div
+  class="modal fade bonus-history-modal"
+  id="{{ modal_id }}"
+  tabindex="-1"
+  role="dialog"
+  aria-labelledby="{{ modal_id }}Label"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-dialog-centered modal-xl" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title" id="{{ modal_id }}Label">登録履歴（月）</h5>
+          <div class="small text-muted">履歴を確認して、表示したい期別を選択できます。</div>
+        </div>
+        <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        {% if history_rows %}
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="d-flex align-items-center gap-3">
+              <div class="fw-bold">登録履歴一覧（月次）</div>
+              {% include "com/_bonus_histry_legend.html" %}
+            </div>
+            <div class="text-end">
+              <strong>件数：{{ history_rows|length }} 件</strong>
+            </div>
+          </div>
+
+          <div class="table-responsive" style="max-height: 60vh; overflow: auto;">
+            <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
+              <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                <tr>
+                  <th class="text-center" style="width: 90px;">選択</th>
+                  <th class="text-center" style="width: 170px;">期別</th>
+                  <th class="text-center">支払日</th>
+                  <th class="text-center bonus-histry-col bonus-histry-col--title">タイトル</th>
+                  <th class="text-center">タイトルボーナス</th>
+                  <th class="text-center">タイトル差額</th>
+                  <th class="text-center">再購入オーバー</th>
+                  <th class="text-center">3スター配当</th>
+                  <th class="text-center bonus-histry-col bonus-histry-col--month">月ボーナス</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for h in history_rows %}
+                  <tr class="{% if h.kibetu == selected_kibetu %}table-success{% elif h.is_previous_month %}table-primary{% endif %}">
+                    <td class="text-center">
+                      <a class="btn btn-primary btn-sm" href="{% url history_target_url_name %}?kibetu={{ h.kibetu|urlencode }}">選択</a>
+                    </td>
+                    <td class="text-center">{{ h.kibetu }}</td>
+                    <td class="text-center">{{ h.payment_date|default:"" }}</td>
+                    <td class="text-center bonus-histry-col bonus-histry-col--title{% if h.month_title_is_empty %} bonus-histry-cell--empty{% endif %}">{{ h.month_title|default:"" }}</td>
+                    <td class="text-center{% if h.title_bonus_is_empty %} bonus-histry-cell--empty{% endif %}">{{ h.title_bonus|default:"" }}</td>
+                    <td class="text-center{% if h.title_diff_bonus_is_empty %} bonus-histry-cell--empty{% endif %}">{{ h.title_diff_bonus|default:"" }}</td>
+                    <td class="text-center{% if h.repurchase_over_bonus_is_empty %} bonus-histry-cell--empty{% endif %}">{{ h.repurchase_over_bonus|default:"" }}</td>
+                    <td class="text-center{% if h.three_star_global_bonus_is_empty %} bonus-histry-cell--empty{% endif %}">{{ h.three_star_global_bonus|default:"" }}</td>
+                    <td class="text-center bonus-histry-col bonus-histry-col--month{% if h.month_bonus_is_empty %} bonus-histry-cell--empty{% endif %}">{{ h.month_bonus|default:"" }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="mb-0 text-muted">登録履歴はありません。</p>
+        {% endif %}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">閉じる</button>
+      </div>
+    </div>
+  </div>
+</div>

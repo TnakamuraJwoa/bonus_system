@@ -3,6 +3,16 @@
 
 {% block head %}
   <link href="{% static 'css/common.css' %}" rel="stylesheet">
+  <style>
+    .repurchase-preview-table-wrap {
+      overflow-x: auto;
+    }
+
+    .repurchase-preview-table {
+      white-space: nowrap;
+      min-width: max-content;
+    }
+  </style>
 {% endblock %}
 
 {% block contents %}
@@ -10,36 +20,66 @@
 
   <div class="row g-1">
 
-    {% include "com/_sidebar.html" with active_menu="repurchase_last_month" %}
+    {% include "com/_sidebar_orders.html" with active_menu="repurchase_last_month" %}
 
     <main class="col-12 col-md-9 col-lg-10">
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
 
-          <h5 class="page-title mb-3">【設定 - 購入情報登録】</h5>
+          <h5 class="page-title mb-3">【注文管理 - 購入情報登録】</h5>
           <div class="fw-bold mb-2">対象年月を選択</div>
 
           <div class="d-flex gap-2 align-items-end flex-wrap">
 
-            <form method="get" class="d-flex gap-2 align-items-end mb-0">
+            <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
               <div style="min-width: 220px;">
-              <select name="target_month" class="form-select">
-                <option value="">対象年月を選択</option>
+                <label class="form-label mb-1 small text-muted">直近1年から選択</label>
+                <select name="target_month_choice" class="form-select js-target-month-choice">
+                  <option value="">対象年月を選択</option>
+                  {% for obj in month_choices %}
+                    <option value="{{ obj.value }}"
+                            {% if obj.value == selected_month_choice %}selected{% endif %}>
+                      {% if obj.value in registered_months %}
+                        ★ {{ obj.year }}年{{ obj.month }}月
+                      {% else %}
+                        　{{ obj.year }}年{{ obj.month }}月
+                      {% endif %}
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
 
-                {% for obj in month_choices %}
-                  <option value="{{ obj.value }}"
-                    {% if obj.value == selected_month %}selected{% endif %}>
+              <div style="width: 140px;">
+                <label class="form-label mb-1 small text-muted">年</label>
+                <input type="text"
+                       name="target_year"
+                       class="form-control js-target-manual"
+                       value="{{ target_year|default:'' }}"
+                       inputmode="numeric"
+                       pattern="[0-9]{4}"
+                       placeholder="yyyy">
+              </div>
 
-                    {% if obj.value in registered_months %}
-                      ★ {{ obj.year }}年{{ obj.month }}月
-                    {% else %}
-                     　  {{ obj.year }}年{{ obj.month }}月
-                    {% endif %}
+              <div style="width: 120px;">
+                <label class="form-label mb-1 small text-muted">月</label>
+                <input type="text"
+                       name="target_month"
+                       class="form-control js-target-manual"
+                       value="{{ target_month|default:'' }}"
+                       inputmode="numeric"
+                       pattern="[0-9]{1,2}"
+                       placeholder="mm">
+              </div>
 
-                  </option>
-                {% endfor %}
-              </select>
+              <div style="width: 110px;">
+                <label class="form-label mb-1 small text-muted">表示件数</label>
+                <select name="per_page" class="form-select">
+                  <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                  <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                  <option value="300" {% if per_page == 300 %}selected{% endif %}>300</option>
+                  <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+                </select>
               </div>
 
               <button type="submit" class="btn btn-primary">
@@ -50,7 +90,8 @@
             {% if user_access.can_execute %}
             <form method="post" class="mb-0">
               {% csrf_token %}
-              <input type="hidden" name="target_month" value="{{ selected_month }}">
+              <input type="hidden" name="target_year" value="{{ target_year }}">
+              <input type="hidden" name="target_month" value="{{ target_month }}">
               <button type="submit"
                       class="btn btn-success"
                       {% if not selected_month %}disabled{% endif %}>
@@ -72,49 +113,64 @@
         <div class="card-body">
 
           {% if rows %}
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <div class="fw-bold">一覧</div>
-              <div class="text-end">
-                <strong>件数：{{ rows|length }} 件</strong>
-              </div>
-            </div>
+            {% include "com/_list_summary.html" %}
 
-            <div class="table-responsive">
-              <table class="table table-bordered table-sm align-middle mb-0">
+            <div class="table-responsive repurchase-preview-table-wrap">
+              <table class="table table-bordered table-sm align-middle mb-0 repurchase-preview-table">
                 <thead class="table-light">
                   <tr>
-                    <th>order_code</th>
-                    <th>jwoa_code</th>
-                    <th>send_bv_name</th>
-                    <th>order_type</th>
+                    <th>登録年</th>
+                    <th>登録月</th>
+                    <th>注文年</th>
+                    <th>注文月</th>
+                    <th>注文番号</th>
+                    <th>注文区分</th>
+                    <th>会員番号</th>
+                    <th>会員名</th>
                     <th>total_bv</th>
                     <th>bv</th>
-                    <th>deposit_at</th>
-                    <th>order_at</th>
-                    <th>payment_date</th>
-                    <th>order_year</th>
-                    <th>order_month</th>
+                    <th>BV反映日時</th>
+                    <th>注文日時</th>
+                    <th>ボーナス支払日</th>
                   </tr>
                 </thead>
                 <tbody>
                   {% for r in rows %}
                     <tr>
+                      <td>{{ r.register_year }}</td>
+                      <td>{{ r.register_month }}</td>
+                      <td>{{ r.order_year }}</td>
+                      <td>{{ r.order_month }}</td>
                       <td>{{ r.order_code }}</td>
+                      <td>
+                        {% if r.order_type == 101 %}
+                          再購入品
+                        {% elif r.order_type == 102 %}
+                          初回購入品
+                        {% elif r.order_type == 103 %}
+                          ランクアップ購入品
+                        {% elif r.order_type == 105 %}
+                          特別対応購入品
+                        {% elif r.order_type == 200 %}
+                          <span class="text-danger fw-bold">クーリングオフ</span>
+                        {% else %}
+                          {{ r.order_type }}
+                        {% endif %}
+                      </td>
                       <td>{{ r.jwoa_code }}</td>
                       <td>{{ r.send_bv_name }}</td>
-                      <td>{{ r.order_type }}</td>
                       <td>{{ r.total_bv }}</td>
                       <td>{{ r.bv }}</td>
                       <td>{{ r.deposit_at }}</td>
                       <td>{{ r.order_at }}</td>
                       <td>{{ r.payment_date }}</td>
-                      <td>{{ r.order_year }}</td>
-                      <td>{{ r.order_month }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>
               </table>
             </div>
+
+            {% include "com/_pagination.html" %}
           {% else %}
             {% if selected_month %}
               <p class="mb-0">この期間のデータはありません。</p>
@@ -129,4 +185,30 @@
     </main>
   </div>
 </div>
+{% endblock %}
+
+{% block script %}
+<script>
+(function () {
+  var choice = document.querySelector(".js-target-month-choice");
+  var manualFields = document.querySelectorAll(".js-target-manual");
+
+  if (choice) {
+    choice.addEventListener("change", function () {
+      if (!choice.value) return;
+      manualFields.forEach(function (field) {
+        field.value = "";
+      });
+    });
+  }
+
+  manualFields.forEach(function (field) {
+    field.addEventListener("input", function () {
+      if (choice) {
+        choice.value = "";
+      }
+    });
+  });
+})();
+</script>
 {% endblock %}

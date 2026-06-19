@@ -21,6 +21,11 @@
            href="{% url 'connect:settings' %}">設定</a>
         {% endif %}
 
+        {% if user_access|can_menu:"help_text" %}
+        <a class="list-group-item list-group-item-action {% if active_menu == 'help_text' %}active{% endif %}"
+           href="{% url 'connect:help_text' %}">ヘルプテキスト</a>
+        {% endif %}
+
         {% if user_access|can_menu:"user_target_rank" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'user_target_rank' %}active{% endif %}"
            href="{% url 'connect:user_target_rank' %}">ユーザーランク(指定月)</a>
@@ -46,20 +51,6 @@
            href="{% url 'connect:placement_tree' %}">上位者ツリー(登録&表示)</a>
         {% endif %}
 
-        {% if user_access|can_menu:"bonus_payment_date" %}
-        <a class="list-group-item list-group-item-action {% if active_menu == 'bonus_payment_date' %}active{% endif %}"
-           href="{% url 'connect:bonus_payment_date' %}">注文別ボーナス支払日</a>
-        {% endif %}
-
-        {% if user_access|can_menu:"repurchase_last_month" %}
-        <a class="list-group-item list-group-item-action {% if active_menu == 'repurchase_last_month' %}active{% endif %}"
-           href="{% url 'connect:repurchase_last_month' %}">購入情報登録</a>
-        {% endif %}
-
-        {% if user_access|can_menu:"repurchase_list" %}
-        <a class="list-group-item list-group-item-action {% if active_menu == 'repurchase_list' %}active{% endif %}"
-           href="{% url 'connect:repurchase_list' %}">購入情報一覧</a>
-        {% endif %}
       </div>
     </div>
     {% endif %}

@@ -2,7 +2,7 @@
 {% load static custom_filters %}
 
 {% block head %}
-    <link href="{% static 'css/common.css' %}" rel="stylesheet">
+    <link href="{% static 'css/common.css' %}?v=51" rel="stylesheet">
 {% endblock %}
 
 {% block contents %}
@@ -16,36 +16,71 @@
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <h5 class="page-title mb-3">【ボーナス計算 - 週ボーナス】</h5>
+          {% include "com/_bonus_calc_help.html" with title="【ボーナス計算 - 週ボーナス】" help_title="週ボーナス" help_key="week_bonus" history_modal_id="weekBonusHistoryModal" history_title="登録履歴を表示" %}
 
-          <div class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+          <div class="bonus-calc-toolbar">
+            <form method="get"
+                  class="bonus-calc-toolbar__main mb-0"
+                  id="weekCalcForm">
+              <div class="bonus-calc-toolbar__period-row">
+                {% bonus_calc_kibetu_input selected_kibetu period_type="weekly" %}
+                <div class="bonus-calc-actions bonus-calc-actions--inline">
+                  <button type="submit" class="btn btn-primary" id="weekCalcSubmitButton">計算</button>
+                  <a class="btn btn-outline-secondary" href="{% url 'connect:week_bonus' %}">リセット</a>
+                </div>
+              </div>
 
-            <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
-              {% bonus_calc_kibetu_input selected_kibetu period_type="weekly" %}
+              <div class="bonus-calc-selection-status">
+                {% bonus_calc_period_status empty_message="期別を選択して「計算」を押してください" %}
+              </div>
 
-              <button type="submit" class="btn btn-primary">表示</button>
+              {% if not rows %}
+                <div class="bonus-calc-pre-register">
+                  <div class="bonus-calc-pre-register__header">
+                    <div class="bonus-calc-pre-register__title">
+                      <span>計算前に登録</span>
+                      <small>チェックした個人ボーナスを自動登録してから集計します</small>
+                    </div>
+                    <div class="bonus-calc-pre-register__actions" aria-label="事前登録チェックの一括操作">
+                      <button type="button" class="btn btn-outline-primary btn-sm" data-pre-register-check-all>すべてチェック</button>
+                      <button type="button" class="btn btn-outline-secondary btn-sm" data-pre-register-uncheck-all>すべて解除</button>
+                    </div>
+                  </div>
+                  <div class="bonus-calc-pre-register__grid">
+                    {% for key, label in pre_register_options %}
+                      <label class="bonus-calc-pre-register__item{% if key in pre_register_targets %} bonus-calc-pre-register__item--checked{% endif %}">
+                        <input
+                          type="checkbox"
+                          name="pre_register"
+                          value="{{ key }}"
+                          class="form-check-input mt-0"
+                          {% if key in pre_register_targets %}checked{% endif %}
+                        >
+                        <span>{{ label }}</span>
+                      </label>
+                    {% endfor %}
+                  </div>
+                </div>
+              {% endif %}
 
-              <a class="btn btn-outline-secondary" href="{% url 'connect:week_bonus' %}">
-                リセット
-              </a>
             </form>
 
             {% if user_access.can_execute and selected_period and rows %}
-              <form method="post" class="mb-0"
-                    onsubmit="return confirm('表示中の週ボーナス結果を登録しますか？すでに登録済みの場合は上書き更新されます。');">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="register_week_bonus">
-                <input type="hidden" name="kibetu" value="{{ selected_kibetu }}">
+              <div class="bonus-calc-register-aside">
+                <form method="post"
+                      class="mb-0"
+                      data-confirm="表示中の週ボーナス結果を登録しますか？すでに登録済みの場合は上書き更新されます。">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="register_week_bonus">
+                  <input type="hidden" name="kibetu" value="{{ selected_kibetu }}">
 
-                <button type="submit" class="btn btn-warning">
-                  この期別の結果を登録
-                </button>
-              </form>
+                  <button type="submit" class="btn btn-warning btn-block">
+                    この期別の結果を登録
+                  </button>
+                </form>
+              </div>
             {% endif %}
-
           </div>
-
-          {% bonus_calc_period_status empty_message="期別を選択してください" %}
         </div>
       </div>
 
@@ -92,7 +127,7 @@
             {% if selected_kibetu %}
               <p class="mb-0">この期間のデータはありません。</p>
             {% else %}
-              <p class="mb-0 text-muted">期別を選択して「表示」を押してください。</p>
+              <p class="mb-0 text-muted">期別を選択して「計算」を押してください。</p>
             {% endif %}
           {% endif %}
 
@@ -102,4 +137,144 @@
     </main>
   </div>
 </div>
+
+{% include "com/_bonus_histry_week_modal.html" with modal_id="weekBonusHistoryModal" %}
+
+<div class="bonus-calculating-overlay" id="weekCalculatingOverlay" aria-live="polite" aria-hidden="true">
+  <div class="bonus-calculating-box">
+    <div class="bonus-calculating-spinner" aria-hidden="true"></div>
+    <div class="fw-bold mb-1">計算中です</div>
+    <div class="small text-muted">完了するまでこのままお待ちください。</div>
+    <div class="bonus-calculating-progress">
+      <div class="bonus-calculating-progress__track" aria-hidden="true">
+        <div class="bonus-calculating-progress__bar" id="weekCalcProgressBar"></div>
+      </div>
+      <div class="bonus-calculating-progress__text">
+        <span id="weekCalcProgressText">0%</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  var form = document.getElementById("weekCalcForm");
+  var submitButton = document.getElementById("weekCalcSubmitButton");
+  var overlay = document.getElementById("weekCalculatingOverlay");
+  var progressBar = document.getElementById("weekCalcProgressBar");
+  var progressText = document.getElementById("weekCalcProgressText");
+  var progressTimer = null;
+  var progressValue = 0;
+
+  var preRegisterInputs = Array.prototype.slice.call(
+    document.querySelectorAll(".bonus-calc-pre-register__item input[type='checkbox']")
+  );
+
+  function updatePreRegisterItem(input) {
+    input.closest(".bonus-calc-pre-register__item").classList.toggle(
+      "bonus-calc-pre-register__item--checked",
+      input.checked
+    );
+  }
+
+  preRegisterInputs.forEach(function(input) {
+    input.addEventListener("change", function() {
+      updatePreRegisterItem(input);
+    });
+  });
+
+  document.querySelectorAll("[data-pre-register-check-all]").forEach(function(button) {
+    button.addEventListener("click", function() {
+      preRegisterInputs.forEach(function(input) {
+        input.checked = true;
+        updatePreRegisterItem(input);
+      });
+    });
+  });
+
+  document.querySelectorAll("[data-pre-register-uncheck-all]").forEach(function(button) {
+    button.addEventListener("click", function() {
+      preRegisterInputs.forEach(function(input) {
+        input.checked = false;
+        updatePreRegisterItem(input);
+      });
+    });
+  });
+
+  if (!form || !submitButton || !overlay || !progressBar || !progressText) {
+    return;
+  }
+
+  function updateProgress(value) {
+    progressValue = Math.max(0, Math.min(value, 95));
+    progressBar.style.width = progressValue + "%";
+    progressText.textContent = progressValue + "%";
+  }
+
+  function startEstimatedProgress() {
+    if (progressTimer) {
+      window.clearInterval(progressTimer);
+    }
+
+    updateProgress(0);
+
+    progressTimer = window.setInterval(function() {
+      var nextValue;
+      if (progressValue < 45) {
+        nextValue = progressValue + 7;
+      } else if (progressValue < 75) {
+        nextValue = progressValue + 4;
+      } else if (progressValue < 90) {
+        nextValue = progressValue + 2;
+      } else {
+        nextValue = progressValue + 1;
+      }
+
+      updateProgress(Math.min(nextValue, 95));
+
+      if (progressValue >= 95) {
+        window.clearInterval(progressTimer);
+      }
+    }, 650);
+  }
+
+  function showCalculating() {
+    submitButton.disabled = true;
+    submitButton.textContent = "計算中...";
+    overlay.classList.add("is-active");
+    overlay.setAttribute("aria-hidden", "false");
+    startEstimatedProgress();
+  }
+
+  form.addEventListener("submit", function(event) {
+    if (form.dataset.confirmed === "1") {
+      showCalculating();
+      return;
+    }
+
+    event.preventDefault();
+    var modal = window.jQuery ? window.jQuery("#appConfirmModal") : null;
+    var message = document.getElementById("appConfirmModalMessage");
+    var yesButton = document.getElementById("appConfirmModalYes");
+
+    if (!modal || !message || !yesButton) {
+      form.dataset.confirmed = "1";
+      showCalculating();
+      form.submit();
+      return;
+    }
+
+    message.textContent = "選択した期別で週ボーナスを計算します。チェックしたボーナスは計算前に登録されます。よろしいですか？";
+    modal.modal("show");
+
+    yesButton.addEventListener("click", function handleWeekCalcConfirm() {
+      yesButton.removeEventListener("click", handleWeekCalcConfirm);
+      modal.modal("hide");
+      form.dataset.confirmed = "1";
+      showCalculating();
+      form.submit();
+    });
+  });
+});
+</script>
 {% endblock %}

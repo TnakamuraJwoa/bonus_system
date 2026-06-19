@@ -4,13 +4,41 @@
 
 {% block head %}
     {% load static %}
-    <link href="{% static 'css/login.css' %}?v=3" rel="stylesheet">
+    <link href="{% static 'css/login.css' %}?v=7" rel="stylesheet">
 {% endblock %}
 
 {% block contents %}
 <div class="login-page">
+    <div class="login-page__scene" aria-hidden="true">
+        <div class="login-page__bg"></div>
+        <div class="login-page__mist login-page__mist--1"></div>
+        <div class="login-page__mist login-page__mist--2"></div>
+        <div class="login-page__mist login-page__mist--3"></div>
+        <div class="login-page__water-shimmer"></div>
+        <div class="login-page__glow"></div>
+        <div class="login-page__particles">
+            <span style="--i:0"></span><span style="--i:1"></span><span style="--i:2"></span>
+            <span style="--i:3"></span><span style="--i:4"></span><span style="--i:5"></span>
+            <span style="--i:6"></span><span style="--i:7"></span><span style="--i:8"></span>
+            <span style="--i:9"></span><span style="--i:10"></span><span style="--i:11"></span>
+        </div>
+        <div class="login-page__vignette"></div>
+    </div>
+
     <div class="login-card">
-        <h1>Bonus System</h1>
+        {% if redirect_field_value|slice:":6" == "/admin" or request.GET.next|slice:":6" == "/admin" %}
+            <div class="login-card__admin-badge">管理画面ログイン</div>
+        {% endif %}
+        <h1>
+            {% if redirect_field_value|slice:":6" == "/admin" or request.GET.next|slice:":6" == "/admin" %}
+                Admin Console
+            {% else %}
+                Bonus System
+            {% endif %}
+        </h1>
+        {% if redirect_field_value|slice:":6" == "/admin" or request.GET.next|slice:":6" == "/admin" %}
+            <p class="login-card__admin-note">管理者用の画面へログインします。</p>
+        {% endif %}
         {% if request.GET.timeout %}
             <div class="alert alert-warning mb-3" role="alert">
                 1時間操作がなかったため、自動的にログアウトしました。再度ログインしてください。
@@ -29,6 +57,11 @@
             </div>
         </form>
         <div class="form-footer">
+            {% if redirect_field_value|slice:":6" == "/admin" or request.GET.next|slice:":6" == "/admin" %}
+                <a class="login-card__sub-link" href="{% url 'account_login' %}">通常ログインへ戻る</a>
+            {% else %}
+                <a class="login-card__sub-link" href="{% url 'account_login' %}?next=/admin">管理画面ログインへ</a>
+            {% endif %}
         </div>
     </div>
 </div>

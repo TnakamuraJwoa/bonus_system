@@ -1,0 +1,34 @@
+{% load access_tags %}
+<nav class="col-12 col-md-3 col-lg-2">
+  <div class="card shadow-sm position-sticky" style="top: 1rem;">
+    <div class="card-body">
+      <div class="fw-bold mb-2">■ 業務検索</div>
+
+      <div class="small text-muted fw-bold mb-1">週別</div>
+      <div class="list-group mb-3">
+        {% if user_access|can_menu:"business_personal_week_performance" %}
+        <a class="list-group-item list-group-item-action {% if active_menu == 'business_personal_week_performance' %}active{% endif %}"
+           href="{% url 'connect:business_personal_week_performance' %}">個人業績</a>
+        {% endif %}
+
+        {% if user_access|can_menu:"business_team_week_performance" %}
+        <a class="list-group-item list-group-item-action {% if active_menu == 'business_team_week_performance' %}active{% endif %}"
+           href="{% url 'connect:business_team_week_performance' %}">チーム業績</a>
+        {% endif %}
+      </div>
+
+      <div class="small text-muted fw-bold mb-1">月別</div>
+      <div class="list-group">
+        {% if user_access|can_menu:"business_personal_performance" %}
+        <a class="list-group-item list-group-item-action {% if active_menu == 'business_personal_performance' %}active{% endif %}"
+           href="{% url 'connect:business_personal_performance' %}">個人業績</a>
+        {% endif %}
+
+        {% if user_access|can_menu:"business_team_performance" %}
+        <a class="list-group-item list-group-item-action {% if active_menu == 'business_team_performance' %}active{% endif %}"
+           href="{% url 'connect:business_team_performance' %}">チーム業績</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</nav>

@@ -21,6 +21,7 @@ MENU_GROUPS = (
     ("orders", "注文"),
     ("bonus_search", "ボーナス検索"),
     ("bonus_calc", "ボーナス計算"),
+    ("business_search", "業務検索"),
     ("settings", "設定・マスタ"),
 )
 
@@ -37,6 +38,9 @@ MENU_FEATURES = (
         ("orders_distribution_bv",),
     ),
     MenuFeature("api_users_bv", "会員BV特別反映情報", "orders", ("api_users_bv",)),
+    MenuFeature("repurchase_last_month", "購入情報登録", "orders", ("repurchase_last_month",)),
+    MenuFeature("repurchase_list", "購入情報一覧", "orders", ("repurchase_list",)),
+    MenuFeature("bonus_payment_date", "注文別ボーナス支払日", "orders", ("bonus_payment_date",)),
     MenuFeature("cooling_off", "クーリングオフ", "orders", ("cooling_off",)),
     # --- ボーナス検索（個人） ---
     MenuFeature("s_drive_bonus", "ドライブボーナス（検索）", "bonus_search", ("s_drive_bonus",)),
@@ -47,6 +51,7 @@ MENU_FEATURES = (
         "bonus_search",
         ("s_matching_bonus",),
     ),
+    MenuFeature("s_month_title", "月タイトル（検索）", "bonus_search", ("s_month_title",)),
     MenuFeature("s_title_bonus", "タイトルボーナス（検索）", "bonus_search", ("s_title_bonus",)),
     MenuFeature(
         "s_title_diff_bonus",
@@ -94,20 +99,44 @@ MENU_FEATURES = (
     ),
     # --- ボーナス計算（合計・履歴） ---
     MenuFeature("week_bonus", "週間ボーナス（計算）", "bonus_calc", ("week_bonus",)),
+    MenuFeature("month_title", "月タイトル（計算）", "bonus_calc", ("month_title",)),
     MenuFeature("month_bonus", "月間ボーナス（計算）", "bonus_calc", ("month_bonus",)),
-    MenuFeature("bonus_histry", "個人実績の登録履歴", "bonus_calc", ("bonus_histry",)),
+    MenuFeature("bonus_histry", "個人実績の登録履歴", "bonus_calc", ("bonus_histry", "bonus_histry_month")),
+    # --- 業務検索 ---
+    MenuFeature(
+        "business_personal_performance",
+        "月別 個人業績",
+        "business_search",
+        ("business_personal_performance",),
+    ),
+    MenuFeature(
+        "business_team_performance",
+        "月別 チーム業績",
+        "business_search",
+        ("business_team_performance",),
+    ),
+    MenuFeature(
+        "business_personal_week_performance",
+        "週別 個人業績",
+        "business_search",
+        ("business_personal_week_performance",),
+    ),
+    MenuFeature(
+        "business_team_week_performance",
+        "週別 チーム業績",
+        "business_search",
+        ("business_team_week_performance",),
+    ),
     # --- 設定・マスタ ---
     MenuFeature("kibetu", "期別（週）", "settings", ("kibetu",)),
     MenuFeature("kibetu_month", "期別（月）", "settings", ("kibetu_month",)),
     MenuFeature("settings", "設定", "settings", ("settings",)),
+    MenuFeature("help_text", "ヘルプテキスト", "settings", ("help_text",)),
     MenuFeature("user_target_rank", "ユーザーランク（指定月）", "settings", ("user_target_rank",)),
     MenuFeature("title_list", "タイトル表", "settings", ("title_list",)),
     MenuFeature("active_users", "アクティブ会員登録", "settings", ("active_users",)),
     MenuFeature("title_registration", "タイトルユーザー登録", "settings", ("title_registration",)),
     MenuFeature("placement_tree", "上位者ツリー", "settings", ("placement_tree",)),
-    MenuFeature("bonus_payment_date", "注文別ボーナス支払日", "settings", ("bonus_payment_date",)),
-    MenuFeature("repurchase_last_month", "購入情報登録", "settings", ("repurchase_last_month",)),
-    MenuFeature("repurchase_list", "購入情報一覧", "settings", ("repurchase_list",)),
 )
 
 MENU_BY_KEY = {feature.key: feature for feature in MENU_FEATURES}
@@ -132,6 +161,7 @@ NAV_GROUP_MAP = {
     "orders": "orders",
     "bonus_search": "bonus_search",
     "bonus_calc": "bonus_calc",
+    "business_search": "business_search",
     "settings": "settings",
 }
 
@@ -165,6 +195,7 @@ BONUS_TOTAL_URL_NAMES = frozenset({
     "week_bonus",
     "month_bonus",
     "bonus_histry",
+    "bonus_histry_month",
 })
 
 

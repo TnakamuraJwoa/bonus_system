@@ -108,6 +108,40 @@ def get_title_bonus_insert_data(selected_kibetu, rows):
 
     return insert_sql, insert_params
 
+## 月タイトル
+def get_month_title_delete_insert_data(selected_kibetu, rows):
+    delete_sql = """
+        DELETE FROM bonus_db.month_title
+        WHERE kibetu = %s
+    """
+
+    insert_sql = """
+        INSERT INTO bonus_db.month_title (
+            kibetu,
+            jwoa_code,
+            jwoa_name,
+            income_line_bv,
+            basic_line_bv,
+            title_id
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s
+        )
+    """
+
+    insert_params = []
+
+    for r in rows:
+        insert_params.append([
+            selected_kibetu,
+            r.get("jwoa_code") or "",
+            r.get("jwoa_name") or "",
+            r.get("income_line_bv") or 0,
+            r.get("basic_line_bv") or 0,
+            r.get("title_id") or 0,
+        ])
+
+    return delete_sql, [selected_kibetu], insert_sql, insert_params
+
 
 ## basic_bv_line
 ## 繰り越しBV
@@ -142,7 +176,6 @@ def get_basic_bv_line_insert_data(selected_kibetu, rows):
         ])
 
     return insert_sql, insert_params
-
 
 
 ## タイトル差額ボーナス
@@ -217,7 +250,6 @@ def get_title_diff_bonus_insert_data(selected_kibetu, rows):
 
     return insert_sql, insert_params
 
-
 ## 再購入オーバーボーナス
 def get_repurchase_over_bonus_insert_data(selected_kibetu, rows):
 
@@ -274,7 +306,6 @@ def get_repurchase_over_bonus_insert_data(selected_kibetu, rows):
 
     return insert_sql, insert_params
 
-
 ## 3スターダイヤグローバル配当
 def get_three_star_global_bonus_insert_data(selected_kibetu, rows):
 
@@ -317,6 +348,92 @@ def get_three_star_global_bonus_insert_data(selected_kibetu, rows):
             r.get("total_over_bv") or 0,
             r.get("one_score_bonus") or 0,
             r.get("bonus_amount") or 0,
+        ])
+
+    return insert_sql, insert_params
+
+
+def get_week_team_performance_insert_data(selected_kibetu, rows):
+    insert_sql = """
+        INSERT INTO bonus_db.B_team_business_search_result (
+            kibetu,
+            period_type,
+            upper_code,
+            line_code,
+            purchaser_code,
+            purchaser_name,
+            lvl,
+            sum_bv,
+            created_at,
+            updated_at
+        ) VALUES (
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'),
+            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo')
+        )
+    """
+
+    insert_params = []
+    for row in rows:
+        insert_params.append([
+            selected_kibetu,
+            "weekly",
+            row.get("upper_code") or "",
+            row.get("line_code") or "",
+            row.get("purchaser_code") or "",
+            row.get("purchaser_name") or "",
+            row.get("lvl") or 0,
+            row.get("sum_bv") or 0,
+        ])
+
+    return insert_sql, insert_params
+
+
+def get_month_team_performance_insert_data(selected_kibetu, rows):
+    insert_sql = """
+        INSERT INTO bonus_db.B_team_business_search_result (
+            kibetu,
+            period_type,
+            upper_code,
+            line_code,
+            purchaser_code,
+            purchaser_name,
+            lvl,
+            sum_bv,
+            created_at,
+            updated_at
+        ) VALUES (
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'),
+            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo')
+        )
+    """
+
+    insert_params = []
+    for row in rows:
+        insert_params.append([
+            selected_kibetu,
+            "monthly",
+            row.get("upper_code") or "",
+            row.get("line_code") or "",
+            row.get("purchaser_code") or "",
+            row.get("purchaser_name") or "",
+            row.get("lvl") or 0,
+            row.get("sum_bv") or 0,
         ])
 
     return insert_sql, insert_params

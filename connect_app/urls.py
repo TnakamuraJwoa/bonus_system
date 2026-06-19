@@ -17,10 +17,18 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from django.contrib.staticfiles.urls import static
+from django.shortcuts import redirect
+from django.urls import reverse
 from . import settings_common, settings_dev
 
 
+def admin_login_redirect(request):
+    next_url = request.GET.get("next") or "/admin/"
+    return redirect(f"{reverse('account_login')}?next={next_url}")
+
+
 urlpatterns = [
+    path('admin/login/', admin_login_redirect),
     path('admin/', admin.site.urls),
     path('', include('connect.urls')),
     path('accounts/', include('allauth.urls')),
