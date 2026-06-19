@@ -94,6 +94,9 @@
                     <th>title_id</th>
                     <th>title_name</th>
                     <th>update_date</th>
+                    {% if title_user_can_update %}
+                      <th class="text-center">タイトル変更</th>
+                    {% endif %}
                   </tr>
                 </thead>
                 <tbody>
@@ -104,6 +107,21 @@
                       <td>{{ r.title_id }}</td>
                       <td>{{ r.title_name }}</td>
                       <td>{{ r.update_date }}</td>
+                      {% if title_user_can_update %}
+                        <td class="text-center">
+                          <button type="button"
+                                  class="btn btn-warning btn-sm"
+                                  data-toggle="modal"
+                                  data-target="#titleUpdateModal"
+                                  data-title-update-button
+                                  data-jmoa-code="{{ r.jmoa_code }}"
+                                  data-jwoa-name="{{ r.jwoa_name }}"
+                                  data-title-id="{{ r.title_id }}"
+                                  data-title-name="{{ r.title_name }}">
+                            更新
+                          </button>
+                        </td>
+                      {% endif %}
                     </tr>
                   {% endfor %}
                 </tbody>
@@ -122,4 +140,86 @@
     </main>
   </div>
 </div>
+{% if title_user_can_update %}
+<div class="modal fade" id="titleUpdateModal" tabindex="-1" role="dialog" aria-labelledby="titleUpdateModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <form method="post" class="mb-0" data-confirm="タイトルIDを変更します。よろしいですか？">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="update">
+        <input type="hidden" name="jmoa_code" id="titleUpdateJmoaCode">
+        <input type="hidden" name="next_query" value="{{ request.GET.urlencode }}">
+
+        <div class="modal-header">
+          <h5 class="modal-title" id="titleUpdateModalLabel">タイトルID変更</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <dl class="row mb-3">
+            <dt class="col-sm-4">会員ID</dt>
+            <dd class="col-sm-8" id="titleUpdateJmoaCodeText"></dd>
+            <dt class="col-sm-4">会員名</dt>
+            <dd class="col-sm-8" id="titleUpdateJwoaNameText"></dd>
+            <dt class="col-sm-4">現在タイトル</dt>
+            <dd class="col-sm-8" id="titleUpdateCurrentTitleText"></dd>
+          </dl>
+
+          <div class="form-group mb-0">
+            <label for="titleUpdateTitleId" class="form-label">変更後タイトル</label>
+            <select name="title_id" id="titleUpdateTitleId" class="form-control" required>
+              {% for t in title_choices %}
+                <option value="{{ t.title_id }}">{{ t.title_id }} : {{ t.title_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
+          <button type="submit" class="btn btn-warning">更新</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+
+
+{% block script %}
+{% if title_user_can_update %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  var modal = document.getElementById("titleUpdateModal");
+  if (!modal) {
+    return;
+  }
+
+  var jmoaCodeInput = document.getElementById("titleUpdateJmoaCode");
+  var jmoaCodeText = document.getElementById("titleUpdateJmoaCodeText");
+  var jwoaNameText = document.getElementById("titleUpdateJwoaNameText");
+  var currentTitleText = document.getElementById("titleUpdateCurrentTitleText");
+  var titleSelect = document.getElementById("titleUpdateTitleId");
+
+  document.querySelectorAll("[data-title-update-button]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var jmoaCode = button.getAttribute("data-jmoa-code") || "";
+      var jwoaName = button.getAttribute("data-jwoa-name") || "";
+      var titleId = button.getAttribute("data-title-id") || "";
+      var titleName = button.getAttribute("data-title-name") || "";
+
+      jmoaCodeInput.value = jmoaCode;
+      jmoaCodeText.textContent = jmoaCode;
+      jwoaNameText.textContent = jwoaName || "-";
+      currentTitleText.textContent = titleId + " : " + (titleName || "タイトルなし");
+      titleSelect.value = titleId;
+    });
+  });
+});
+</script>
+{% endif %}
 {% endblock %}

@@ -1,8 +1,8 @@
 ﻿{% extends 'base.html' %}
-{% load static %}
+{% load static custom_filters %}
 
 {% block head %}
-  <link href="{% static 'css/common.css' %}" rel="stylesheet">
+  <link href="{% static 'css/common.css' %}?v=51" rel="stylesheet">
 {% endblock %}
 
 {% block contents %}
@@ -17,137 +17,160 @@
       <div class="card shadow-sm mb-3">
         <div class="card-body">
 
-          <h5 class="page-title mb-2">【上位者ツリー】</h5>
-          <div class="mb-2">
-            <span class="text-muted small">ランク = new_rank</span>
+          <div class="d-flex justify-content-between align-items-start flex-wrap mb-3">
+            <div>
+              <h5 class="page-title mb-2">【上位者ツリー】</h5>
+              <p class="text-muted small mb-0">上位者コードを起点に、会員の配置階層とランクを確認します。ランクは new_rank を表示します。</p>
+            </div>
+            <div class="text-muted small mt-1">
+              ランク：
+              <span class="badge badge-info">new_rank</span>
+            </div>
           </div>
 
-          {% if user_access.can_execute %}
-          <div class="d-flex flex-wrap mb-3">
-            <form method="post" class="mr-2 mb-2">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="copy">
-              <button type="submit"
-                      class="btn btn-primary"
-                      data-confirm-submit="既存データを全削除して、v_user_placement_tree からコピー登録します。よろしいですか？">
-                コピー登録
-              </button>
+          <div class="bonus-calc-form">
+            <form method="get" id="placementTreeSearchForm" class="mb-0">
+              <div class="d-flex align-items-end flex-wrap">
+                <div class="mr-2 mb-2">
+                  <label class="form-label mb-0 small text-muted">会員コード</label>
+                  <input type="text"
+                         name="q_jwoa_code"
+                         class="form-control"
+                         value="{{ q_jwoa_code|default:'' }}"
+                         placeholder="例: JP05198407">
+                </div>
+
+                <div class="mr-2 mb-2">
+                  <label class="form-label mb-0 small text-muted">会員名</label>
+                  <input type="text"
+                         name="q_name"
+                         class="form-control"
+                         value="{{ q_name|default:'' }}"
+                         placeholder="例: 山田">
+                </div>
+
+                <div class="mr-2 mb-2">
+                  <label class="form-label mb-0 small text-muted">上位者コード</label>
+                  <input type="text"
+                         name="q_placement_code"
+                         class="form-control"
+                         value="{{ q_placement_code|default:'' }}"
+                         placeholder="例: JP00000001">
+                </div>
+
+                <div class="mr-2 mb-2" style="width: 150px;">
+                  <label class="form-label mb-0 small text-muted">上位者ランク</label>
+                  <select name="q_placement_rank" class="form-control">
+                    <option value="">全て</option>
+                    <option value="1" {% if q_placement_rank == "1" %}selected{% endif %}>シルバー</option>
+                    <option value="2" {% if q_placement_rank == "2" %}selected{% endif %}>ゴールド</option>
+                    <option value="3" {% if q_placement_rank == "3" %}selected{% endif %}>プラチナ</option>
+                    <option value="4" {% if q_placement_rank == "4" %}selected{% endif %}>ダイヤ</option>
+                    <option value="9" {% if q_placement_rank == "9" %}selected{% endif %}>一般会員</option>
+                  </select>
+                </div>
+
+                <div class="mr-2 mb-2" style="width: 150px;">
+                  <label class="form-label mb-0 small text-muted">ランク</label>
+                  <select name="q_rank" class="form-control">
+                    <option value="">全て</option>
+                    <option value="1" {% if q_rank == "1" %}selected{% endif %}>シルバー</option>
+                    <option value="2" {% if q_rank == "2" %}selected{% endif %}>ゴールド</option>
+                    <option value="3" {% if q_rank == "3" %}selected{% endif %}>プラチナ</option>
+                    <option value="4" {% if q_rank == "4" %}selected{% endif %}>ダイヤ</option>
+                    <option value="9" {% if q_rank == "9" %}selected{% endif %}>一般会員</option>
+                  </select>
+                </div>
+
+                <div class="mr-2 mb-2" style="width: 110px;">
+                  <label class="form-label mb-0 small text-muted">表示件数</label>
+                  <select name="per_page" class="form-control">
+                    <option value="50"  {% if per_page == 50 %}selected{% endif %}>50</option>
+                    <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                    <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                    <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+                  </select>
+                </div>
+              </div>
             </form>
 
-            {% if user_access.can_delete %}
-            <form method="post" class="mb-2">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="delete">
-              <button type="submit"
-                      class="btn btn-danger"
-                      data-confirm-submit="users_placement_tree_cache のデータを全削除します。よろしいですか？">
-                全削除
-              </button>
-            </form>
-            {% endif %}
+            <div class="bonus-calc-selection-status">
+              {% if q_jwoa_code or q_name or q_placement_code or q_placement_rank or q_rank %}
+                <span class="text-muted small">絞り込み中：</span>
+                {% if q_jwoa_code %}
+                  <span class="badge badge-info">会員コード={{ q_jwoa_code }}</span>
+                {% endif %}
+                {% if q_name %}
+                  <span class="badge badge-secondary">会員名={{ q_name }}</span>
+                {% endif %}
+                {% if q_placement_code %}
+                  <span class="badge badge-dark">上位者コード={{ q_placement_code }}</span>
+                {% endif %}
+                {% if q_placement_rank %}
+                  <span class="badge badge-primary">上位者ランク={{ q_placement_rank|rank_label }}</span>
+                {% endif %}
+                {% if q_rank %}
+                  <span class="badge badge-primary">ランク={{ q_rank|rank_label }}</span>
+                {% endif %}
+              {% else %}
+                <span class="text-muted small">全件表示中</span>
+              {% endif %}
+            </div>
+
+            <div class="bonus-calc-action-row">
+              <button type="submit" form="placementTreeSearchForm" class="btn btn-primary">検索</button>
+              <a class="btn btn-outline-secondary" href="{% url 'connect:placement_tree' %}">
+                リセット
+              </a>
+
+              {% if user_access.can_execute %}
+                <form method="post" class="mb-0">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="copy">
+                  <button type="submit"
+                          class="btn btn-primary"
+                          data-confirm-submit="既存データを全削除して、v_user_placement_tree からコピー登録します。よろしいですか？">
+                    コピー登録
+                  </button>
+                </form>
+              {% endif %}
+            </div>
           </div>
-          {% endif %}
-
-          <form method="get" class="d-flex align-items-end mb-0 flex-wrap">
-
-            <div class="mr-2 mb-2">
-              <label class="form-label mb-0 small text-muted">会員コード</label>
-              <input type="text"
-                     name="q_jwoa_code"
-                     class="form-control"
-                     value="{{ q_jwoa_code|default:'' }}"
-                     placeholder="例: JP05198407">
-            </div>
-
-            <div class="mr-2 mb-2">
-              <label class="form-label mb-0 small text-muted">会員名</label>
-              <input type="text"
-                     name="q_name"
-                     class="form-control"
-                     value="{{ q_name|default:'' }}"
-                     placeholder="例: 山田">
-            </div>
-
-            <div class="mr-2 mb-2">
-              <label class="form-label mb-0 small text-muted">上位者コード</label>
-              <input type="text"
-                     name="q_placement_code"
-                     class="form-control"
-                     value="{{ q_placement_code|default:'' }}"
-                     placeholder="例: JP00000001">
-            </div>
-
-            <div class="mr-2 mb-2">
-              <label class="form-label mb-0 small text-muted">表示件数</label>
-              <select name="per_page" class="form-control">
-                <option value="50"  {% if per_page == 50 %}selected{% endif %}>50</option>
-                <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
-                <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
-                <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
-              </select>
-            </div>
-
-            <div class="mb-2 mr-2">
-              <button type="submit" class="btn btn-primary">絞り込み</button>
-            </div>
-
-            <div class="mb-2">
-              <a class="btn btn-outline-secondary" href="{% url 'connect:placement_tree' %}">リセット</a>
-            </div>
-          </form>
-
-          {% if q_jwoa_code or q_name or q_placement_code %}
-            <div class="text-muted small mt-3">
-              絞り込み中：
-              {% if q_jwoa_code %}
-                <span class="badge badge-info">会員コード={{ q_jwoa_code }}</span>
-              {% endif %}
-              {% if q_name %}
-                <span class="badge badge-secondary">会員名={{ q_name }}</span>
-              {% endif %}
-              {% if q_placement_code %}
-                <span class="badge badge-dark">上位者コード={{ q_placement_code }}</span>
-              {% endif %}
-            </div>
-          {% else %}
-            <div class="text-muted small mt-3">全件表示中</div>
-          {% endif %}
-
         </div>
       </div>
 
-      <div class="card shadow-sm">
-        <div class="card-body">
+      <div class="card shadow-sm flex-grow-1" style="min-height: 0;">
+        <div class="card-body d-flex flex-column" style="min-height: 0; overflow: hidden;">
 
           {% if rows %}
             {% include "com/_list_summary.html" %}
 
-            <div class="table-responsive">
-              <table class="table table-bordered table-sm align-middle mb-0">
-                <thead class="table-light">
+            <div class="table-responsive flex-grow-1" style="min-height: 0; overflow-x: auto; overflow-y: auto;">
+              <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                   <tr>
-                    <th>ID</th>
+                    <th class="text-end">ID</th>
                     <th>上位者コード</th>
                     <th>上位者名</th>
-                    <th>上位者ランク</th>
+                    <th class="text-end">上位者ランク</th>
                     <th>会員コード</th>
                     <th>会員名</th>
-                    <th>ランク</th>
-                    <th>階層</th>
+                    <th class="text-end">ランク</th>
+                    <th class="text-end">階層</th>
                     <th>作成日時</th>
                   </tr>
                 </thead>
                 <tbody>
                   {% for r in rows %}
                     <tr>
-                      <td>{{ r.id }}</td>
-                      <td>{{ r.placement_code }}</td>
-                      <td>{{ r.placement_name }}</td>
-                      <td>{{ r.placement_rank }}</td>
-                      <td>{{ r.jwoa_code }}</td>
-                      <td>{{ r.send_bv_name }}</td>
-                      <td>{{ r.new_rank }}</td>
-                      <td>{{ r.tree_level }}</td>
+                      <td class="text-end">{{ r.id }}</td>
+                      <td class="font-weight-bold">{{ r.placement_code }}</td>
+                      <td>{{ r.placement_name|default:"-" }}</td>
+                      <td class="text-end">{{ r.placement_rank|rank_label }}</td>
+                      <td class="font-weight-bold">{{ r.jwoa_code }}</td>
+                      <td>{{ r.send_bv_name|default:"-" }}</td>
+                      <td class="text-end">{{ r.new_rank|rank_label }}</td>
+                      <td class="text-end">{{ r.tree_level }}</td>
                       <td>{{ r.created_at }}</td>
                     </tr>
                   {% endfor %}

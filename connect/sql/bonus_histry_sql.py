@@ -210,7 +210,24 @@ MONTH_BONUS_HISTORY_SQL = """
                  )
                 THEN 1
             END
-        ) AS month_bonus_is_empty
+        ) AS month_bonus_is_empty,
+
+        MAX(
+            CASE
+                WHEN h.bonus_name = 'title_registration'
+                THEN DATE(h.registered_at)
+            END
+        ) AS title_registration,
+        MAX(
+            CASE
+                WHEN h.bonus_name = 'title_registration'
+                 AND (
+                    h.comment_text LIKE '0件%%'
+                    OR h.comment_text LIKE '%%: 0件登録'
+                 )
+                THEN 1
+            END
+        ) AS title_registration_is_empty
 
     FROM bonus_db.monthly_period mp
 
@@ -229,7 +246,8 @@ MONTH_BONUS_HISTORY_SQL = """
                 'title_diff_bonus',
                 'repurchase_over_bonus',
                 'three_star_global_bonus',
-                'month_bonus'
+                'month_bonus',
+                'title_registration'
             )
             GROUP BY kibetu, bonus_name
         ) b

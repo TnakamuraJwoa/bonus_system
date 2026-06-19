@@ -1917,7 +1917,7 @@ class UserTargetRankView(KeysetPaginationMixin, generic.TemplateView):
         "new_rank",
     ]
 
-    DEFAULT_PER_PAGE = 10
+    DEFAULT_PER_PAGE = 100
     MAX_PER_PAGE = 500
 
     # ----------------------------
@@ -2096,7 +2096,11 @@ LIMIT %s OFFSET %s
         q_name = (self.request.GET.get("q_name") or "").strip()
         q_new_rank = (self.request.GET.get("q_new_rank") or "").strip()
 
-        per_page = 10
+        try:
+            per_page = int(self.request.GET.get("per_page") or str(self.DEFAULT_PER_PAGE))
+        except ValueError:
+            per_page = self.DEFAULT_PER_PAGE
+        per_page = max(1, min(per_page, self.MAX_PER_PAGE))
 
         try:
             page = int(self.request.GET.get("page") or "1")
@@ -2326,10 +2330,10 @@ LEFT JOIN bonus_db.users u
 
         sql = f"""
 SELECT
-  u.jmoa_code AS jmoa_code,
+  ut.jmoa_code AS jmoa_code,
   u.send_bv_name AS jwoa_name,
   ut.title_id AS title_id,
-  tm.title_name AS title_name,
+  COALESCE(tm.title_name, 'タイトルなし') AS title_name,
   ut.update_date AS update_date
 FROM bonus_db.user_titles ut
 LEFT JOIN bonus_db.users u
@@ -2356,7 +2360,96 @@ ORDER BY tm.title_id
         """
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql)
-            return [{"title_id": r[0], "title_name": r[1]} for r in cursor.fetchall()]
+            choices = [{"title_id": r[0], "title_name": r[1]} for r in cursor.fetchall()]
+        if not any(str(choice["title_id"]) == "0" for choice in choices):
+            choices.insert(0, {"title_id": 0, "title_name": "タイトルなし"})
+        return choices
+
+    def _title_exists(self, title_id: int) -> bool:
+        if title_id == 0:
+            return True
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(
+                """
+SELECT 1
+FROM bonus_db.title_master
+WHERE title_id = %s
+LIMIT 1
+                """,
+                [title_id],
+            )
+            return cursor.fetchone() is not None
+
+    def _update_user_title(self, jmoa_code: str, title_id: int) -> int:
+        with connections["rds"].cursor() as cursor:
+            logger.info(
+                "ピンタイトル一覧からタイトルIDを更新します。jmoa_code=%s title_id=%s",
+                jmoa_code,
+                title_id,
+            )
+            cursor.execute(
+                """
+UPDATE bonus_db.user_titles
+SET
+  title_id = %s,
+  update_date = CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo')
+WHERE jmoa_code = %s
+                """,
+                [title_id, jmoa_code],
+            )
+            return cursor.rowcount
+
+    def _can_update_title_user(self, user) -> bool:
+        profile = getattr(user, "access_profile", None)
+        if profile is not None:
+            return bool(profile.can_update)
+        return get_user_access(user).can_update
+
+    def post(self, request, *args, **kwargs):
+        user_access = get_user_access(request.user)
+        if not user_access.can_menu("title_user") or not self._can_update_title_user(request.user):
+            return HttpResponse("権限がありません。", status=403)
+
+        next_query = (request.POST.get("next_query") or "").strip()
+        list_url = redirect("connect:title_user").url
+        next_url = f"{list_url}?{next_query}" if next_query else list_url
+
+        action = (request.POST.get("action") or "").strip()
+        if action != "update":
+            messages.error(request, "不正な操作です。")
+            return redirect(next_url)
+
+        jmoa_code = (request.POST.get("jmoa_code") or "").strip()
+        title_id_text = (request.POST.get("title_id") or "").strip()
+        if not jmoa_code:
+            messages.error(request, "更新対象の会員IDが不正です。")
+            return redirect(next_url)
+
+        try:
+            title_id = int(title_id_text)
+        except (TypeError, ValueError):
+            messages.error(request, "タイトルIDが不正です。")
+            return redirect(next_url)
+
+        if title_id < 0 or not self._title_exists(title_id):
+            messages.error(request, "存在しないタイトルIDです。")
+            return redirect(next_url)
+
+        try:
+            with transaction.atomic(using="rds"):
+                updated_count = self._update_user_title(jmoa_code, title_id)
+        except Exception as e:
+            logger.exception("ピンタイトル一覧のタイトルID更新エラー")
+            messages.error(request, f"タイトルID更新中にエラーが発生しました: {e}")
+            return redirect(next_url)
+
+        if updated_count:
+            messages.success(request, f"{jmoa_code} のタイトルIDを {title_id} に変更しました。")
+        else:
+            messages.warning(request, "更新対象データがありません。")
+
+        return redirect(next_url)
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -2393,6 +2486,7 @@ ORDER BY tm.title_id
         ctx["title_choices"] = self._fetch_title_choices()
         ctx["selected_title_id"] = title_id
         ctx["q_jpid"] = q_jpid
+        ctx["title_user_can_update"] = self._can_update_title_user(self.request.user)
 
         return self.set_page_context(
             ctx=ctx,
@@ -2640,119 +2734,65 @@ class TitleRegistrationView(generic.TemplateView):
             for i in range(12)
         ]
 
-    def _get_sql(self):
+    def _resolve_kibetu(self, year, month):
+        period = (
+            MonthlyPeriod.objects.using("rds")
+            .filter(year=year, month=month)
+            .order_by("-kibetu")
+            .first()
+        )
+        return period.kibetu if period else ""
+
+    def _resolve_period(self, kibetu="", target_month=""):
+        if kibetu:
+            return MonthlyPeriod.objects.using("rds").filter(kibetu=kibetu).first()
+
+        if target_month:
+            try:
+                year, month = map(int, target_month.split("-"))
+            except (ValueError, TypeError):
+                return None
+
+            return (
+                MonthlyPeriod.objects.using("rds")
+                .filter(year=year, month=month)
+                .order_by("-kibetu")
+                .first()
+            )
+
+        return None
+
+    def _redirect_url(self, kibetu=""):
+        if kibetu:
+            return f"/title_registration/?kibetu={kibetu}"
+        return "/title_registration/"
+
+    def _fetch_rows(self, year, month, kibetu=None):
+        kibetu = kibetu or self._resolve_kibetu(year, month)
+        if not kibetu:
+            return []
+
         sql = """
-WITH orders AS (
-    SELECT
-        a.order_code,
-        a.order_status,
-        a.jwoa_code,
-        a.deposit_at,
-        b.jwoa_code AS jwoa_code1,
-        b.distribution_bv
-    FROM bonus_db.orders AS a
-    LEFT JOIN bonus_db.orders_distribution_bv AS b
-        ON a.order_code = b.order_code
-    WHERE a.bv_actived_flg = 1
-      AND a.deposit_at >= %s
-      AND a.deposit_at < %s
-      AND a.order_status <> 204
-),
-
-sum_bv AS (
-    SELECT
-        jwoa_code,
-        jwoa_code1,
-        SUM(IFNULL(distribution_bv, 0)) AS total_distribution_bv
-    FROM orders
-    GROUP BY jwoa_code, jwoa_code1
-),
-
-ranked AS (
-    SELECT
-        *,
-        ROW_NUMBER() OVER (
-            PARTITION BY jwoa_code
-            ORDER BY total_distribution_bv DESC
-        ) AS rn
-    FROM sum_bv
-),
-
-max_bv AS (
-    SELECT
-        jwoa_code,
-        total_distribution_bv
-    FROM ranked
-    WHERE rn = 1
-),
-
-not_max_bv AS (
-    SELECT
-        jwoa_code,
-        SUM(total_distribution_bv) AS income_bv
-    FROM ranked
-    WHERE rn <> 1
-    GROUP BY jwoa_code
-),
-
-distinct_jwoa AS (
-    SELECT DISTINCT
-        jwoa_code
-    FROM orders
-),
-
-bv_table AS (
-    SELECT
-        a.jwoa_code,
-        IFNULL(max_bv.total_distribution_bv, 0) AS basic_bv,
-        IFNULL(not_max_bv.income_bv, 0) AS income_bv
-    FROM distinct_jwoa a
-    LEFT JOIN max_bv
-        ON a.jwoa_code = max_bv.jwoa_code
-    LEFT JOIN not_max_bv
-        ON a.jwoa_code = not_max_bv.jwoa_code
-),
-
-title_ranked AS (
-    SELECT
-        b.jwoa_code,
-        b.basic_bv,
-        b.income_bv,
-        MAX(t.title_id) AS title_id,
-        %s AS year,
-        %s AS month
-    FROM bv_table b
-    LEFT JOIN bonus_db.title_master t
-        ON b.basic_bv >= t.base_line
-       AND b.income_bv >= t.income_line
-    GROUP BY
-        b.jwoa_code,
-        b.basic_bv,
-        b.income_bv
-)
-
-SELECT
-    jwoa_code,
-    basic_bv,
-    income_bv,
-    title_id,
-    year,
-    month
-FROM title_ranked
-WHERE title_id > 0
-"""
-        return sql
-
-    def _fetch_rows(self, year, month):
-        start = datetime(year, month, 1)
-        end = start + relativedelta(months=1)
-
-        sql = self._get_sql()
-        params = [start, end, year, month]
+            SELECT
+                mt.jwoa_code,
+                mt.basic_line_bv AS basic_bv,
+                mt.income_line_bv AS income_bv,
+                mt.title_id,
+                %s AS year,
+                %s AS month
+            FROM bonus_db.month_title mt
+            JOIN bonus_db.user_titles u
+              ON u.jmoa_code = mt.jwoa_code
+            WHERE mt.kibetu = %s
+              AND mt.title_id > 0
+              AND mt.title_id >= IFNULL(u.title_id, 0)
+            ORDER BY mt.title_id DESC, mt.jwoa_code
+        """
+        params = [year, month, kibetu]
 
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql, params)
-            print(cursor._executed)
+            logger.info("タイトルユーザー登録対象取得SQLを実行します。kibetu=%s", kibetu)
             cols = [c[0] for c in cursor.description]
             return [dict(zip(cols, r)) for r in cursor.fetchall()]
 
@@ -2768,59 +2808,63 @@ LIMIT 1
             cursor.execute(sql, [year, month])
             return cursor.fetchone() is not None
 
-    def _insert_rows(self, year, month):
-        start = datetime(year, month, 1)
-        end = start + relativedelta(months=1)
+    def _insert_rows(self, year, month, kibetu=None):
+        kibetu = kibetu or self._resolve_kibetu(year, month)
+        if not kibetu:
+            return
 
-        sql = f"""
-INSERT INTO bonus_db.title_update_history
-(
-    jwoa_code,
-    basic_bv,
-    income_bv,
-    title_id,
-    year,
-    month,
-    created_at
-)
-SELECT
-    t.jwoa_code,
-    t.basic_bv,
-    t.income_bv,
-    t.title_id,
-    t.year,
-    t.month,
-    CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo')
-FROM (
-{self._get_sql()}
-) t
+        sql = """
+            INSERT INTO bonus_db.title_update_history (
+                jwoa_code,
+                basic_bv,
+                income_bv,
+                title_id,
+                year,
+                month,
+                created_at
+            )
+            SELECT
+                mt.jwoa_code,
+                mt.basic_line_bv,
+                mt.income_line_bv,
+                mt.title_id,
+                %s AS year,
+                %s AS month,
+                CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo')
+            FROM bonus_db.month_title mt
+            JOIN bonus_db.user_titles u
+              ON u.jmoa_code = mt.jwoa_code
+            WHERE mt.kibetu = %s
+              AND mt.title_id > 0
+              AND mt.title_id >= IFNULL(u.title_id, 0)
         """
 
-        params = [start, end, year, month]
+        params = [year, month, kibetu]
 
         with connections["rds"].cursor() as cursor:
+            logger.info("タイトル更新履歴INSERT SQLを実行します。kibetu=%s", kibetu)
             cursor.execute(sql, params)
 
-    def _update_title(self, year, month):
-        start = datetime(year, month, 1)
-        end = start + relativedelta(months=1)
+    def _update_title(self, year, month, kibetu=None):
+        kibetu = kibetu or self._resolve_kibetu(year, month)
+        if not kibetu:
+            return
 
-        sql = f"""
-    UPDATE bonus_db.user_titles u
-    JOIN (
-    {self._get_sql()}
-    ) t
-      ON u.jmoa_code = t.jwoa_code
-    SET
-      u.title_id = t.title_id,
-      u.update_date = CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo')
-    WHERE u.title_id <> t.title_id AND u.title_id < t.title_id
+        sql = """
+            UPDATE bonus_db.user_titles u
+            JOIN bonus_db.month_title mt
+              ON u.jmoa_code = mt.jwoa_code
+            SET
+              u.title_id = mt.title_id,
+              u.update_date = CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo')
+            WHERE mt.kibetu = %s
+              AND mt.title_id > 0
+              AND IFNULL(u.title_id, 0) < mt.title_id
         """
 
-        params = [start, end, year, month]
-
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, params)
+            logger.info("タイトルユーザー更新SQLを実行します。kibetu=%s", kibetu)
+            cursor.execute(sql, [kibetu])
 
     def _update_setting(self, year, month):
         value = f"{year}{month:02d}"
@@ -2838,64 +2882,107 @@ FROM (
         ctx = super().get_context_data(**kwargs)
 
         month_choices = self._get_month_choices()
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
         selected = self.request.GET.get("target_month")
+        selected_period = self._resolve_period(selected_kibetu, selected)
 
         ctx["month_choices"] = month_choices
-        ctx["selected_month"] = selected
+        ctx["selected_kibetu"] = selected_period.kibetu if selected_period else selected_kibetu
+        ctx["selected_period"] = selected_period
+        ctx["selected_month"] = (
+            f"{selected_period.year}-{selected_period.month:02d}"
+            if selected_period
+            else selected
+        )
+        ctx["history_rows"] = get_month_bonus_history_rows()
+        ctx["history_target_url_name"] = "connect:title_registration"
         ctx["rows"] = []
 
-        if selected:
-            try:
-                y, m = map(int, selected.split("-"))
-                ctx["rows"] = self._fetch_rows(y, m)
-            except (ValueError, TypeError):
-                ctx["rows"] = []
+        if selected_period:
+            ctx["rows"] = self._fetch_rows(
+                selected_period.year,
+                selected_period.month,
+                selected_period.kibetu,
+            )
+            if not ctx["rows"]:
+                insert_empty_bonus_history_on_display(
+                    self.request,
+                    "title_registration",
+                    selected_period.kibetu,
+                )
 
         return ctx
 
     def post(self, request, *args, **kwargs):
+        selected_kibetu = (request.POST.get("kibetu") or "").strip()
         selected = request.POST.get("target_month")
+        period = self._resolve_period(selected_kibetu, selected)
 
-        if not selected:
-            messages.error(request, "年月未選択です。")
+        if not period:
+            messages.error(request, "期別を選択してください。")
             return redirect("connect:title_registration")
 
-        try:
-            y, m = map(int, selected.split("-"))
-        except (ValueError, TypeError):
-            messages.error(request, "年月の形式が不正です。")
-            return redirect("connect:title_registration")
+        y = period.year
+        m = period.month
+        kibetu = period.kibetu
+        selected = f"{y}-{m:02d}"
+
+        rows = self._fetch_rows(y, m, kibetu)
+        if not rows:
+            with transaction.atomic(using="rds"):
+                insert_bonus_register_history(
+                    "title_registration",
+                    kibetu,
+                    request.user.username,
+                    "0件登録（対象データなし）",
+                )
+            messages.warning(request, "同じ期別の月タイトル登録データがありません。")
+            return redirect(self._redirect_url(kibetu))
 
         # 事前チェック
         if self._exists_data(y, m):
+            with transaction.atomic(using="rds"):
+                insert_bonus_register_history(
+                    "title_registration",
+                    kibetu,
+                    request.user.username,
+                    "登録済みのため更新スキップ",
+                )
             messages.warning(request, "すでに登録されています。")
-            return redirect(f"{redirect('connect:title_registration').url}?target_month={selected}")
+            return redirect(self._redirect_url(kibetu))
 
         try:
             with transaction.atomic(using="rds"):
                 # タイトル更新履歴に登録
-                self._insert_rows(y, m)
+                self._insert_rows(y, m, kibetu)
 
                 # タイトルユーザーを更新
-                self._update_title(y, m)
+                self._update_title(y, m, kibetu)
 
                 # 設定を更新
                 self._update_setting(y, m)
+
+                insert_bonus_register_history(
+                    "title_registration",
+                    kibetu,
+                    request.user.username,
+                    f"{len(rows)}件登録",
+                )
 
         except IntegrityError as e:
             print("IntegrityError:", e)
             traceback.print_exc()
             messages.warning(request, "すでに登録されています。")
-            return redirect(f"{redirect('connect:title_registration').url}?target_month={selected}")
+            return redirect(self._redirect_url(kibetu))
 
         except Exception as e:
             print("Exception:", e)
             traceback.print_exc()
             messages.error(request, f"登録中にエラーが発生しました: {e}")
-            return redirect(f"{redirect('connect:title_registration').url}?target_month={selected}")
+            return redirect(self._redirect_url(kibetu))
 
         messages.success(request, "登録完了")
-        return redirect(f"{redirect('connect:title_registration').url}?target_month={selected}")
+        return redirect(self._redirect_url(kibetu))
 
 
 
@@ -3896,13 +3983,20 @@ class PlacementTreeView(KeysetPaginationMixin, generic.TemplateView):
     DEFAULT_PER_PAGE = 200
     MAX_PER_PAGE = 500
 
-    def _build_where(self, q_jwoa_code: str, q_name: str, q_placement_code: str):
+    def _build_where(
+        self,
+        q_jwoa_code: str,
+        q_name: str,
+        q_placement_code: str,
+        q_placement_rank: str,
+        q_rank: str,
+    ):
         where = []
         params = []
 
         if q_jwoa_code:
             where.append("c.jwoa_code LIKE %s")
-            params.append(f"%{q_jwoa_code}%")
+            params.append(f"{q_jwoa_code}%")
 
         if q_name:
             where.append("c.send_bv_name LIKE %s")
@@ -3910,13 +4004,34 @@ class PlacementTreeView(KeysetPaginationMixin, generic.TemplateView):
 
         if q_placement_code:
             where.append("c.placement_code LIKE %s")
-            params.append(f"%{q_placement_code}%")
+            params.append(f"{q_placement_code}%")
+
+        if q_placement_rank:
+            where.append("c.placement_rank = %s")
+            params.append(q_placement_rank)
+
+        if q_rank:
+            where.append("c.new_rank = %s")
+            params.append(q_rank)
 
         where_sql = ("WHERE " + " AND ".join(where)) if where else ""
         return where_sql, params
 
-    def _fetch_total_count(self, q_jwoa_code: str, q_name: str, q_placement_code: str) -> int:
-        where_sql, params = self._build_where(q_jwoa_code, q_name, q_placement_code)
+    def _fetch_total_count(
+        self,
+        q_jwoa_code: str,
+        q_name: str,
+        q_placement_code: str,
+        q_placement_rank: str,
+        q_rank: str,
+    ) -> int:
+        where_sql, params = self._build_where(
+            q_jwoa_code,
+            q_name,
+            q_placement_code,
+            q_placement_rank,
+            q_rank,
+        )
 
         sql = f"""
 SELECT COUNT(*)
@@ -3933,10 +4048,18 @@ FROM bonus_db.C_users_placement_tree_cache c
         q_jwoa_code: str,
         q_name: str,
         q_placement_code: str,
+        q_placement_rank: str,
+        q_rank: str,
         limit: int,
         offset: int = 0,
     ):
-        where_sql, params = self._build_where(q_jwoa_code, q_name, q_placement_code)
+        where_sql, params = self._build_where(
+            q_jwoa_code,
+            q_name,
+            q_placement_code,
+            q_placement_rank,
+            q_rank,
+        )
 
         sql = f"""
 SELECT
@@ -4031,6 +4154,8 @@ FROM bonus_db.v_user_placement_tree
         q_jwoa_code = (self.request.GET.get("q_jwoa_code") or "").strip()
         q_name = (self.request.GET.get("q_name") or "").strip()
         q_placement_code = (self.request.GET.get("q_placement_code") or "").strip()
+        q_placement_rank = (self.request.GET.get("q_placement_rank") or "").strip()
+        q_rank = (self.request.GET.get("q_rank") or "").strip()
 
         try:
             per_page = int(self.request.GET.get("per_page") or str(self.DEFAULT_PER_PAGE))
@@ -4038,7 +4163,13 @@ FROM bonus_db.v_user_placement_tree
             per_page = self.DEFAULT_PER_PAGE
         per_page = max(1, min(per_page, self.MAX_PER_PAGE))
 
-        total_count = self._fetch_total_count(q_jwoa_code, q_name, q_placement_code)
+        total_count = self._fetch_total_count(
+            q_jwoa_code,
+            q_name,
+            q_placement_code,
+            q_placement_rank,
+            q_rank,
+        )
         total_pages = max(1, math.ceil(total_count / per_page)) if total_count > 0 else 1
         page = self.get_page_number(total_pages)
         offset = (page - 1) * per_page
@@ -4047,6 +4178,8 @@ FROM bonus_db.v_user_placement_tree
             q_jwoa_code=q_jwoa_code,
             q_name=q_name,
             q_placement_code=q_placement_code,
+            q_placement_rank=q_placement_rank,
+            q_rank=q_rank,
             limit=per_page,
             offset=offset,
         )
@@ -4058,12 +4191,18 @@ FROM bonus_db.v_user_placement_tree
             base_params["q_name"] = q_name
         if q_placement_code:
             base_params["q_placement_code"] = q_placement_code
+        if q_placement_rank:
+            base_params["q_placement_rank"] = q_placement_rank
+        if q_rank:
+            base_params["q_rank"] = q_rank
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
 
         ctx["q_jwoa_code"] = q_jwoa_code
         ctx["q_name"] = q_name
         ctx["q_placement_code"] = q_placement_code
+        ctx["q_placement_rank"] = q_placement_rank
+        ctx["q_rank"] = q_rank
 
         return self.set_page_context(
             ctx=ctx,
@@ -7864,6 +8003,8 @@ class MonthTitleView(generic.ListView):
                 )
             )
 
+            title_registration_status = ""
+
             with transaction.atomic(using="rds"):
                 with connections["rds"].cursor() as cursor:
                     logger.info("月タイトル登録前削除SQLを実行します。kibetu=%s", selected_kibetu)
@@ -7899,10 +8040,58 @@ class MonthTitleView(generic.ListView):
                         ],
                     )
 
-            messages.success(
-                request,
-                f"{len(rows)}件を月タイトル結果に登録しました。",
-            )
+                title_registration = TitleRegistrationView()
+                if title_registration._exists_data(period.year, period.month):
+                    title_registration_status = "skipped"
+                    logger.info(
+                        "タイトルユーザー登録は登録済みのためスキップします。year=%s month=%s",
+                        period.year,
+                        period.month,
+                    )
+                    insert_bonus_register_history(
+                        "title_registration",
+                        selected_kibetu,
+                        request.user.username,
+                        "月タイトル登録後の自動登録: 登録済みのため更新スキップ",
+                    )
+                else:
+                    logger.info(
+                        "月タイトル登録後にタイトルユーザー登録を実行します。kibetu=%s year=%s month=%s",
+                        selected_kibetu,
+                        period.year,
+                        period.month,
+                    )
+                    title_registration_rows = title_registration._fetch_rows(
+                        period.year,
+                        period.month,
+                        selected_kibetu,
+                    )
+                    title_registration._insert_rows(period.year, period.month, selected_kibetu)
+                    title_registration._update_title(period.year, period.month, selected_kibetu)
+                    title_registration._update_setting(period.year, period.month)
+                    insert_bonus_register_history(
+                        "title_registration",
+                        selected_kibetu,
+                        request.user.username,
+                        f"月タイトル登録後の自動登録: {len(title_registration_rows)}件登録",
+                    )
+                    title_registration_status = "registered"
+
+            if title_registration_status == "registered":
+                messages.success(
+                    request,
+                    f"{len(rows)}件を月タイトル結果に登録し、タイトルユーザー登録も実行しました。",
+                )
+            elif title_registration_status == "skipped":
+                messages.success(
+                    request,
+                    f"{len(rows)}件を月タイトル結果に登録しました。タイトルユーザー登録は登録済みのためスキップしました。",
+                )
+            else:
+                messages.success(
+                    request,
+                    f"{len(rows)}件を月タイトル結果に登録しました。",
+                )
             return redirect(f"/month_title/?kibetu={selected_kibetu}")
 
         except Exception as e:
