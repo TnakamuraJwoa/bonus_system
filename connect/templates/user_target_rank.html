@@ -39,6 +39,7 @@
                       <option value="{{ obj.value }}"
                         {% if obj.value == selected_prev_month %}selected{% endif %}>
                         {{ obj.year }}年{{ obj.month }}月
+                        {% if obj.value == select_month_value %}（登録済）{% endif %}
                       </option>
                     {% endfor %}
                   </select>

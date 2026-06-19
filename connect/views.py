@@ -207,6 +207,118 @@ def insert_empty_bonus_history_on_display(request, bonus_name, kibetu):
         )
 
 
+def get_previous_month_from_kibetu(selected_kibetu):
+    kibetu_year = int(selected_kibetu[0:4])
+    kibetu_month = int(selected_kibetu[5:7])
+    current_month_first = datetime(kibetu_year, kibetu_month, 1)
+    prev_month_last = current_month_first - timedelta(days=1)
+    return prev_month_last.year, prev_month_last.month
+
+
+def get_user_target_rank_cutoff(year, month):
+    return datetime(year, month, 1, 0, 0, 0) + relativedelta(months=1)
+
+
+def get_user_add_rank_setting():
+    with connections["rds"].cursor() as cursor:
+        cursor.execute(
+            """
+                SELECT value
+                FROM bonus_db.settings
+                WHERE name = 'user_add_rank'
+                LIMIT 1
+            """
+        )
+        row = cursor.fetchone()
+    return str(row[0]) if row and row[0] is not None else ""
+
+
+def has_user_target_rank_history(kibetu):
+    with connections["rds"].cursor() as cursor:
+        cursor.execute(
+            """
+                SELECT 1
+                FROM bonus_db.bonus_register_history
+                WHERE bonus_name = 'user_target_rank'
+                  AND kibetu = %s
+                LIMIT 1
+            """,
+            [kibetu],
+        )
+        return cursor.fetchone() is not None
+
+
+def register_users_target_rank(year, month):
+    cutoff_dt = get_user_target_rank_cutoff(year, month)
+    target_rank = f"{year}{month:02d}"
+
+    with connections["rds"].cursor() as cursor:
+        cursor.execute("TRUNCATE TABLE bonus_db.users_target_rank")
+        cursor.execute(register_sql.USERS_TARGET_RANK_INSERT_SQL, [cutoff_dt])
+        inserted_count = cursor.rowcount
+        cursor.execute(
+            """
+                UPDATE bonus_db.settings
+                SET value = %s
+                WHERE name = 'user_add_rank'
+            """,
+            [target_rank],
+        )
+
+    return inserted_count, target_rank
+
+
+def ensure_user_target_rank_for_kibetu(request, selected_kibetu):
+    """ドライブボーナス計算用に、期別の前月ユーザーランクを用意する。"""
+    try:
+        year, month = get_previous_month_from_kibetu(selected_kibetu)
+        required_rank = f"{year}{month:02d}"
+        current_rank = get_user_add_rank_setting()
+        has_history = has_user_target_rank_history(required_rank)
+
+        if current_rank == required_rank:
+            if not has_history:
+                with transaction.atomic(using="rds"):
+                    insert_bonus_register_history(
+                        "user_target_rank",
+                        required_rank,
+                        request.user.username,
+                        (
+                            "ドライブボーナス計算前の自動登録: "
+                            f"登録済みのため更新スキップ（{required_rank}）"
+                        ),
+                    )
+            return True
+
+        with transaction.atomic(using="rds"):
+            inserted_count, target_rank = register_users_target_rank(year, month)
+            insert_bonus_register_history(
+                "user_target_rank",
+                target_rank,
+                request.user.username,
+                (
+                    "ドライブボーナス計算前の自動登録: "
+                    f"{year}年{month}月（{target_rank}） {inserted_count}件登録"
+                ),
+            )
+
+        messages.info(
+            request,
+            f"ドライブボーナス計算前に、{year}年{month}月（{required_rank}）のユーザーランクを自動登録しました。",
+        )
+        return True
+    except Exception:
+        logger.exception(
+            "ユーザーランク自動登録エラー: kibetu=%s",
+            selected_kibetu,
+        )
+        messages.error(
+            request,
+            "ドライブボーナス計算前のユーザーランク自動登録に失敗しました。",
+        )
+        return False
+
+
 def parse_input_date(value):
     if value is None:
         return None
@@ -932,6 +1044,9 @@ class DriveBonusView(generic.ListView):
             return redirect("connect:drive_bonus")
 
         try:
+            if not ensure_user_target_rank_for_kibetu(request, selected_kibetu):
+                return redirect(f"/drive_bonus/?kibetu={selected_kibetu}")
+
             rows = self._get_drive_bonus_rows(selected_kibetu, period)
 
             if not rows:
@@ -1046,6 +1161,14 @@ class DriveBonusView(generic.ListView):
 
         ctx["selected_period"] = period
         if not ensure_week_purchase_info(self.request, selected_kibetu, period):
+            insert_empty_bonus_history_on_display(
+                self.request,
+                "drive_bonus",
+                selected_kibetu,
+            )
+            return ctx
+
+        if not ensure_user_target_rank_for_kibetu(self.request, selected_kibetu):
             insert_empty_bonus_history_on_display(
                 self.request,
                 "drive_bonus",
@@ -2114,7 +2237,11 @@ LIMIT %s OFFSET %s
         ctx["columns"] = self.DISPLAY_COLUMNS
         ctx["rows"] = []
         ctx["total_count"] = 0
-        ctx["select_month"] = self._get_select_month_setting()
+        select_month = self._get_select_month_setting()
+        ctx["select_month"] = select_month
+        ctx["select_month_value"] = ""
+        if select_month and len(select_month) == 6 and select_month.isdigit():
+            ctx["select_month_value"] = f"{select_month[0:4]}-{select_month[4:6]}"
 
         ctx["q_code"] = q_code
         ctx["q_name"] = q_name
@@ -2197,87 +2324,9 @@ LIMIT %s OFFSET %s
             return redirect("connect:user_target_rank")
 
         year, month = map(int, selected_prev_month.split("-"))
-        cutoff_dt = self._month_end_exclusive(year, month)
         target_rank = f"{year}{month:02d}"
 
-        insert_sql = """
-INSERT INTO bonus_db.users_target_rank
-(
-  `jmoa_code`,
-  `introducer_code`,
-  `placement_code`,
-  `group_code`,
-  `send_bv_name`,
-  `status_code`,
-  `rank`,
-  `salon_administrator`,
-  `salon_name`,
-  `interim_at`,
-  `activated_at`,
-  `created_at`,
-  `target_rank`,
-  `max_up_at`,
-  `new_rank`
-)
-SELECT
-  t.jmoa_code,
-  t.introducer_code,
-  t.placement_code,
-  t.group_code,
-  t.send_bv_name,
-  t.status_code,
-  t.`rank`,
-  t.salon_administrator,
-  t.salon_name,
-  t.interim_at,
-  t.activated_at,
-  t.created_at,
-
-  CASE
-    WHEN x.fluctuation_name REGEXP '^[0-9]+$' THEN CAST(x.fluctuation_name AS UNSIGNED)
-    ELSE NULL
-  END AS target_rank,
-
-  x.created_at AS max_up_at,
-
-  CASE
-    WHEN t.status_code <> 1 THEN 9
-    WHEN x.fluctuation_name REGEXP '^[0-9]+$' THEN CAST(x.fluctuation_name AS UNSIGNED)
-    ELSE t.`rank`
-  END AS new_rank
-
-FROM bonus_db.users t
-LEFT JOIN (
-  SELECT user_id, fluctuation_name, created_at
-  FROM (
-    SELECT
-      user_id,
-      fluctuation_name,
-      created_at,
-      id,
-      ROW_NUMBER() OVER (
-        PARTITION BY user_id
-        ORDER BY created_at DESC, id DESC
-      ) AS rn
-    FROM bonus_db.users_rank_up_history
-    WHERE created_at <= %s
-  ) r
-  WHERE rn = 1
-) x
-  ON t.jmoa_code = x.user_id
-"""
-
-        with connections["rds"].cursor() as cursor:
-            cursor.execute("TRUNCATE TABLE bonus_db.users_target_rank")
-            cursor.execute(insert_sql, [cutoff_dt])
-            cursor.execute(
-                """
-                UPDATE bonus_db.settings
-                SET value = %s
-                WHERE name = 'user_add_rank'
-                """,
-                [target_rank],
-            )
+        register_users_target_rank(year, month)
 
         messages.success(request, f"{year}年{month}月（{target_rank}）で全件登録しました。")
         return redirect(f"{redirect('connect:user_target_rank').url}?prev_month={selected_prev_month}")
@@ -7498,6 +7547,17 @@ class WeekBonusView(generic.ListView):
 
     def _register_drive_bonus(self, selected_kibetu, period):
         if not ensure_week_purchase_info(self.request, selected_kibetu, period):
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    self._insert_auto_register_history(
+                        cursor,
+                        "drive_bonus",
+                        selected_kibetu,
+                        0,
+                    )
+            return 0
+
+        if not ensure_user_target_rank_for_kibetu(self.request, selected_kibetu):
             with transaction.atomic(using="rds"):
                 with connections["rds"].cursor() as cursor:
                     self._insert_auto_register_history(
