@@ -55,6 +55,22 @@ DEFAULT_BONUS_HELP = {
         "title": "月タイトルの説明",
         "content": "月タイトルは、指定した期別の購入情報からインカム系列BVとベーシック系列BVを集計し、会員ごとのタイトルIDを算出します。",
     },
+    "business_personal_week_performance": {
+        "title": "週別 個人業績の説明",
+        "content": "登録済みの週次ボーナス結果を、期別・会員コードで検索して一覧表示します。ドライブボーナス、ベーシックボーナス、マッチングボーナス、週間ボーナスを確認できます。",
+    },
+    "business_personal_performance": {
+        "title": "月別 個人業績の説明",
+        "content": "登録済みの月次ボーナス結果を、期別・会員コードで検索して一覧表示します。タイトルボーナス、再購入オーバーボーナス、差額ボーナス、グローバル配当、月間ボーナスを確認できます。",
+    },
+    "business_team_week_performance": {
+        "title": "週別 チーム業績の説明",
+        "content": "会員の傘下組織（直下メンバー）の注文実績を集計して一覧表示します。直下人数、チーム注文件数、チームBV、チーム売上を確認できます。",
+    },
+    "business_team_performance": {
+        "title": "月別 チーム業績の説明",
+        "content": "会員の傘下組織（直下メンバー）の注文実績を集計して一覧表示します。直下人数、チーム注文件数、チームBV、チーム売上を確認できます。",
+    },
 }
 
 ALLOWED_BONUS_HELP_KEYS = set(DEFAULT_BONUS_HELP.keys())

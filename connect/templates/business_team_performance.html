@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% load humanize %}
-{% load static %}
+{% load static custom_filters %}
 
 {% block head %}
   <link href="{% static 'css/common.css' %}" rel="stylesheet">
@@ -27,7 +27,7 @@
     <main class="col-12 col-md-9 col-lg-10 list-page-main">
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <h5 class="page-title mb-3">【業務検索 - {{ period_label }} チーム業績】</h5>
+          {% include "com/_bonus_calc_help.html" with title="【業務検索 - "|add:period_label|add:" チーム業績】" help_title=period_label|add:" チーム業績" help_key=team_help_key %}
 
           <form method="get" class="business-performance-filter mb-0">
             <div style="width: 180px;">

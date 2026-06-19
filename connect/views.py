@@ -6072,6 +6072,11 @@ class BusinessTeamPerformanceView(KeysetPaginationMixin, generic.TemplateView):
         ctx["period_label"] = self.period_label
         ctx["active_menu"] = self.active_menu
         ctx["reset_url_name"] = self.reset_url_name
+        ctx["team_help_key"] = (
+            "business_team_week_performance"
+            if self.active_menu == "business_team_week_performance"
+            else "business_team_performance"
+        )
         return self.set_page_context(
             ctx=ctx,
             rows=rows,

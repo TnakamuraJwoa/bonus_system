@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% load humanize %}
-{% load static %}
+{% load static custom_filters %}
 
 {% block head %}
   <link href="{% static 'css/common.css' %}" rel="stylesheet">
@@ -27,7 +27,7 @@
     <main class="col-12 col-md-9 col-lg-10 list-page-main">
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <h5 class="page-title mb-3">【業務検索 - 月別 個人業績】</h5>
+          {% include "com/_bonus_calc_help.html" with title="【業務検索 - 月別 個人業績】" help_title="月別 個人業績" help_key="business_personal_performance" %}
 
           <form method="get" class="business-performance-filter mb-0" autocomplete="off">
             {% include "com/_business_search_kibetu_input.html" with placeholder="例: 2025C12" %}
