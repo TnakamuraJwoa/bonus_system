@@ -27,10 +27,10 @@
     <main class="col-12 col-md-9 col-lg-10 list-page-main">
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          {% include "com/_bonus_calc_help.html" with title="【業務検索 - 週別 個人業績】" help_title="週別 個人業績" help_key="business_personal_week_performance" %}
+          {% include "com/_bonus_calc_help.html" with title="【業務検索 - 週別 個人業績】" help_title="週別 個人業績" help_key="business_personal_week_performance" history_modal_id=registration_history_modal_id history_title="登録履歴を表示" %}
 
           <form method="get" class="business-performance-filter mb-0" autocomplete="off">
-            {% include "com/_business_search_kibetu_input.html" with placeholder="例: 2025C12W3" %}
+            {% business_search_kibetu_input q_kibetu period_type="weekly" %}
 
             <div style="width: 180px;">
               <label class="form-label mb-0 small text-muted">会員コード</label>
@@ -105,4 +105,6 @@
     </main>
   </div>
 </div>
+
+{% include "com/_business_search_registration_modal.html" with modal_id=registration_history_modal_id modal_title=registration_modal_title selected_q_kibetu=q_kibetu registration_target_url_name=registration_target_url_name %}
 {% endblock %}

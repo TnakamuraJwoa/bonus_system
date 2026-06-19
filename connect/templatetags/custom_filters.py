@@ -194,12 +194,16 @@ def selection_from_period(period, empty_message=""):
     }
 
 
-@register.inclusion_tag("com/_bonus_calc_kibetu_input.html", takes_context=True)
-def bonus_calc_kibetu_input(context, selected_kibetu="", period_type="weekly"):
-    request = context.get("request")
-    kibetu_choice_mode = "recent"
-    if request:
-        kibetu_choice_mode = request.GET.get("kibetu_choice_mode") or "recent"
+def _resolve_kibetu_choice_mode(request):
+    if not request:
+        return "recent"
+    return request.GET.get("kibetu_choice_mode") or "recent"
+
+
+def _build_kibetu_period_choices(request, period_type, created_kibetu_set=None, zero_count_kibetu_set=None):
+    created_kibetu_set = created_kibetu_set or set()
+    zero_count_kibetu_set = zero_count_kibetu_set or set()
+    kibetu_choice_mode = _resolve_kibetu_choice_mode(request)
 
     if period_type == "monthly":
         today = date.today()
@@ -208,7 +212,6 @@ def bonus_calc_kibetu_input(context, selected_kibetu="", period_type="weekly"):
             .filter(Q(year__lt=today.year) | Q(year=today.year, month__lt=today.month))
             .order_by("-kibetu")
         )
-        datalist_id = "bonus-calc-kibetu-monthly"
         next_completion_kibetu = None
         previous_month = date.today() - relativedelta(months=1)
         previous_month_period = (
@@ -242,8 +245,27 @@ def bonus_calc_kibetu_input(context, selected_kibetu="", period_type="weekly"):
             kibetu_choice_mode = "recent"
 
         period_choices = period_choices.order_by("-kibetu")
-        datalist_id = "bonus-calc-kibetu-weekly"
 
+    period_choices = list(period_choices)
+    for period in period_choices:
+        period.is_zero_count = period.kibetu in zero_count_kibetu_set
+        period.is_created = (
+            period.kibetu in created_kibetu_set
+            and period.kibetu not in zero_count_kibetu_set
+        )
+
+    return {
+        "period_choices": period_choices,
+        "period_type": period_type,
+        "kibetu_choice_mode": kibetu_choice_mode,
+        "next_completion_kibetu": next_completion_kibetu,
+        "previous_month_kibetu": previous_month_kibetu,
+    }
+
+
+@register.inclusion_tag("com/_bonus_calc_kibetu_input.html", takes_context=True)
+def bonus_calc_kibetu_input(context, selected_kibetu="", period_type="weekly"):
+    request = context.get("request")
     history_target_url_name = str(context.get("history_target_url_name") or "")
     history_target_url_name = history_target_url_name.split(":")[-1]
     history_field = BONUS_HISTORY_FIELD_BY_URL_NAME.get(history_target_url_name)
@@ -256,22 +278,44 @@ def bonus_calc_kibetu_input(context, selected_kibetu="", period_type="weekly"):
             if row.get(f"{history_field}_is_empty"):
                 zero_count_kibetu_set.add(row.get("kibetu"))
 
-    period_choices = list(period_choices)
-    for period in period_choices:
-        period.is_zero_count = period.kibetu in zero_count_kibetu_set
-        period.is_created = (
-            period.kibetu in created_kibetu_set
-            and period.kibetu not in zero_count_kibetu_set
-        )
+    period_context = _build_kibetu_period_choices(
+        request,
+        period_type,
+        created_kibetu_set=created_kibetu_set,
+        zero_count_kibetu_set=zero_count_kibetu_set,
+    )
+    datalist_id = (
+        "bonus-calc-kibetu-monthly"
+        if period_type == "monthly"
+        else "bonus-calc-kibetu-weekly"
+    )
 
     return {
         "selected_kibetu": selected_kibetu or "",
-        "period_choices": period_choices,
-        "period_type": period_type,
         "datalist_id": datalist_id,
-        "kibetu_choice_mode": kibetu_choice_mode,
-        "next_completion_kibetu": next_completion_kibetu,
-        "previous_month_kibetu": previous_month_kibetu,
+        **period_context,
+    }
+
+
+@register.inclusion_tag("com/_business_search_kibetu_input.html", takes_context=True)
+def business_search_kibetu_input(context, q_kibetu="", period_type="weekly", placeholder=""):
+    request = context.get("request")
+    created_kibetu_set = set()
+    for row in context.get("registration_history_rows") or []:
+        kibetu = row.get("kibetu")
+        if kibetu and (row.get("row_count") or 0) > 0:
+            created_kibetu_set.add(kibetu)
+
+    period_context = _build_kibetu_period_choices(
+        request,
+        period_type,
+        created_kibetu_set=created_kibetu_set,
+    )
+
+    return {
+        "q_kibetu": q_kibetu or "",
+        "placeholder": placeholder or "期別を入力または選択",
+        **period_context,
     }
 
 

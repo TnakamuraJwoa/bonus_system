@@ -8,6 +8,8 @@ document.addEventListener("DOMContentLoaded", function() {
     var input = dropdown.querySelector(".bonus-calc-kibetu-input");
     var toggle = dropdown.querySelector(".bonus-calc-kibetu-toggle");
     var options = Array.from(dropdown.querySelectorAll(".bonus-calc-kibetu-option"));
+    var openOnFocus = dropdown.dataset.kibetuOpenOnFocus !== "false";
+    var suppressWhenSelected = dropdown.dataset.kibetuSuppressWhenSelected === "true";
 
     if (!input) {
       return;
@@ -16,6 +18,23 @@ document.addEventListener("DOMContentLoaded", function() {
     function setOpen(isOpen) {
       dropdown.classList.toggle("is-open", isOpen);
       input.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    }
+
+    function isSelectedKibetu() {
+      var value = input.value.trim();
+      if (!value) {
+        return false;
+      }
+      return options.some(function(option) {
+        return (option.dataset.kibetuValue || "") === value;
+      });
+    }
+
+    function canOpenDropdown() {
+      if (suppressWhenSelected && isSelectedKibetu()) {
+        return false;
+      }
+      return true;
     }
 
     function filterOptions() {
@@ -27,19 +46,30 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     input.addEventListener("focus", function() {
+      if (!openOnFocus || !canOpenDropdown()) {
+        return;
+      }
       filterOptions();
       setOpen(true);
     });
 
     input.addEventListener("input", function() {
       filterOptions();
-      setOpen(true);
+      if (canOpenDropdown()) {
+        setOpen(true);
+      } else {
+        setOpen(false);
+      }
     });
 
     if (toggle) {
       toggle.addEventListener("click", function() {
+        if (dropdown.classList.contains("is-open")) {
+          setOpen(false);
+          return;
+        }
         filterOptions();
-        setOpen(!dropdown.classList.contains("is-open"));
+        setOpen(true);
         input.focus();
       });
     }

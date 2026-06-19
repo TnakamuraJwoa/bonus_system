@@ -1,6 +1,26 @@
+{% load custom_filters %}
 <div class="bonus-calc-kibetu-field business-search-kibetu-field">
-  <label class="form-label mb-0 small text-muted">期別</label>
-  <div class="bonus-calc-kibetu-select" data-kibetu-dropdown>
+  <div class="d-flex justify-content-between align-items-center mb-1">
+    <label class="form-label mb-0 small text-muted">期別</label>
+    {% if period_type == "weekly" %}
+      <div class="btn-group btn-group-sm" role="group" aria-label="期別候補の表示切替">
+        <button type="button"
+                onclick="this.closest('form').querySelector('input[name=kibetu_choice_mode]').value='recent'; this.closest('form').submit();"
+                class="btn {% if kibetu_choice_mode == 'recent' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+          直近半年
+        </button>
+        <button type="button"
+                onclick="this.closest('form').querySelector('input[name=kibetu_choice_mode]').value='all'; this.closest('form').submit();"
+                class="btn {% if kibetu_choice_mode == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+          全件
+        </button>
+      </div>
+    {% endif %}
+  </div>
+  <div class="bonus-calc-kibetu-select"
+       data-kibetu-dropdown
+       data-kibetu-open-on-focus="false"
+       data-kibetu-suppress-when-selected="true">
     <input type="text"
            name="q_kibetu"
            class="form-control bonus-calc-kibetu-input"
@@ -15,18 +35,43 @@
       ▾
     </button>
     <div class="bonus-calc-kibetu-options" role="listbox">
-      {% for kibetu in kibetu_options %}
+      {% for obj in period_choices %}
         <button type="button"
-                class="bonus-calc-kibetu-option"
-                data-kibetu-value="{{ kibetu }}"
-                data-kibetu-search="{{ kibetu }}">
+                class="bonus-calc-kibetu-option business-search-kibetu-option{% if obj.kibetu == q_kibetu %} business-search-kibetu-option--selected{% endif %}{% if obj.kibetu == next_completion_kibetu %} bonus-calc-kibetu-option--next{% endif %}{% if obj.kibetu == previous_month_kibetu %} bonus-calc-kibetu-option--previous-month{% endif %}"
+                data-kibetu-value="{{ obj.kibetu }}"
+                data-kibetu-search="{{ obj.kibetu }} {{ obj.st_date }} {{ obj.end_date }} {{ obj.payment_date }}">
           <span class="bonus-calc-kibetu-option__main">
             <span class="bonus-calc-kibetu-option__text">
-              <span class="bonus-calc-kibetu-option__title">{{ kibetu }}</span>
+              <span class="bonus-calc-kibetu-option__title">
+                {{ obj.kibetu }}
+              </span>
+              <span class="business-search-kibetu-option__date">
+                {% if period_type == "monthly" %}
+                  支払日：{% if obj.payment_date %}{{ obj.payment_date|jp_date }}{% else %}未設定{% endif %}
+                {% else %}
+                  期間：{% if obj.st_date %}{{ obj.st_date|jp_date }} ～ {{ obj.end_date|jp_date }}{% else %}未設定{% endif %}
+                {% endif %}
+              </span>
+              {% if obj.kibetu == previous_month_kibetu %}
+                <span class="bonus-calc-kibetu-option__badge bonus-calc-kibetu-option__badge--previous-month">前月</span>
+              {% endif %}
             </span>
+            {% if obj.is_zero_count %}
+              <span class="bonus-calc-kibetu-option__badge bonus-calc-kibetu-option__badge--zero-count">ゼロ件</span>
+            {% elif obj.is_created %}
+              <span class="bonus-calc-kibetu-option__badge bonus-calc-kibetu-option__badge--created">作成済み</span>
+            {% endif %}
           </span>
+          {% if obj.kibetu == next_completion_kibetu %}
+            <span class="bonus-calc-kibetu-option__badge-row">
+              <span class="bonus-calc-kibetu-option__badge">次の完成日：{{ obj.completion_date|jp_date }}</span>
+            </span>
+          {% endif %}
         </button>
       {% endfor %}
     </div>
   </div>
+  {% if period_type == "weekly" %}
+    <input type="hidden" name="kibetu_choice_mode" value="{{ kibetu_choice_mode }}">
+  {% endif %}
 </div>

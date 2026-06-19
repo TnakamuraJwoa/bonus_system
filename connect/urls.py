@@ -1,5 +1,9 @@
 from django.urls import path
 from . import views
+from .business_team_performance import (
+    BusinessTeamMonthPerformanceView,
+    BusinessTeamWeekPerformanceView,
+)
 
 
 
@@ -31,7 +35,7 @@ urlpatterns = [
     ),
     path(
         "business_team_performance/",
-        views.BusinessTeamPerformanceView.as_view(),
+        BusinessTeamMonthPerformanceView.as_view(),
         name="business_team_performance",
     ),
     path(
@@ -41,11 +45,7 @@ urlpatterns = [
     ),
     path(
         "business_team_week_performance/",
-        views.BusinessTeamPerformanceView.as_view(
-            period_label="週別",
-            active_menu="business_team_week_performance",
-            reset_url_name="connect:business_team_week_performance",
-        ),
+        BusinessTeamWeekPerformanceView.as_view(),
         name="business_team_week_performance",
     ),
 

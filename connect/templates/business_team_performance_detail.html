@@ -1,0 +1,176 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% load static custom_filters %}
+
+{% block head %}
+  <link href="{% static 'css/common.css' %}" rel="stylesheet">
+  <style>
+    .business-performance-table {
+      min-width: 1400px;
+      white-space: nowrap;
+    }
+
+    .business-performance-filter {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 0.5rem;
+    }
+  </style>
+{% endblock %}
+
+{% block contents %}
+<div class="container-fluid mt-3 list-page-viewport">
+  <div class="row g-1 h-100">
+    {% include "com/_sidebar_business_search.html" with active_menu=active_menu %}
+
+    <main class="col-12 col-md-9 col-lg-10 list-page-main">
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          {% include "com/_bonus_calc_help.html" with title="【業務検索 - "|add:period_label|add:" チーム業績】" help_title=period_label|add:" チーム業績" help_key=team_help_key history_modal_id=registration_history_modal_id history_title="登録履歴を表示" %}
+
+          <div class="bonus-calc-toolbar business-performance-toolbar">
+            <form method="get"
+                  class="bonus-calc-toolbar__main mb-0"
+                  autocomplete="off"
+                  id="businessTeamPerformanceSearchForm">
+              <div class="bonus-calc-toolbar__period-row">
+                {% business_search_kibetu_input q_kibetu period_type=period_type %}
+
+                <div style="width: 180px;">
+                  <label class="form-label mb-0 small text-muted">上位会員コード</label>
+                  <input type="text"
+                         name="q_upper_code"
+                         class="form-control"
+                         value="{{ q_upper_code|default:'' }}"
+                         placeholder="例: JP00000000"
+                         autocomplete="off">
+                </div>
+
+                <div style="width: 180px;">
+                  <label class="form-label mb-0 small text-muted">購入者コード</label>
+                  <input type="text"
+                         name="q_purchaser_code"
+                         class="form-control"
+                         value="{{ q_purchaser_code|default:'' }}"
+                         placeholder="例: JP00000000"
+                         autocomplete="off">
+                </div>
+
+                <div style="width: 110px;">
+                  <label class="form-label mb-0 small text-muted">表示件数</label>
+                  <select name="per_page" class="form-select">
+                    <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                    <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                    <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                    <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+                  </select>
+                </div>
+
+                <div class="bonus-calc-actions bonus-calc-actions--inline">
+                  <button type="submit" class="btn btn-primary">検索</button>
+                  <a href="{% url reset_url_name %}" class="btn btn-outline-secondary">リセット</a>
+                </div>
+              </div>
+            </form>
+
+            {% if user_access.can_execute and q_kibetu %}
+              <div class="bonus-calc-register-aside">
+                <form method="post"
+                      class="mb-0"
+                      data-confirm="{% if is_team_performance_registered %}選択中の期別のチーム業績明細を再登録します。既存データは削除されます。{% else %}選択中の期別のチーム業績明細を登録します。{% endif %}よろしいですか？"
+                      data-loading-message="{% if is_team_performance_registered %}再登録中です...{% else %}登録中です...{% endif %}"
+                      data-loading-target="#businessTeamRegisterOverlay">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="register_team_performance">
+                  <input type="hidden" name="kibetu" value="{{ q_kibetu }}">
+                  <button type="submit" class="btn btn-warning btn-block" data-loading-button>
+                    {% if is_team_performance_registered %}この期別の結果を再登録{% else %}この期別の結果を登録{% endif %}
+                  </button>
+                </form>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm flex-grow-1">
+        <div class="card-body d-flex flex-column">
+          {% if rows %}
+            {% include "com/_list_summary.html" with list_title=period_label|add:" チーム業績一覧" %}
+
+            {% if is_team_performance_preview %}
+              <div class="alert alert-info py-2 mb-2">
+                未登録の{{ period_label }}計算結果を表示しています。「登録」ボタンで明細テーブルに保存できます。
+              </div>
+            {% endif %}
+
+            <div class="table-responsive flex-grow-1">
+              <table class="table table-bordered table-sm align-middle mb-0 business-performance-table">
+                <thead class="table-light">
+                  <tr>
+                    <th class="text-center">期別</th>
+                    <th class="text-center">上位会員コード</th>
+                    <th class="text-center">ライン会員コード</th>
+                    <th class="text-center">購入者コード</th>
+                    <th class="text-center">購入者名</th>
+                    <th class="text-center">階層</th>
+                    <th class="text-center">BV</th>
+                    <th class="text-center">作成日時</th>
+                    <th class="text-center">更新日時</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for r in rows %}
+                  <tr>
+                    <td>{{ r.kibetu }}</td>
+                    <td>{{ r.upper_code }}</td>
+                    <td>{{ r.line_code }}</td>
+                    <td>{{ r.purchaser_code }}</td>
+                    <td>{{ r.purchaser_name|default:"" }}</td>
+                    <td class="text-end">{{ r.lvl|intcomma }}</td>
+                    <td class="text-end">{{ r.sum_bv|floatformat:0|intcomma }}</td>
+                    <td class="text-center">
+                      {% if r.created_at %}{{ r.created_at|date:"Y-m-d H:i:s" }}{% else %}-{% endif %}
+                    </td>
+                    <td class="text-center">
+                      {% if r.updated_at %}{{ r.updated_at|date:"Y-m-d H:i:s" }}{% else %}-{% endif %}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            {% include "com/_pagination.html" %}
+          {% else %}
+            <p class="mb-0 text-muted">
+              {% if q_kibetu %}
+                {% if team_performance_preview_error %}
+                  {{ team_performance_preview_error }}
+                {% else %}
+                  該当データがありません。{% if not is_team_performance_registered %}「登録」ボタンで明細を作成できます。{% endif %}
+                {% endif %}
+              {% else %}
+                期別を選択して検索してください。
+              {% endif %}
+            </p>
+          {% endif %}
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+{% include "com/_business_search_registration_modal.html" with modal_id=registration_history_modal_id modal_title=registration_modal_title selected_q_kibetu=q_kibetu registration_target_url_name=registration_target_url_name %}
+
+<div class="bonus-calculating-overlay" id="businessTeamRegisterOverlay" aria-live="polite" aria-hidden="true">
+  <div class="bonus-calculating-box">
+    <div class="bonus-calculating-spinner" aria-hidden="true"></div>
+    <div class="fw-bold mb-1" data-loading-message>登録中です...</div>
+    <div class="text-muted small">
+      チーム業績明細を保存しています。画面を閉じずにお待ちください。
+    </div>
+  </div>
+</div>
+{% endblock %}

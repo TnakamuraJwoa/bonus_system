@@ -28,6 +28,11 @@ from django.db.models import Sum
 from django.utils.timezone import make_aware
 from .models import TitleMaster, PeriodMaster, UserTitles, Orders, User, PurchaseInfoList, MonthlyPeriod
 from .models import Settings
+from .business_search_registration import (
+    MONTH_PERSONAL_RESULT_TABLE,
+    WEEK_PERSONAL_RESULT_TABLE,
+    fetch_registration_history_rows,
+)
 
 from connect.sql.week_bonus_sql import WEEK_BONUS_SQL
 from connect.sql.month_bonus_sql import MONTH_BONUS_SQL
@@ -5822,16 +5827,6 @@ class BusinessPersonalMonthPerformanceView(KeysetPaginationMixin, generic.Templa
             cols = [c[0] for c in cursor.description]
             return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
-    def _fetch_kibetu_options(self):
-        sql = """
-            SELECT DISTINCT kibetu
-            FROM bonus_db.B_month_bonus_result
-            WHERE kibetu NOT LIKE %s
-            ORDER BY kibetu DESC
-        """
-        with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, ["%W%"])
-            return [row[0] for row in cursor.fetchall() if row[0]]
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -5856,8 +5851,14 @@ class BusinessPersonalMonthPerformanceView(KeysetPaginationMixin, generic.Templa
 
         ctx["q_kibetu"] = q_kibetu
         ctx["q_jwoa_code"] = q_jwoa_code
-        ctx["kibetu_options"] = self._fetch_kibetu_options()
         ctx["active_menu"] = "business_personal_performance"
+        ctx["registration_history_rows"] = fetch_registration_history_rows(
+            MONTH_PERSONAL_RESULT_TABLE,
+            kibetu_not_like="%W%",
+        )
+        ctx["registration_history_modal_id"] = "monthPersonalRegistrationModal"
+        ctx["registration_modal_title"] = "登録履歴（月別 個人業績）"
+        ctx["registration_target_url_name"] = "connect:business_personal_performance"
         return self.set_page_context(
             ctx=ctx,
             rows=rows,
@@ -5933,21 +5934,12 @@ class BusinessPersonalWeekPerformanceView(KeysetPaginationMixin, generic.Templat
             cols = [c[0] for c in cursor.description]
             return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
-    def _fetch_kibetu_options(self):
-        sql = """
-            SELECT DISTINCT kibetu
-            FROM bonus_db.B_week_bonus_result
-            WHERE kibetu LIKE %s
-            ORDER BY kibetu DESC
-        """
-        with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, ["%W%"])
-            return [row[0] for row in cursor.fetchall() if row[0]]
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         q_kibetu = (self.request.GET.get("q_kibetu") or "").strip()
         q_jwoa_code = (self.request.GET.get("q_jwoa_code") or "").strip()
+        kibetu_choice_mode = self.request.GET.get("kibetu_choice_mode") or "recent"
 
         per_page = self.get_per_page()
         total_count = self._fetch_total_count(
@@ -5967,8 +5959,14 @@ class BusinessPersonalWeekPerformanceView(KeysetPaginationMixin, generic.Templat
 
         ctx["q_kibetu"] = q_kibetu
         ctx["q_jwoa_code"] = q_jwoa_code
-        ctx["kibetu_options"] = self._fetch_kibetu_options()
         ctx["active_menu"] = "business_personal_week_performance"
+        ctx["registration_history_rows"] = fetch_registration_history_rows(
+            WEEK_PERSONAL_RESULT_TABLE,
+            kibetu_like="%W%",
+        )
+        ctx["registration_history_modal_id"] = "weekPersonalRegistrationModal"
+        ctx["registration_modal_title"] = "登録履歴（週別 個人業績）"
+        ctx["registration_target_url_name"] = "connect:business_personal_week_performance"
         return self.set_page_context(
             ctx=ctx,
             rows=rows,
@@ -5980,114 +5978,7 @@ class BusinessPersonalWeekPerformanceView(KeysetPaginationMixin, generic.Templat
                 "q_kibetu": q_kibetu,
                 "q_jwoa_code": q_jwoa_code,
                 "per_page": per_page,
-            },
-        )
-
-
-class BusinessTeamPerformanceView(KeysetPaginationMixin, generic.TemplateView):
-    template_name = "business_team_performance.html"
-    period_label = "月別"
-    active_menu = "business_team_performance"
-    reset_url_name = "connect:business_team_performance"
-
-    def _build_where(self, q_jmoa_code="", q_name=""):
-        where = []
-        params = []
-
-        if q_jmoa_code:
-            where.append("u.jmoa_code LIKE %s")
-            params.append(f"%{q_jmoa_code}%")
-
-        if q_name:
-            where.append("(u.send_bv_name LIKE %s OR u.name LIKE %s)")
-            params.append(f"%{q_name}%")
-            params.append(f"%{q_name}%")
-
-        where_sql = "WHERE " + " AND ".join(where) if where else ""
-        return where_sql, params
-
-    def _fetch_total_count(self, q_jmoa_code="", q_name=""):
-        where_sql, params = self._build_where(q_jmoa_code=q_jmoa_code, q_name=q_name)
-        sql = f"""
-            SELECT COUNT(*)
-            FROM nexus_production.users u
-            {where_sql}
-        """
-        with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, params)
-            row = cursor.fetchone()
-        return int(row[0]) if row else 0
-
-    def _fetch_rows(self, q_jmoa_code="", q_name="", limit=200, offset=0):
-        where_sql, params = self._build_where(q_jmoa_code=q_jmoa_code, q_name=q_name)
-        sql = f"""
-            SELECT
-                u.jmoa_code,
-                u.send_bv_name,
-                u.rank,
-                u.status_code,
-                COUNT(DISTINCT d.id) AS direct_member_count,
-                COUNT(o.id) AS team_order_count,
-                COALESCE(SUM(o.total_bv), 0) AS team_total_bv,
-                COALESCE(SUM(o.total_price), 0) AS team_total_price
-            FROM nexus_production.users u
-            LEFT JOIN nexus_production.users d
-                ON d.placement_code = u.jmoa_code
-            LEFT JOIN nexus_production.orders o
-                ON o.jwoa_code = d.jmoa_code
-            {where_sql}
-            GROUP BY
-                u.jmoa_code,
-                u.send_bv_name,
-                u.rank,
-                u.status_code
-            ORDER BY u.jmoa_code
-            LIMIT %s OFFSET %s
-        """
-        with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, params + [limit, offset])
-            cols = [c[0] for c in cursor.description]
-            return [dict(zip(cols, row)) for row in cursor.fetchall()]
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        q_jmoa_code = (self.request.GET.get("q_jmoa_code") or "").strip()
-        q_name = (self.request.GET.get("q_name") or "").strip()
-
-        per_page = self.get_per_page()
-        total_count = self._fetch_total_count(q_jmoa_code=q_jmoa_code, q_name=q_name)
-        total_pages = max(1, math.ceil(total_count / per_page))
-        page = self.get_page_number(total_pages)
-        offset = (page - 1) * per_page
-
-        rows = self._fetch_rows(
-            q_jmoa_code=q_jmoa_code,
-            q_name=q_name,
-            limit=per_page,
-            offset=offset,
-        )
-
-        ctx["q_jmoa_code"] = q_jmoa_code
-        ctx["q_name"] = q_name
-        ctx["period_label"] = self.period_label
-        ctx["active_menu"] = self.active_menu
-        ctx["reset_url_name"] = self.reset_url_name
-        ctx["team_help_key"] = (
-            "business_team_week_performance"
-            if self.active_menu == "business_team_week_performance"
-            else "business_team_performance"
-        )
-        return self.set_page_context(
-            ctx=ctx,
-            rows=rows,
-            per_page=per_page,
-            total_count=total_count,
-            total_pages=total_pages,
-            page=page,
-            base_params={
-                "q_jmoa_code": q_jmoa_code,
-                "q_name": q_name,
-                "per_page": per_page,
+                "kibetu_choice_mode": kibetu_choice_mode,
             },
         )
 

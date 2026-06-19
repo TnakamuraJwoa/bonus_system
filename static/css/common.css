@@ -486,17 +486,59 @@ html, body {
     margin-bottom: 0;
 }
 
-/* 業務検索フォーム：期別ドロップダウンは他項目と同幅に固定 */
-.business-performance-filter .business-search-kibetu-field {
-    flex: 0 0 180px;
-    width: 180px;
-    max-width: 180px;
+/* 業務検索フォーム：期別はボーナス計算と同じ幅・候補表示 */
+.business-performance-filter .business-search-kibetu-field,
+.business-performance-toolbar .business-search-kibetu-field {
+    flex: 0 0 320px;
+    max-width: 320px;
 }
 
 .business-performance-filter .business-search-kibetu-field .bonus-calc-kibetu-select,
-.business-performance-filter .business-search-kibetu-field .bonus-calc-kibetu-input {
+.business-performance-filter .business-search-kibetu-field .bonus-calc-kibetu-input,
+.business-performance-toolbar .business-search-kibetu-field .bonus-calc-kibetu-select,
+.business-performance-toolbar .business-search-kibetu-field .bonus-calc-kibetu-input {
     max-width: 100%;
     min-width: 0;
+}
+
+.business-performance-filter .business-search-kibetu-field .bonus-calc-kibetu-options,
+.business-performance-toolbar .business-search-kibetu-field .bonus-calc-kibetu-options {
+    left: 0;
+    right: auto;
+    width: min(520px, calc(100vw - 2rem));
+    max-height: 34rem;
+    padding: 0.45rem;
+}
+
+.business-search-kibetu-option {
+    padding: 0.7rem 0.75rem;
+}
+
+.business-search-kibetu-option--selected {
+    border-color: var(--color-primary);
+    background: #eef2ff;
+}
+
+.business-search-kibetu-option .bonus-calc-kibetu-option__main {
+    align-items: center;
+}
+
+.business-search-kibetu-option .bonus-calc-kibetu-option__title {
+    display: block;
+    font-size: 0.95rem;
+    line-height: 1.2;
+}
+
+.business-search-kibetu-option__date {
+    display: block;
+    margin-top: 0.25rem;
+    color: #475569;
+    font-size: 0.78rem;
+    line-height: 1.4;
+}
+
+.business-search-kibetu-option .bonus-calc-kibetu-option__badge {
+    white-space: nowrap;
 }
 
 .bonus-calc-kibetu-field .form-label {
@@ -655,6 +697,96 @@ html, body {
     flex: 0 0 auto;
     margin-left: auto;
     background: #dc2626;
+}
+
+.business-history-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: #f8fafc;
+}
+
+.business-history-summary__count {
+    flex: 0 0 auto;
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+    background: #eef2ff;
+    color: var(--color-primary);
+    font-weight: 700;
+}
+
+.business-history-table-wrap {
+    max-height: 62vh;
+    overflow: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+}
+
+.business-history-table {
+    white-space: nowrap;
+}
+
+.business-history-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #f8fafc;
+}
+
+.business-history-table th {
+    color: #334155;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.business-history-table__selected {
+    background: #eef2ff;
+}
+
+.business-history-kibetu {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: #0f172a;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+}
+
+.business-history-badge {
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    background: var(--color-primary);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.business-history-period {
+    color: #334155;
+    line-height: 1.35;
+}
+
+.business-history-period__sub {
+    display: block;
+    margin-top: 0.15rem;
+    color: #64748b;
+    font-size: 0.76rem;
+}
+
+.business-history-count {
+    display: inline-block;
+    min-width: 4.2rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #0f172a;
+    font-weight: 700;
+    text-align: center;
 }
 
 .bonus-calc-pre-register {

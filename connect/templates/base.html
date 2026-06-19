@@ -394,6 +394,33 @@ $(function () {
         modal.modal("show");
     }
 
+    function showFormLoading(form) {
+        var loadingMessage = form.getAttribute("data-loading-message");
+        if (!loadingMessage) {
+            return;
+        }
+
+        var overlaySelector = form.getAttribute("data-loading-target");
+        var overlay = overlaySelector ? document.querySelector(overlaySelector) : null;
+        if (overlay) {
+            var messageEl = overlay.querySelector("[data-loading-message]");
+            if (messageEl) {
+                messageEl.textContent = loadingMessage;
+            }
+            overlay.classList.add("is-active");
+            overlay.setAttribute("aria-hidden", "false");
+        }
+
+        form.querySelectorAll("button, input[type='submit']").forEach(function (button) {
+            button.disabled = true;
+        });
+
+        var loadingButton = form.querySelector("[data-loading-button]");
+        if (loadingButton) {
+            loadingButton.textContent = loadingMessage;
+        }
+    }
+
     document.addEventListener("submit", function (event) {
         var form = event.target;
         if (!form.matches("form[data-confirm]")) {
@@ -402,6 +429,7 @@ $(function () {
 
         event.preventDefault();
         openConfirm(form.getAttribute("data-confirm"), function () {
+            showFormLoading(form);
             form.submit();
         });
     });
@@ -427,6 +455,7 @@ $(function () {
                 form.appendChild(hidden);
             }
 
+            showFormLoading(form);
             form.submit();
         });
     });
