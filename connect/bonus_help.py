@@ -71,6 +71,10 @@ DEFAULT_BONUS_HELP = {
         "title": "月別 チーム業績の説明",
         "content": "購入情報からチーム業績明細を計算し、期別ごとに登録して参照します。上位会員コード・ライン会員コード・購入者・階層・BVの明細を確認できます。未登録の期別は「登録」、登録済みの期別は「再登録」で明細を更新します。",
     },
+    "business_carry_over_performance": {
+        "title": "繰り越し業績照会の説明",
+        "content": "ベーシックボーナス計算時に登録された繰り越しBV管理データを、期別・上位者コード・会員コードで検索して一覧表示します。BV と繰り越しBV を確認できます。",
+    },
 }
 
 ALLOWED_BONUS_HELP_KEYS = set(DEFAULT_BONUS_HELP.keys())

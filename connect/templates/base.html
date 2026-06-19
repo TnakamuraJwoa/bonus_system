@@ -6,13 +6,15 @@
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Bonus System{% endblock %}</title>
+    <link rel="icon" href="{% static 'imgs/logo.png' %}" type="image/png">
+    <link rel="apple-touch-icon" href="{% static 'imgs/logo.png' %}">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <link href="{% static 'css/base_style.css' %}" rel="stylesheet"/>
-    <link href="{% static 'css/theme.css' %}?v=26" rel="stylesheet"/>
+    <link href="{% static 'css/theme.css' %}?v=27" rel="stylesheet"/>
     <link href="{% static 'css/common.css' %}?v=51" rel="stylesheet"/>
     <!-- Bootstrap CSS (v4) -->
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
@@ -27,7 +29,7 @@
     <!-- Navigation-->
     <nav class="navbar navbar-expand-lg app-navbar px-3">
         <a class="navbar-brand brand-saas d-flex align-items-center" href="{% if user.is_authenticated %}{% url 'connect:users' %}{% else %}{% url 'account_login' %}{% endif %}">
-            <img class="logo-box" src="{% static 'imgs/logo.png' %}" alt="Bonus System">
+            <img class="logo-box" src="{% static 'imgs/logo.png' %}" alt="">
             <span class="brand-title">Bonus System</span>
         </a>
 
@@ -110,7 +112,7 @@
                 {% nav_group_active 'business_search' as business_search_active %}
                 <li class="nav-item{% if business_search_active %} nav-item--active{% endif %}">
                     <a class="nav-link{% if business_search_active %} nav-link--active{% endif %}"
-                       href="{% if user_access|can_menu:'business_personal_week_performance' %}{% url 'connect:business_personal_week_performance' %}{% elif user_access|can_menu:'business_team_week_performance' %}{% url 'connect:business_team_week_performance' %}{% elif user_access|can_menu:'business_personal_performance' %}{% url 'connect:business_personal_performance' %}{% else %}{% url 'connect:business_team_performance' %}{% endif %}">
+                       href="{% if user_access|can_menu:'business_personal_week_performance' %}{% url 'connect:business_personal_week_performance' %}{% elif user_access|can_menu:'business_team_week_performance' %}{% url 'connect:business_team_week_performance' %}{% elif user_access|can_menu:'business_personal_performance' %}{% url 'connect:business_personal_performance' %}{% elif user_access|can_menu:'business_team_performance' %}{% url 'connect:business_team_performance' %}{% else %}{% url 'connect:business_carry_over_performance' %}{% endif %}">
                         業務検索
                     </a>
                 </li>
