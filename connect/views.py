@@ -8974,20 +8974,32 @@ class CoolingOffView(generic.TemplateView):
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action")
         next_query = (request.POST.get("next_query") or "").strip()
-        redirect_url = "connect:cooling_off"
+        base_url = redirect("connect:cooling_off").url
+        redirect_target = f"{base_url}?{next_query}" if next_query else base_url
 
-        if action == "create":
-            self._create(request)
+        try:
+            if action == "create":
+                if self._create(request):
+                    messages.success(request, "クーリングオフを登録しました。")
+            elif action == "update":
+                if self._update(request):
+                    messages.success(request, "クーリングオフを更新しました。")
+            elif action == "delete":
+                if self._delete(request):
+                    messages.success(request, "クーリングオフを削除しました。")
+            else:
+                messages.error(request, "不正な操作です。")
+        except IntegrityError:
+            logger.exception("クーリングオフの登録エラー")
+            messages.error(
+                request,
+                "クーリングオフの登録中にエラーが発生しました。注文番号を確認してください。",
+            )
+        except Exception as e:
+            logger.exception("クーリングオフ操作エラー")
+            messages.error(request, f"エラーが発生しました: {e}")
 
-        elif action == "update":
-            self._update(request)
-
-        elif action == "delete":
-            self._delete(request)
-
-        if next_query:
-            return redirect(f"{redirect('connect:cooling_off').url}?{next_query}")
-        return redirect(redirect_url)
+        return redirect(redirect_target)
 
     def _get_rows(self, q_order_code="", q_active_flag=""):
         where = []
@@ -9105,9 +9117,51 @@ class CoolingOffView(generic.TemplateView):
         row = cursor.fetchone()
         return row[0] if row else ""
 
+    def _validate_cooling_off_order_code(self, order_code, exclude_id=None):
+        if not order_code:
+            return "注文番号を入力してください。"
+
+        if not self._get_order_detail(order_code):
+            return (
+                f"注文番号 {order_code} は orders に存在しません。"
+                "注文マスタへ登録されているか確認してください。"
+            )
+
+        sql = """
+            SELECT id
+            FROM bonus_db.cooling_off
+            WHERE order_code = %s
+        """
+        params = [order_code]
+        if exclude_id is not None:
+            sql += " AND id <> %s"
+            params.append(exclude_id)
+        sql += " LIMIT 1"
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            if cursor.fetchone():
+                return f"注文番号 {order_code} はすでにクーリングオフ登録済みです。"
+
+        return None
+
     def _create(self, request):
         order_code = (request.POST.get("order_code") or "").strip()
-        active_flag = int(request.POST.get("active_flag", 1))
+        try:
+            active_flag = int(request.POST.get("active_flag", 1))
+        except (TypeError, ValueError):
+            messages.error(request, "状態の値が不正です。")
+            return False
+
+        if active_flag not in (0, 1):
+            messages.error(request, "状態の値が不正です。")
+            return False
+
+        error_message = self._validate_cooling_off_order_code(order_code)
+        if error_message:
+            messages.error(request, error_message)
+            return False
+
         sql = """
             INSERT INTO bonus_db.cooling_off (
                 order_code,
@@ -9137,10 +9191,32 @@ class CoolingOffView(generic.TemplateView):
                 if active_flag == 1:
                     self._set_purchase_info_cooling_off(cursor, order_code)
 
+        return True
+
     def _update(self, request):
         order_code = (request.POST.get("order_code") or "").strip()
-        active_flag = int(request.POST.get("active_flag", 1))
-        row_id = request.POST.get("id")
+        row_id = (request.POST.get("id") or "").strip()
+
+        if not row_id:
+            messages.error(request, "更新対象が不正です。")
+            return False
+
+        try:
+            row_id = int(row_id)
+            active_flag = int(request.POST.get("active_flag", 1))
+        except (TypeError, ValueError):
+            messages.error(request, "更新内容が不正です。")
+            return False
+
+        if active_flag not in (0, 1):
+            messages.error(request, "状態の値が不正です。")
+            return False
+
+        error_message = self._validate_cooling_off_order_code(order_code, exclude_id=row_id)
+        if error_message:
+            messages.error(request, error_message)
+            return False
+
         sql = """
             UPDATE bonus_db.cooling_off
             SET
@@ -9154,6 +9230,9 @@ class CoolingOffView(generic.TemplateView):
         with transaction.atomic(using="rds"):
             with connections["rds"].cursor() as cursor:
                 old_order_code = self._get_cooling_off_order_code(cursor, row_id)
+                if not old_order_code:
+                    messages.error(request, "更新対象データがありません。")
+                    return False
 
                 cursor.execute(
                     sql,
@@ -9166,7 +9245,7 @@ class CoolingOffView(generic.TemplateView):
                     ]
                 )
 
-                if old_order_code and old_order_code != order_code:
+                if old_order_code != order_code:
                     self._restore_purchase_info_order_type(cursor, old_order_code)
 
                 if active_flag == 1:
@@ -9174,7 +9253,21 @@ class CoolingOffView(generic.TemplateView):
                 else:
                     self._restore_purchase_info_order_type(cursor, order_code)
 
+        return True
+
     def _delete(self, request):
+        row_id = (request.POST.get("id") or "").strip()
+
+        if not row_id:
+            messages.error(request, "削除対象が不正です。")
+            return False
+
+        try:
+            row_id = int(row_id)
+        except (TypeError, ValueError):
+            messages.error(request, "削除対象が不正です。")
+            return False
+
         sql = """
             DELETE
             FROM bonus_db.cooling_off
@@ -9183,8 +9276,12 @@ class CoolingOffView(generic.TemplateView):
 
         with transaction.atomic(using="rds"):
             with connections["rds"].cursor() as cursor:
-                row_id = request.POST.get("id")
                 order_code = self._get_cooling_off_order_code(cursor, row_id)
+                if not order_code:
+                    messages.warning(request, "削除対象データがありません。")
+                    return False
+
                 cursor.execute(sql, [row_id])
-                if order_code:
-                    self._restore_purchase_info_order_type(cursor, order_code)
+                self._restore_purchase_info_order_type(cursor, order_code)
+
+        return True
