@@ -38,7 +38,7 @@ MENU_FEATURES = (
         ("orders_distribution_bv",),
     ),
     MenuFeature("api_users_bv", "会員BV特別反映情報", "orders", ("api_users_bv",)),
-    MenuFeature("repurchase_last_month", "ボーナス購入情報登録", "orders", ("repurchase_last_month",)),
+    MenuFeature("repurchase_last_month", "ボーナス購入情報(登録/削除)", "orders", ("repurchase_last_month",)),
     MenuFeature("repurchase_list", "ボーナス購入情報一覧", "orders", ("repurchase_list",)),
     MenuFeature("bonus_payment_date", "注文別ボーナス支払日", "orders", ("bonus_payment_date",)),
     MenuFeature("cooling_off", "クーリングオフ", "orders", ("cooling_off",)),

@@ -66,21 +66,6 @@
                   </svg>
                 </button>
               {% endif %}
-              {% if user_access.can_delete %}
-                <button type="button"
-                        class="btn btn-sm btn-outline-danger rounded-circle"
-                        data-toggle="modal"
-                        data-target="#repurchaseDeleteMonthModal"
-                        aria-label="選択年月のデータを削除"
-                        title="選択年月のデータを削除"
-                        style="width: 1.8rem; height: 1.8rem; padding: 0; line-height: 1;"
-                        {% if not selected_period %}disabled{% endif %}>
-                  <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                    <path fill="currentColor" d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5Zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5Zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6Z"/>
-                    <path fill="currentColor" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1 0-2H5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1h2.5a1 1 0 0 1 1 1ZM4.1 4l.4 9.02A1 1 0 0 0 5.5 14h5a1 1 0 0 0 1-.98L11.9 4H4.1Z"/>
-                  </svg>
-                </button>
-              {% endif %}
             </div>
           </div>
 
@@ -409,44 +394,6 @@
         <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
         <a href="{% url 'connect:repurchase_export' %}?{{ request.GET.urlencode }}" class="btn btn-success">Excel出力</a>
       </div>
-    </div>
-  </div>
-</div>
-{% endif %}
-
-{% if user_access.can_delete %}
-<div class="modal fade" id="repurchaseDeleteMonthModal" tabindex="-1" role="dialog" aria-labelledby="repurchaseDeleteMonthModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered" role="document">
-    <div class="modal-content">
-      <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="delete_registered_month">
-        <input type="hidden" name="target_month" value="{{ selected_month }}">
-        <div class="modal-header">
-          <div>
-            <h5 class="modal-title" id="repurchaseDeleteMonthModalLabel">選択年月のデータ削除</h5>
-            <div class="small text-danger">この操作は元に戻せません。</div>
-          </div>
-          <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
-            <span aria-hidden="true">&times;</span>
-          </button>
-        </div>
-        <div class="modal-body">
-          {% if selected_period %}
-            <p class="mb-2">
-              <strong>{% jp_year_month_label selected_period.year selected_period.month %}</strong>
-              の購入情報をすべて削除します。
-            </p>
-            <p class="mb-0 text-muted small">削除前に対象年月が正しいことを確認してください。</p>
-          {% else %}
-            <p class="mb-0 text-muted">削除する対象年月を選択してください。</p>
-          {% endif %}
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
-          <button type="submit" class="btn btn-danger" {% if not selected_period %}disabled{% endif %}>削除する</button>
-        </div>
-      </form>
     </div>
   </div>
 </div>

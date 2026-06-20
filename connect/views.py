@@ -1759,16 +1759,6 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
                 for row in cursor.fetchall()
             ]
 
-    def _delete_registered_month(self, year, month):
-        sql = """
-            DELETE FROM bonus_db.purchase_info_list
-            WHERE register_year = %s
-              AND register_month = %s
-        """
-        with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, [year, month])
-            return cursor.rowcount
-
     def _update_bv(self, row_id, bv):
         select_sql = """
             SELECT order_code
@@ -1815,7 +1805,6 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
 
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "")
-        selected_month = (request.POST.get("target_month") or "").strip()
         next_query = (request.POST.get("next_query") or "").strip()
         list_url = redirect("connect:repurchase_list").url
         next_url = f"{list_url}?{next_query}" if next_query else list_url
@@ -1849,34 +1838,8 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
 
             return redirect(next_url)
 
-        if action != "delete_registered_month":
-            messages.error(request, "不正な操作です。")
-            return redirect("connect:repurchase_list")
-
-        if not selected_month:
-            messages.error(request, "削除する登録年月を選択してください。")
-            return redirect("connect:repurchase_list")
-
-        try:
-            year, month = map(int, selected_month.split("-"))
-        except (ValueError, TypeError):
-            messages.error(request, "登録年月の形式が不正です。")
-            return redirect("connect:repurchase_list")
-
-        try:
-            with transaction.atomic(using="rds"):
-                deleted_count = self._delete_registered_month(year, month)
-        except Exception as e:
-            logger.exception("購入情報登録一覧の年月削除エラー")
-            messages.error(request, f"削除中にエラーが発生しました: {e}")
-            return redirect(f"{redirect('connect:repurchase_list').url}?target_month={selected_month}")
-
-        if deleted_count:
-            messages.success(request, f"{year}年{month}月 の購入情報を {deleted_count}件削除しました。")
-        else:
-            messages.warning(request, f"{year}年{month}月 の削除対象データはありません。")
-
-        return redirect("connect:repurchase_list")
+        messages.error(request, "不正な操作です。")
+        return redirect(next_url)
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -3037,7 +3000,8 @@ LIMIT 1
 
 class RepurchaseLastMonthView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "repurchase_last_month.html"
-    DEFAULT_PER_PAGE = 500
+    DEFAULT_PER_PAGE = 1000
+    MAX_PER_PAGE = 2000
 
     def _get_month_choices(self):
         today = date.today().replace(day=1)
@@ -3065,6 +3029,28 @@ class RepurchaseLastMonthView(KeysetPaginationMixin, generic.TemplateView):
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql)
             return [row[0] for row in cursor.fetchall()]
+
+    def _get_registered_month_options(self):
+        sql = """
+            SELECT
+                register_year,
+                register_month,
+                COUNT(*) AS row_count
+            FROM bonus_db.purchase_info_list
+            GROUP BY register_year, register_month
+            ORDER BY register_year DESC, register_month DESC
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql)
+            return [
+                {
+                    "value": format_target_month(row[0], row[1]),
+                    "year": row[0],
+                    "month": row[1],
+                    "count": int(row[2]),
+                }
+                for row in cursor.fetchall()
+            ]
 
     def _build_query_params(self, year, month):
         start = datetime(year, month, 1)
@@ -3097,7 +3083,6 @@ LIMIT %s OFFSET %s
                 params.extend([limit, offset])
 
             cursor.execute(sql, params)
-            print(cursor._executed)
             cols = [c[0] for c in cursor.description]
             return [dict(zip(cols, r)) for r in cursor.fetchall()]
 
@@ -3109,6 +3094,49 @@ WHERE register_year = %s
 """
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql, [year, month])
+            return cursor.rowcount
+
+    def _count_registered_rows(self, year, month):
+        sql = """
+            SELECT COUNT(*)
+            FROM bonus_db.purchase_info_list
+            WHERE register_year = %s
+              AND register_month = %s
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, [year, month])
+            row = cursor.fetchone()
+            return int(row[0]) if row else 0
+
+    def _count_all_registered(self):
+        sql = """
+            SELECT COUNT(*)
+            FROM bonus_db.purchase_info_list
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql)
+            row = cursor.fetchone()
+            return int(row[0]) if row else 0
+
+    def _delete_all_registered(self):
+        sql = """
+            DELETE FROM bonus_db.purchase_info_list
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql)
+            return cursor.rowcount
+
+    def _redirect_url(self, year=None, month=None):
+        base_url = redirect("connect:repurchase_last_month").url
+        if year is not None and month is not None:
+            return f"{base_url}?target_year={year}&target_month={month}"
+        return base_url
+
+    def _enrich_month_context(self, ctx, year, month):
+        selected_month = format_target_month(year, month)
+        ctx["is_registered_month"] = selected_month in ctx.get("registered_months", [])
+        ctx["registered_count"] = self._count_registered_rows(year, month)
+        return ctx
 
     def _insert_rows(self, rows):
         insert_sql = """
@@ -3172,12 +3200,17 @@ WHERE name = 'set_title'
         target_month = (self.request.GET.get("target_month") or "").strip()
         ctx["month_choices"] = self._get_month_choices()
         ctx["registered_months"] = self._get_registered_months()
+        ctx["registered_month_options"] = self._get_registered_month_options()
         ctx["selected_month"] = ""
         ctx["selected_month_choice"] = selected_choice
         ctx["target_year"] = target_year
         ctx["target_month"] = target_month
         ctx["rows"] = []
         ctx["per_page"] = self.get_per_page()
+        ctx["registered_count"] = 0
+        ctx["total_registered_count"] = self._count_all_registered()
+        ctx["is_registered_month"] = False
+        ctx["delete_target_month"] = ""
 
         if selected_choice or target_year or target_month:
             try:
@@ -3186,6 +3219,11 @@ WHERE name = 'set_title'
                 ctx["selected_month_choice"] = format_target_month(y, m)
                 ctx["target_year"] = y
                 ctx["target_month"] = m
+                self._enrich_month_context(ctx, y, m)
+                if ctx["is_registered_month"]:
+                    ctx["delete_target_month"] = ctx["selected_month"]
+                elif ctx["registered_month_options"]:
+                    ctx["delete_target_month"] = ctx["registered_month_options"][0]["value"]
                 per_page = self.get_per_page()
                 total_count = self._count_rows(y, m)
                 total_pages = max(1, math.ceil(total_count / per_page))
@@ -3210,9 +3248,83 @@ WHERE name = 'set_title'
                 messages.error(self.request, "年月の形式が不正です。年と月を正しく指定してください。")
                 ctx["rows"] = []
 
+        if not ctx["delete_target_month"] and ctx["registered_month_options"]:
+            ctx["delete_target_month"] = ctx["registered_month_options"][0]["value"]
+
         return ctx
 
     def post(self, request, *args, **kwargs):
+        action = (request.POST.get("action") or "register").strip()
+        user_access = get_user_access(request.user)
+
+        if action == "delete_all":
+            if not user_access.can_delete:
+                messages.error(request, "削除権限がありません。")
+                return redirect(self._redirect_url())
+
+            try:
+                with transaction.atomic(using="rds"):
+                    deleted_count = self._delete_all_registered()
+            except Exception as e:
+                logger.exception("ボーナス購入情報登録の全件削除エラー")
+                messages.error(request, f"削除中にエラーが発生しました: {e}")
+                return redirect(self._redirect_url())
+
+            if deleted_count:
+                messages.success(
+                    request,
+                    f"購入情報を {deleted_count}件 すべて削除しました。",
+                )
+            else:
+                messages.warning(request, "削除対象データはありません。")
+            return redirect(self._redirect_url())
+
+        if action == "delete_registered_month":
+            if not user_access.can_delete:
+                messages.error(request, "削除権限がありません。")
+                return redirect(self._redirect_url())
+
+            delete_target = (request.POST.get("delete_target_month") or "").strip()
+            if delete_target:
+                try:
+                    y, m = parse_target_month(delete_target)
+                except (ValueError, TypeError):
+                    messages.error(request, "削除年月の形式が不正です。")
+                    return redirect(self._redirect_url())
+            else:
+                if not (
+                    request.POST.get("target_month_choice")
+                    or request.POST.get("target_year")
+                    or request.POST.get("target_month")
+                ):
+                    messages.error(request, "削除する年月を選択してください。")
+                    return redirect(self._redirect_url())
+
+                try:
+                    y, m = get_target_year_month_from_params(request.POST)
+                except (ValueError, TypeError):
+                    messages.error(request, "年月の形式が不正です。年と月を正しく指定してください。")
+                    return redirect(self._redirect_url())
+
+            redirect_url = self._redirect_url(y, m)
+
+            try:
+                with transaction.atomic(using="rds"):
+                    deleted_count = self._delete_rows(y, m)
+            except Exception as e:
+                logger.exception("ボーナス購入情報登録の年月削除エラー")
+                messages.error(request, f"削除中にエラーが発生しました: {e}")
+                return redirect(redirect_url)
+
+            if deleted_count:
+                messages.success(
+                    request,
+                    f"{y}年{m}月 の購入情報を {deleted_count}件削除しました。",
+                )
+            else:
+                messages.warning(request, f"{y}年{m}月 の削除対象データはありません。")
+            return redirect(redirect_url)
+
         if not (
             request.POST.get("target_month_choice")
             or request.POST.get("target_year")
@@ -3223,18 +3335,25 @@ WHERE name = 'set_title'
 
         try:
             y, m = get_target_year_month_from_params(request.POST)
-            selected = format_target_month(y, m)
         except (ValueError, TypeError):
             messages.error(request, "年月の形式が不正です。年と月を正しく指定してください。")
             return redirect("connect:repurchase_last_month")
+
+        redirect_url = self._redirect_url(y, m)
+
+        if action != "register":
+            messages.error(request, "不正な操作です。")
+            return redirect(redirect_url)
+
+        if not user_access.can_execute:
+            messages.error(request, "実行権限がありません。")
+            return redirect(redirect_url)
 
         rows = self._fetch_rows(y, m)
 
         if not rows:
             messages.info(request, "対象データなし")
-            return redirect(
-                f"{redirect('connect:repurchase_last_month').url}?target_year={y}&target_month={m}"
-            )
+            return redirect(redirect_url)
 
         try:
             with transaction.atomic(using="rds"):
@@ -3243,16 +3362,12 @@ WHERE name = 'set_title'
                 self._update_setting(y, m)
 
         except Exception as e:
-            print(e)
+            logger.exception("ボーナス購入情報登録エラー")
             messages.error(request, f"エラー発生: {e}")
-            return redirect(
-                f"{redirect('connect:repurchase_last_month').url}?target_year={y}&target_month={m}"
-            )
+            return redirect(redirect_url)
 
         messages.success(request, f"{len(rows)}件登録完了")
-        return redirect(
-            f"{redirect('connect:repurchase_last_month').url}?target_year={y}&target_month={m}"
-        )
+        return redirect(redirect_url)
 
 
 class RepurchaseExportView(RepurchaseListView):
