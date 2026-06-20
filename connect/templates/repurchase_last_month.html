@@ -2,120 +2,226 @@
 {% load static custom_filters %}
 
 {% block head %}
-  <link href="{% static 'css/common.css' %}" rel="stylesheet">
-  <style>
-    .repurchase-preview-table-wrap {
-      overflow-x: auto;
-    }
+<link href="{% static 'css/common.css' %}" rel="stylesheet">
+<style>
+  .repurchase-register-filter .form-control,
+  .repurchase-register-filter .form-select,
+  .repurchase-register-filter .btn {
+    min-height: 34px;
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+    font-size: 0.875rem;
+  }
 
-    .repurchase-preview-table {
-      white-space: nowrap;
-      min-width: max-content;
+  .repurchase-register-filter .form-label {
+    line-height: 1.1;
+  }
+
+  .repurchase-register-sections {
+    display: grid;
+    grid-template-columns: minmax(520px, 1.4fr) minmax(280px, 0.8fr);
+    gap: 0.75rem;
+    align-items: stretch;
+  }
+
+  .repurchase-register-section {
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 0.65rem 0.75rem;
+    background: #fff;
+  }
+
+  .repurchase-register-section--select {
+    border-left: 4px solid #10b981;
+  }
+
+  .repurchase-register-section--action {
+    border-left: 4px solid #4f46e5;
+  }
+
+  .repurchase-register-section__title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #475569;
+    margin-bottom: 0.35rem;
+  }
+
+  .repurchase-preview-table-wrap {
+    overflow-x: auto;
+  }
+
+  .repurchase-preview-table {
+    white-space: nowrap;
+    min-width: max-content;
+  }
+
+  @media (max-width: 991.98px) {
+    .repurchase-register-sections {
+      grid-template-columns: 1fr;
     }
-  </style>
+  }
+</style>
 {% endblock %}
 
 {% block contents %}
-<div class="container-fluid mt-3">
+<div class="container-fluid mt-3 list-page-viewport">
 
-  <div class="row g-1">
+  <div class="row g-1 h-100">
 
     {% include "com/_sidebar_orders.html" with active_menu="repurchase_last_month" %}
 
-    <main class="col-12 col-md-9 col-lg-10">
+    <main class="col-12 col-md-9 col-lg-10 list-page-main">
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
 
-          <h5 class="page-title mb-3">【注文管理 - ボーナス購入情報登録】</h5>
-          <div class="fw-bold mb-2">対象年月を選択</div>
-
-          <div class="d-flex gap-2 align-items-end flex-wrap">
-
-            <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
-              <div style="min-width: 220px;">
-                <label class="form-label mb-1 small text-muted">直近1年から選択</label>
-                <select name="target_month_choice" class="form-select js-target-month-choice">
-                  <option value="">対象年月を選択</option>
-                  {% for obj in month_choices %}
-                    <option value="{{ obj.value }}"
-                            {% if obj.value == selected_month_choice %}selected{% endif %}>
-                      {% if obj.value in registered_months %}
-                        ★ {{ obj.year }}年{{ obj.month }}月
-                      {% else %}
-                        　{{ obj.year }}年{{ obj.month }}月
-                      {% endif %}
-                    </option>
-                  {% endfor %}
-                </select>
-              </div>
-
-              <div style="width: 140px;">
-                <label class="form-label mb-1 small text-muted">年</label>
-                <input type="text"
-                       name="target_year"
-                       class="form-control js-target-manual"
-                       value="{{ target_year|default:'' }}"
-                       inputmode="numeric"
-                       pattern="[0-9]{4}"
-                       placeholder="yyyy">
-              </div>
-
-              <div style="width: 120px;">
-                <label class="form-label mb-1 small text-muted">月</label>
-                <input type="text"
-                       name="target_month"
-                       class="form-control js-target-manual"
-                       value="{{ target_month|default:'' }}"
-                       inputmode="numeric"
-                       pattern="[0-9]{1,2}"
-                       placeholder="mm">
-              </div>
-
-              <div style="width: 110px;">
-                <label class="form-label mb-1 small text-muted">表示件数</label>
-                <select name="per_page" class="form-select">
-                  <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
-                  <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
-                  <option value="300" {% if per_page == 300 %}selected{% endif %}>300</option>
-                  <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
-                </select>
-              </div>
-
-              <button type="submit" class="btn btn-primary">
-                選択
+          <div class="d-flex justify-content-between align-items-start flex-wrap mb-3">
+            <div>
+              <h5 class="page-title mb-1">【注文管理 - ボーナス購入情報(登録/削除)】</h5>
+              <div class="text-muted small">対象年月の購入情報をプレビューし、登録・削除を行います。</div>
+              <div class="text-muted small mt-1">★ = 登録済み</div>
+            </div>
+            {% if user_access.can_delete %}
+            <div class="d-flex align-items-center gap-2">
+              <button type="button"
+                      class="btn btn-sm btn-outline-danger rounded-circle"
+                      data-toggle="modal"
+                      data-target="#repurchaseRegisterDeleteMonthModal"
+                      aria-label="選択年月のデータを削除"
+                      title="選択年月のデータを削除"
+                      style="width: 1.8rem; height: 1.8rem; padding: 0; line-height: 1;"
+                      {% if not registered_month_options %}disabled{% endif %}>
+                <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                  <path fill="currentColor" d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5Zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5Zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6Z"/>
+                  <path fill="currentColor" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1 0-2H5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1h2.5a1 1 0 0 1 1 1ZM4.1 4l.4 9.02A1 1 0 0 0 5.5 14h5a1 1 0 0 0 1-.98L11.9 4H4.1Z"/>
+                </svg>
               </button>
-            </form>
-
-            {% if user_access.can_execute %}
-            <form method="post" class="mb-0">
-              {% csrf_token %}
-              <input type="hidden" name="target_year" value="{{ target_year }}">
-              <input type="hidden" name="target_month" value="{{ target_month }}">
-              <button type="submit"
-                      class="btn btn-success"
-                      {% if not selected_month %}disabled{% endif %}>
-                登録
+              <button type="button"
+                      class="btn btn-sm btn-outline-danger"
+                      data-toggle="modal"
+                      data-target="#repurchaseRegisterDeleteAllModal"
+                      aria-label="購入情報を全件削除"
+                      title="購入情報を全件削除">
+                全件削除
               </button>
-            </form>
+            </div>
             {% endif %}
-
           </div>
 
-          {% if selected_month %}
-            {% include "com/_selection_indicator.html" with date_text=selected_month|jp_year_month %}
-          {% endif %}
+          <div class="repurchase-register-sections">
+            <form method="get"
+                  class="repurchase-register-section repurchase-register-section--select mb-0 repurchase-register-filter">
+              <div class="repurchase-register-section__title">対象年月の選択</div>
+              <div class="d-flex gap-2 align-items-end flex-wrap">
+                <div style="min-width: 220px;">
+                  <label class="form-label mb-1 small text-muted">直近1年から選択</label>
+                  <select name="target_month_choice" class="form-select js-target-month-choice">
+                    <option value="">対象年月を選択</option>
+                    {% for obj in month_choices %}
+                      <option value="{{ obj.value }}"
+                              {% if obj.value == selected_month_choice %}selected{% endif %}>
+                        {% if obj.value in registered_months %}
+                          ★ {{ obj.year }}年{{ obj.month }}月
+                        {% else %}
+                          　{{ obj.year }}年{{ obj.month }}月
+                        {% endif %}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </div>
+
+                <div style="width: 140px;">
+                  <label class="form-label mb-1 small text-muted">年</label>
+                  <input type="text"
+                         name="target_year"
+                         class="form-control js-target-manual"
+                         value="{{ target_year|default:'' }}"
+                         inputmode="numeric"
+                         pattern="[0-9]{4}"
+                         placeholder="yyyy">
+                </div>
+
+                <div style="width: 120px;">
+                  <label class="form-label mb-1 small text-muted">月</label>
+                  <input type="text"
+                         name="target_month"
+                         class="form-control js-target-manual"
+                         value="{{ target_month|default:'' }}"
+                         inputmode="numeric"
+                         pattern="[0-9]{1,2}"
+                         placeholder="mm">
+                </div>
+
+                <div style="width: 110px;">
+                  <label class="form-label mb-1 small text-muted">表示件数</label>
+                  <select name="per_page" class="form-select">
+                    <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+                    <option value="1000" {% if per_page == 1000 %}selected{% endif %}>1000</option>
+                    <option value="2000" {% if per_page == 2000 %}selected{% endif %}>2000</option>
+                  </select>
+                </div>
+
+                <button type="submit" class="btn btn-primary">選択</button>
+              </div>
+            </form>
+
+            <div class="repurchase-register-section repurchase-register-section--action">
+              <div class="repurchase-register-section__title">操作</div>
+              {% if selected_month %}
+                <div class="mb-2">
+                  {% include "com/_selection_indicator.html" with date_text=selected_month|jp_year_month %}
+                  {% if is_registered_month %}
+                    <span class="badge badge-success ml-1">登録済み {{ registered_count }}件</span>
+                  {% else %}
+                    <span class="badge badge-secondary ml-1">未登録</span>
+                  {% endif %}
+                </div>
+              {% else %}
+                <div class="text-muted small mb-2">対象年月を選択してください。</div>
+              {% endif %}
+
+              {% if user_access.can_execute or user_access.can_delete %}
+              <div class="d-flex gap-2 flex-wrap align-items-center">
+                {% if user_access.can_execute %}
+                <form method="post" class="mb-0">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="register">
+                  <input type="hidden" name="target_year" value="{{ target_year }}">
+                  <input type="hidden" name="target_month" value="{{ target_month }}">
+                  <button type="submit"
+                          class="btn btn-success"
+                          {% if not selected_month %}disabled{% endif %}>
+                    登録
+                  </button>
+                </form>
+                {% endif %}
+
+                {% if user_access.can_delete %}
+                <button type="button"
+                        class="btn btn-outline-danger"
+                        data-toggle="modal"
+                        data-target="#repurchaseRegisterDeleteMonthModal"
+                        {% if not registered_month_options %}disabled{% endif %}>
+                  年月削除
+                </button>
+                {% endif %}
+              </div>
+              {% endif %}
+            </div>
+          </div>
 
         </div>
       </div>
 
-      <div class="card shadow-sm">
-        <div class="card-body">
+      <div class="card shadow-sm flex-grow-1">
+        <div class="card-body d-flex flex-column">
+
+          <h5 class="page-title mb-3">プレビュー一覧</h5>
 
           {% if rows %}
             {% include "com/_list_summary.html" %}
 
-            <div class="table-responsive repurchase-preview-table-wrap">
+            <div class="table-responsive repurchase-preview-table-wrap flex-grow-1">
               <table class="table table-bordered table-sm align-middle mb-0 repurchase-preview-table">
                 <thead class="table-light">
                   <tr>
@@ -173,9 +279,9 @@
             {% include "com/_pagination.html" %}
           {% else %}
             {% if selected_month %}
-              <p class="mb-0">この期間のデータはありません。</p>
+              <p class="mb-0 text-center table-empty-cell text-muted py-4">この期間のプレビューデータはありません。</p>
             {% else %}
-              <p class="mb-0 text-muted">対象年月を選択して「選択」を押してください。</p>
+              <p class="mb-0 text-center table-empty-cell text-muted py-4">対象年月を選択して「選択」を押してください。</p>
             {% endif %}
           {% endif %}
 
@@ -185,6 +291,105 @@
     </main>
   </div>
 </div>
+
+{% if user_access.can_delete %}
+<div class="modal fade"
+     id="repurchaseRegisterDeleteMonthModal"
+     tabindex="-1"
+     role="dialog"
+     aria-labelledby="repurchaseRegisterDeleteMonthModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="delete_registered_month">
+        <div class="modal-header">
+          <div>
+            <h5 class="modal-title" id="repurchaseRegisterDeleteMonthModalLabel">年月ごとのデータ削除</h5>
+            <div class="small text-danger">この操作は元に戻せません。</div>
+          </div>
+          <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          {% if registered_month_options %}
+            <div class="form-group">
+              <label class="form-label small text-muted" for="deleteTargetMonthSelect">削除対象年月</label>
+              <select id="deleteTargetMonthSelect"
+                      name="delete_target_month"
+                      class="form-control js-delete-target-month">
+                {% for obj in registered_month_options %}
+                  <option value="{{ obj.value }}"
+                          data-count="{{ obj.count }}"
+                          {% if obj.value == delete_target_month %}selected{% endif %}>
+                    {{ obj.year }}年{{ obj.month }}月（{{ obj.count }}件）
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+            <p class="mb-0 text-muted small js-delete-target-summary">
+              選択した年月の登録済み購入情報をすべて削除します。
+            </p>
+          {% else %}
+            <p class="mb-0 text-muted">削除対象の登録済み年月がありません。</p>
+          {% endif %}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
+          <button type="submit"
+                  class="btn btn-danger"
+                  {% if not registered_month_options %}disabled{% endif %}>
+            削除する
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade"
+     id="repurchaseRegisterDeleteAllModal"
+     tabindex="-1"
+     role="dialog"
+     aria-labelledby="repurchaseRegisterDeleteAllModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="delete_all">
+        <div class="modal-header">
+          <div>
+            <h5 class="modal-title" id="repurchaseRegisterDeleteAllModalLabel">購入情報の全件削除</h5>
+            <div class="small text-danger">この操作は元に戻せません。</div>
+          </div>
+          <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-2">
+            全期間の登録済み購入情報
+            <strong>{{ total_registered_count }}件</strong>
+            をすべて削除します。
+          </p>
+          <p class="mb-0 text-muted small">本当にすべて削除する場合のみ実行してください。</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
+          <button type="submit"
+                  class="btn btn-danger"
+                  {% if total_registered_count == 0 %}disabled{% endif %}>
+            全件削除する
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block script %}
@@ -209,6 +414,28 @@
       }
     });
   });
+})();
+
+(function () {
+  var select = document.querySelector(".js-delete-target-month");
+  var summary = document.querySelector(".js-delete-target-summary");
+
+  if (!select || !summary) {
+    return;
+  }
+
+  function updateSummary() {
+    var option = select.options[select.selectedIndex];
+    if (!option) {
+      return;
+    }
+    var label = option.textContent.trim();
+    var count = option.getAttribute("data-count") || "0";
+    summary.textContent = label + " の登録済み購入情報 " + count + "件 をすべて削除します。";
+  }
+
+  select.addEventListener("change", updateSummary);
+  updateSummary();
 })();
 </script>
 {% endblock %}

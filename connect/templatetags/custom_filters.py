@@ -131,6 +131,21 @@ def rank_label(value):
 
 
 @register.filter
+def rank_badge_class(value):
+    classes = {
+        "1": "badge-secondary",
+        "2": "badge-warning",
+        "3": "badge-info",
+        "4": "badge-primary",
+        "9": "badge-light",
+    }
+    if value in (None, ""):
+        return "badge-light"
+    key = str(value).strip()
+    return classes.get(key, "badge-light")
+
+
+@register.filter
 def jp_date(value):
     parsed = _to_date(value)
     if not parsed:

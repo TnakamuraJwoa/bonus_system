@@ -1,0 +1,26 @@
+{% load custom_filters %}
+
+{% for node in nodes %}
+  <div class="placement-tree-node" style="padding-left: {{ indent }}rem;">
+    <div class="placement-tree-node__row">
+      {% if node.children %}
+        <button type="button"
+                class="btn btn-sm btn-link placement-tree-toggle p-0 mr-1"
+                aria-expanded="false"
+                aria-label="下位を展開">
+          ▶
+        </button>
+      {% else %}
+        <span class="placement-tree-toggle-spacer mr-1"></span>
+      {% endif %}
+      <span class="font-weight-bold">{{ node.jwoa_code }}</span>
+      <span class="text-muted mx-1">{{ node.send_bv_name|default:"-" }}</span>
+      <span class="badge {{ node.new_rank|rank_badge_class }}">{{ node.new_rank|rank_label }}</span>
+    </div>
+    {% if node.children %}
+      <div class="placement-tree-children is-collapsed">
+        {% include "com/_placement_tree_nodes.html" with nodes=node.children indent=indent|add:1 %}
+      </div>
+    {% endif %}
+  </div>
+{% endfor %}
