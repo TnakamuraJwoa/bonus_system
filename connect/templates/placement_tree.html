@@ -3,12 +3,92 @@
 
 {% block head %}
   <link href="{% static 'css/common.css' %}?v=51" rel="stylesheet">
+  <style>
+    .placement-tree-tabs .btn {
+      min-width: 5.5rem;
+    }
+
+    .placement-tree-panel {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 0.75rem;
+      background: #fafafa;
+    }
+
+    .placement-tree-panel:fullscreen {
+      padding: 1rem;
+      background: #f8fafc;
+      border-radius: 0;
+    }
+
+    .placement-tree-panel:fullscreen .placement-tree-fullscreen-header {
+      display: flex;
+    }
+
+    .placement-tree-fullscreen-header {
+      display: none;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid #e5e7eb;
+      background: #f8fafc;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    .placement-tree-node__row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.15rem;
+      padding: 0.2rem 0.35rem;
+      border-radius: 6px;
+    }
+
+    .placement-tree-node__row:hover {
+      background: #f1f5f9;
+    }
+
+    .placement-tree-node--focus > .placement-tree-node__row {
+      background: #dbeafe;
+      border: 1px solid #93c5fd;
+    }
+
+    .placement-tree-node--ancestor > .placement-tree-node__row {
+      border-left: 3px solid #94a3b8;
+    }
+
+    .placement-tree-toggle {
+      width: 1.2rem;
+      text-align: center;
+      line-height: 1;
+      color: #475569;
+    }
+
+    .placement-tree-toggle-spacer {
+      display: inline-block;
+      width: 1.2rem;
+    }
+
+    .placement-tree-children {
+      border-left: 1px dashed #cbd5e1;
+      margin-left: 0.55rem;
+    }
+
+    .placement-tree-children.is-collapsed {
+      display: none;
+    }
+  </style>
 {% endblock %}
 
 {% block contents %}
 <div class="container-fluid mt-3 list-page-viewport">
   <div class="row g-1 h-100">
-
 
     {% include "com/_sidebar.html" with active_menu="placement_tree" %}
 
@@ -20,7 +100,7 @@
           <div class="d-flex justify-content-between align-items-start flex-wrap mb-3">
             <div>
               <h5 class="page-title mb-2">【上位者ツリー】</h5>
-              <p class="text-muted small mb-0">上位者コードを起点に、会員の配置階層とランクを確認します。ランクは new_rank を表示します。</p>
+              <p class="text-muted small mb-0">会員コードを起点に、上位チェーンと下位組織を確認できます。ランクは new_rank を表示します。</p>
             </div>
             <div class="text-muted small mt-1">
               ランク：
@@ -30,6 +110,9 @@
 
           <div class="bonus-calc-form">
             <form method="get" id="placementTreeSearchForm" class="mb-0">
+              {% if view_mode == "tree" %}
+                <input type="hidden" name="view" value="tree">
+              {% endif %}
               <div class="d-flex align-items-end flex-wrap">
                 <div class="mr-2 mb-2">
                   <label class="form-label mb-0 small text-muted">会員コード</label>
@@ -142,7 +225,89 @@
       <div class="card shadow-sm flex-grow-1" style="min-height: 0;">
         <div class="card-body d-flex flex-column" style="min-height: 0; overflow: hidden;">
 
-          {% if rows %}
+          <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
+            <div class="btn-group placement-tree-tabs" role="group" aria-label="表示切替">
+              <a class="btn btn-sm {% if view_mode == 'list' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+                 href="{% url 'connect:placement_tree' %}{% if list_tab_query %}?{{ list_tab_query }}{% endif %}">
+                一覧
+              </a>
+              <a class="btn btn-sm {% if view_mode == 'tree' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+                 href="{% url 'connect:placement_tree' %}?{{ tree_tab_query }}">
+                ツリー
+              </a>
+            </div>
+            {% if view_mode == "tree" and tree_node_count %}
+              <div class="text-muted small">表示ノード数：{{ tree_node_count }} 件</div>
+            {% endif %}
+            {% if view_mode == "tree" and not tree_unavailable_reason %}
+              <div class="d-flex gap-2 flex-wrap">
+                <button type="button" class="btn btn-sm btn-outline-secondary js-tree-collapse-all">全て閉じる</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary js-tree-expand-all">全て開く</button>
+                <button type="button" class="btn btn-sm btn-outline-primary js-tree-fullscreen">全画面表示</button>
+              </div>
+            {% endif %}
+          </div>
+
+          {% if view_mode == "tree" %}
+            <div class="placement-tree-panel" id="placementTreePanel">
+              <div class="placement-tree-fullscreen-header">
+                <div class="font-weight-bold">上位者ツリー</div>
+                <button type="button" class="btn btn-sm btn-outline-secondary js-tree-exit-fullscreen">全画面を閉じる</button>
+              </div>
+              {% if tree_unavailable_reason %}
+                <p class="mb-0 text-muted">{{ tree_unavailable_reason }}</p>
+              {% else %}
+                {% if tree_truncated %}
+                  <div class="alert alert-warning py-2 small">
+                    表示件数が上限（{{ tree_node_count }} 件）に達したため、一部のみ表示しています。
+                  </div>
+                {% endif %}
+
+                {% for node in tree_ancestors %}
+                  <div class="placement-tree-node placement-tree-node--ancestor" style="padding-left: {{ forloop.counter0 }}rem;">
+                    <div class="placement-tree-node__row">
+                      <span class="placement-tree-toggle-spacer mr-1"></span>
+                      <span class="font-weight-bold">{{ node.jwoa_code }}</span>
+                      <span class="text-muted mx-1">{{ node.send_bv_name|default:"-" }}</span>
+                      <span class="badge {{ node.new_rank|rank_badge_class }}">{{ node.new_rank|rank_label }}</span>
+                      <span class="badge badge-secondary ml-1">上位</span>
+                    </div>
+                  </div>
+                {% endfor %}
+
+                {% if tree_focus %}
+                  <div class="placement-tree-node placement-tree-node--focus" style="padding-left: 0;">
+                    <div class="placement-tree-node__row">
+                      {% if tree_children %}
+                        <button type="button"
+                                class="btn btn-sm btn-link placement-tree-toggle p-0 mr-1"
+                                aria-expanded="false"
+                                aria-label="下位を展開">
+                          ▶
+                        </button>
+                      {% else %}
+                        <span class="placement-tree-toggle-spacer mr-1"></span>
+                      {% endif %}
+                      <span class="font-weight-bold">{{ tree_focus.jwoa_code }}</span>
+                      <span class="text-muted mx-1">{{ tree_focus.send_bv_name|default:"-" }}</span>
+                      <span class="badge {{ tree_focus.new_rank|rank_badge_class }}">{{ tree_focus.new_rank|rank_label }}</span>
+                      <span class="badge badge-primary ml-1">起点</span>
+                    </div>
+                    {% if tree_children %}
+                      <div class="placement-tree-children is-collapsed">
+                        {% include "com/_placement_tree_nodes.html" with nodes=tree_children indent=1 %}
+                      </div>
+                    {% endif %}
+                  </div>
+                {% endif %}
+
+                {% if not tree_focus and not tree_ancestors %}
+                  <p class="mb-0 text-muted">ツリーを表示するデータがありません。</p>
+                {% endif %}
+              {% endif %}
+            </div>
+
+          {% elif rows %}
             {% include "com/_list_summary.html" %}
 
             <div class="table-responsive flex-grow-1" style="min-height: 0; overflow-x: auto; overflow-y: auto;">
@@ -190,4 +355,72 @@
     </main>
   </div>
 </div>
+{% endblock %}
+
+{% block script %}
+<script>
+(function () {
+  function setToggleState(button, collapsed) {
+    button.textContent = collapsed ? "▶" : "▼";
+    button.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    button.setAttribute("aria-label", collapsed ? "下位を展開" : "下位を折りたたむ");
+  }
+
+  function toggleNode(button) {
+    var node = button.closest(".placement-tree-node");
+    if (!node) return;
+
+    var children = node.querySelector(":scope > .placement-tree-children");
+    if (!children) return;
+
+    var collapsed = children.classList.toggle("is-collapsed");
+    setToggleState(button, collapsed);
+  }
+
+  document.querySelectorAll(".placement-tree-toggle").forEach(function (button) {
+    button.addEventListener("click", function () {
+      toggleNode(button);
+    });
+  });
+
+  document.querySelectorAll(".js-tree-collapse-all").forEach(function (button) {
+    button.addEventListener("click", function () {
+      document.querySelectorAll(".placement-tree-children").forEach(function (children) {
+        children.classList.add("is-collapsed");
+      });
+      document.querySelectorAll(".placement-tree-toggle").forEach(function (toggle) {
+        setToggleState(toggle, true);
+      });
+    });
+  });
+
+  document.querySelectorAll(".js-tree-expand-all").forEach(function (button) {
+    button.addEventListener("click", function () {
+      document.querySelectorAll(".placement-tree-children").forEach(function (children) {
+        children.classList.remove("is-collapsed");
+      });
+      document.querySelectorAll(".placement-tree-toggle").forEach(function (toggle) {
+        setToggleState(toggle, false);
+      });
+    });
+  });
+
+  document.querySelectorAll(".js-tree-fullscreen").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var panel = document.getElementById("placementTreePanel");
+      if (panel && panel.requestFullscreen) {
+        panel.requestFullscreen();
+      }
+    });
+  });
+
+  document.querySelectorAll(".js-tree-exit-fullscreen").forEach(function (button) {
+    button.addEventListener("click", function () {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    });
+  });
+})();
+</script>
 {% endblock %}

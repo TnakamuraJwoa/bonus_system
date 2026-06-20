@@ -34,6 +34,7 @@ from .business_search_registration import (
     fetch_registration_history_rows,
 )
 
+from connect.placement_tree_builder import build_member_tree_view
 from connect.sql.week_bonus_sql import WEEK_BONUS_SQL
 from connect.sql.month_bonus_sql import MONTH_BONUS_SQL
 from connect.sql.month_title_sql import MONTH_TITLE_SQL
@@ -4367,6 +4368,20 @@ FROM bonus_db.v_user_placement_tree
         ctx["q_placement_code"] = q_placement_code
         ctx["q_placement_rank"] = q_placement_rank
         ctx["q_rank"] = q_rank
+
+        view_mode = (self.request.GET.get("view") or "list").strip()
+        if view_mode not in ("list", "tree"):
+            view_mode = "list"
+        ctx["view_mode"] = view_mode
+
+        tab_params = dict(base_params)
+        ctx["list_tab_query"] = urlencode(tab_params) if tab_params else ""
+        tree_tab_params = dict(tab_params)
+        tree_tab_params["view"] = "tree"
+        ctx["tree_tab_query"] = urlencode(tree_tab_params)
+
+        tree_context = build_member_tree_view(q_jwoa_code)
+        ctx.update(tree_context)
 
         return self.set_page_context(
             ctx=ctx,
