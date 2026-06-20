@@ -3960,6 +3960,9 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
         if action == "create":
             return self._create(request, q_jwoa_code, q_year, q_month)
 
+        if action == "bulk_create":
+            return self._bulk_create(request, q_jwoa_code, q_year, q_month)
+
         if action == "update":
             return self._update(request, q_jwoa_code, q_year, q_month)
 
@@ -4012,6 +4015,127 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
             messages.error(request, f"登録中にエラーが発生しました: {e}")
 
         return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+
+    def _bulk_create(self, request, q_jwoa_code, q_year, q_month):
+        uploaded_file = request.FILES.get("active_users_file")
+        if not uploaded_file:
+            messages.error(request, "一括登録ファイルを選択してください。")
+            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+
+        try:
+            rows, errors = self._parse_uploaded_rows(uploaded_file)
+        except Exception as e:
+            messages.error(request, f"ファイルの読み込みに失敗しました: {e}")
+            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+
+        if errors:
+            messages.error(request, " / ".join(errors[:5]))
+            if len(errors) > 5:
+                messages.error(request, f"他 {len(errors) - 5} 件のエラーがあります。")
+            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+
+        if not rows:
+            messages.error(request, "登録できるデータがありません。")
+            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+
+        try:
+            self._bulk_upsert_rows(rows)
+            messages.success(request, f"{len(rows)}件を一括登録しました。")
+        except IntegrityError:
+            messages.error(request, "一括登録に失敗しました。会員コードが存在しない可能性があります。")
+        except Exception as e:
+            messages.error(request, f"一括登録中にエラーが発生しました: {e}")
+
+        return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+
+    def _parse_uploaded_rows(self, uploaded_file):
+        filename = (uploaded_file.name or "").lower()
+
+        if filename.endswith((".xlsx", ".xlsm")):
+            workbook = openpyxl.load_workbook(uploaded_file, read_only=True, data_only=True)
+            sheet = workbook.active
+            source_rows = sheet.iter_rows(values_only=True)
+        else:
+            raw = uploaded_file.read()
+            try:
+                text = raw.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                text = raw.decode("cp932")
+            source_rows = csv.reader(io.StringIO(text))
+
+        rows = []
+        errors = []
+
+        for row_no, row in enumerate(source_rows, start=1):
+            values = list(row or [])
+            if not any(str(value or "").strip() for value in values):
+                continue
+
+            if len(values) < 3:
+                errors.append(f"{row_no}行目: 会員コード・年・月を指定してください。")
+                continue
+
+            jwoa_code = str(values[0] or "").strip()
+            year = self._normalize_bulk_number(values[1])
+            month = self._normalize_bulk_number(values[2])
+
+            if row_no == 1 and (
+                "会員" in jwoa_code
+                or "jwoa" in jwoa_code.lower()
+                or "code" in jwoa_code.lower()
+            ):
+                continue
+
+            error_message = self._validate_input(jwoa_code, year, month)
+            if error_message:
+                errors.append(f"{row_no}行目: {error_message}")
+                continue
+
+            rows.append(
+                {
+                    "jwoa_code": jwoa_code,
+                    "year": int(year),
+                    "month": int(month),
+                }
+            )
+
+        return rows, errors
+
+    def _normalize_bulk_number(self, value):
+        if value in (None, ""):
+            return ""
+        if isinstance(value, float) and value.is_integer():
+            return str(int(value))
+        return str(value).strip()
+
+    def _bulk_upsert_rows(self, rows):
+        sql = """
+            INSERT INTO active_users (
+                jwoa_code,
+                year,
+                month,
+                created_at
+            ) VALUES (
+                %s,
+                %s,
+                %s,
+                NOW()
+            )
+            ON DUPLICATE KEY UPDATE
+                jwoa_code = VALUES(jwoa_code)
+        """
+        data = [
+            (
+                row["jwoa_code"],
+                row["year"],
+                row["month"],
+            )
+            for row in rows
+        ]
+
+        with transaction.atomic(using="rds"):
+            with connections["rds"].cursor() as cursor:
+                cursor.executemany(sql, data)
 
     def _update(self, request, q_jwoa_code, q_year, q_month):
         row_id = request.POST.get("id", "").strip()
