@@ -120,3 +120,7 @@ class CustomUserAdmin(ImportExportModelAdmin, UserAdmin):
 
 
 admin.site.register(CustomUser, CustomUserAdmin)
+
+admin.site.site_header = "Bonus System 管理"
+admin.site.site_title = "Bonus System"
+admin.site.index_title = "管理サイト"
