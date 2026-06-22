@@ -392,7 +392,9 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
-        <a href="{% url 'connect:repurchase_export' %}?{{ request.GET.urlencode }}" class="btn btn-success">Excel出力</a>
+        <a href="{% url 'connect:repurchase_export' %}?{{ request.GET.urlencode }}"
+           class="btn btn-success"
+           id="repurchaseExportButton">Excel出力</a>
       </div>
     </div>
   </div>
@@ -429,6 +431,15 @@
 
 {% block script %}
 <script>
+(function () {
+  var exportButton = document.getElementById("repurchaseExportButton");
+  if (exportButton) {
+    exportButton.addEventListener("click", function () {
+      $("#repurchaseExportModal").modal("hide");
+    });
+  }
+})();
+
 (function () {
   var pendingForm = null;
   var modal = $("#bvUpdateConfirmModal");
