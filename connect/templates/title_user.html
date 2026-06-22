@@ -3,6 +3,12 @@
 
 {% block head %}
   <link href="{% static 'css/common.css' %}" rel="stylesheet">
+  <style>
+    .title-user-action-cell {
+      width: 5.5rem;
+      white-space: nowrap;
+    }
+  </style>
 {% endblock %}
 
 {% block contents %}
@@ -102,7 +108,8 @@
             {% include "com/_list_summary.html" %}
 
             <div class="table-responsive">
-              <table class="table table-bordered table-sm align-middle mb-0">
+              <table class="table table-bordered table-sm align-middle mb-0 title-user-table"
+                     style="white-space: nowrap;">
                 <thead class="table-light">
                   <tr>
                     <th>jmoa_code</th>
@@ -111,7 +118,7 @@
                     <th>title_name</th>
                     <th>update_date</th>
                     {% if title_user_can_update %}
-                      <th class="text-center">タイトル変更</th>
+                      <th class="text-center title-user-action-cell">タイトル変更</th>
                     {% endif %}
                   </tr>
                 </thead>
@@ -124,7 +131,7 @@
                       <td>{{ r.title_name }}</td>
                       <td>{{ r.update_date }}</td>
                       {% if title_user_can_update %}
-                        <td class="text-center">
+                        <td class="text-center title-user-action-cell">
                           <button type="button"
                                   class="btn btn-warning btn-sm"
                                   data-toggle="modal"
