@@ -3,7 +3,9 @@ import math
 
 from django.contrib import messages
 from django.db import connections
+from django.http import HttpResponse
 from django.views import generic
+import openpyxl
 
 from connect.views import KeysetPaginationMixin
 
@@ -183,3 +185,64 @@ class ActiveUserSearchView(KeysetPaginationMixin, generic.TemplateView):
             page=page,
             base_params=base_params,
         )
+
+
+class ActiveUserSearchExportView(ActiveUserSearchView):
+    def get(self, request, *args, **kwargs):
+        q_jwoa_code = request.GET.get("q_jwoa_code", "").strip()
+        q_name = request.GET.get("q_name", "").strip()
+        q_year = request.GET.get("q_year", "").strip()
+        q_month = request.GET.get("q_month", "").strip()
+        q_active_status = request.GET.get("q_active_status", "").strip()
+
+        try:
+            rows = self._fetch_rows(
+                q_jwoa_code=q_jwoa_code,
+                q_name=q_name,
+                q_year=q_year,
+                q_month=q_month,
+                q_active_status=q_active_status,
+                limit=1000000,
+                offset=0,
+            )
+        except ValueError:
+            rows = []
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "アクティブ会員検索"
+        ws.append([
+            "ID",
+            "会員コード",
+            "会員名",
+            "年",
+            "月",
+            "アクティブ年月",
+            "ステータス",
+            "作成日時",
+        ])
+
+        for row in rows:
+            active_status = row.get("active_status")
+            status_label = "アクティブ" if active_status == 1 else "非アクティブ"
+            year = row.get("year")
+            month = row.get("month")
+            ws.append([
+                row.get("id"),
+                row.get("jwoa_code"),
+                row.get("send_bv_name"),
+                year,
+                month,
+                f"{year}/{month}",
+                status_label,
+                row.get("created_at"),
+            ])
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = (
+            'attachment; filename="active_user_search.xlsx"'
+        )
+        wb.save(response)
+        return response

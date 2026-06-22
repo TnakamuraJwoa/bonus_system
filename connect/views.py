@@ -2302,6 +2302,7 @@ class TitleUserView(KeysetPaginationMixin, generic.TemplateView):
 
     DEFAULT_PER_PAGE = 200
     MAX_PER_PAGE = 500
+    EXPORT_FETCH_SIZE = 5000
 
     def _build_where(self, title_id: str, q_jpid: str):
         where = []
@@ -2511,6 +2512,51 @@ WHERE jmoa_code = %s
             page=page,
             base_params=base_params,
         )
+
+
+class TitleUserExportView(TitleUserView):
+    def get(self, request, *args, **kwargs):
+        title_id = (request.GET.get("title_id") or "").strip()
+        q_jpid = (request.GET.get("q_jpid") or "").strip()
+        where_sql, params = self._build_where(title_id, q_jpid)
+
+        sql = f"""
+SELECT
+  ut.jmoa_code AS jmoa_code,
+  u.send_bv_name AS jwoa_name,
+  ut.title_id AS title_id,
+  COALESCE(tm.title_name, 'タイトルなし') AS title_name,
+  ut.update_date AS update_date
+FROM bonus_db.user_titles ut
+LEFT JOIN bonus_db.users u
+  ON ut.jmoa_code = u.jmoa_code
+LEFT JOIN bonus_db.title_master tm
+  ON ut.title_id = tm.title_id
+{where_sql}
+ORDER BY ut.title_id, ut.jmoa_code
+        """
+
+        wb = openpyxl.Workbook(write_only=True)
+        ws = wb.create_sheet("ピンタイトル一覧")
+        ws.append(["jmoa_code", "jwoa_name", "title_id", "title_name", "update_date"])
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            while True:
+                rows = cursor.fetchmany(self.EXPORT_FETCH_SIZE)
+                if not rows:
+                    break
+                for row in rows:
+                    ws.append(list(row))
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = (
+            'attachment; filename="title_user.xlsx"'
+        )
+        wb.save(response)
+        return response
 
 
 
@@ -4406,7 +4452,7 @@ class PlacementTreeView(KeysetPaginationMixin, generic.TemplateView):
             params.append(q_placement_rank)
 
         if q_rank:
-            where.append("c.new_rank = %s")
+            where.append("c.`rank` = %s")
             params.append(q_rank)
 
         where_sql = ("WHERE " + " AND ".join(where)) if where else ""
@@ -4464,7 +4510,7 @@ SELECT
     c.placement_rank,
     c.jwoa_code,
     c.send_bv_name,
-    c.new_rank,
+    c.`rank`,
     c.tree_level,
     c.created_at
 FROM bonus_db.C_users_placement_tree_cache c
@@ -4488,7 +4534,7 @@ INSERT INTO bonus_db.C_users_placement_tree_cache (
     placement_rank,
     jwoa_code,
     send_bv_name,
-    new_rank,
+    `rank`,
     tree_level
 )
 SELECT
@@ -4497,7 +4543,7 @@ SELECT
     placement_rank,
     jmoa_code,
     send_bv_name,
-    new_rank,
+    `rank`,
     tree_level
 FROM bonus_db.v_user_placement_tree
         """
@@ -6533,6 +6579,7 @@ class BusinessPersonalWeekPerformanceView(KeysetPaginationMixin, generic.Templat
 
 class UsersView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "users.html"
+    EXPORT_FETCH_SIZE = 5000
 
     def _build_where(
         self,
@@ -6732,6 +6779,126 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             page=page,
             base_params=base_params,
         )
+
+
+class UsersExportView(UsersView):
+    RANK_LABELS = {
+        1: "シルバー",
+        2: "ゴールド",
+        3: "プラチナ",
+        4: "ダイヤ",
+        9: "一般会員",
+    }
+    STATUS_LABELS = {
+        1: "アクティブ",
+        2: "凍結",
+        3: "退会",
+        4: "中途解約",
+        5: "非アクティブ",
+    }
+
+    def _rank_label(self, value):
+        return self.RANK_LABELS.get(value, "-")
+
+    def _status_label(self, value):
+        return self.STATUS_LABELS.get(value, "-")
+
+    def _activated_label(self, value):
+        return "本登録" if value == 1 else "仮登録中"
+
+    def _company_label(self, value):
+        return "法人" if value == 1 else "-"
+
+    def get(self, request, *args, **kwargs):
+        q_jpid = (request.GET.get("q_jpid") or "").strip()
+        q_name = (request.GET.get("q_name") or "").strip()
+        q_introducer = (request.GET.get("q_introducer") or "").strip()
+        q_placement = (request.GET.get("q_placement") or "").strip()
+        q_status = (request.GET.get("q_status") or "").strip()
+        q_rank = (request.GET.get("q_rank") or "").strip()
+
+        where_sql, params = self._build_where(
+            q_jpid=q_jpid,
+            q_name=q_name,
+            q_introducer=q_introducer,
+            q_placement=q_placement,
+            q_status=q_status,
+            q_rank=q_rank,
+        )
+
+        sql = f"""
+            SELECT
+                u.id,
+                u.group_code,
+                u.jmoa_code,
+                u.send_bv_name,
+                u.introducer_code,
+                u.placement_code,
+                u.rank,
+                u.status_code,
+                u.activated,
+                u.interim_at,
+                u.activated_at,
+                u.company,
+                u.last_purchase_at,
+                u.created_at,
+                u.updated_at
+            FROM nexus_production.users u
+            {where_sql}
+            ORDER BY u.status_code, u.jmoa_code
+        """
+
+        wb = openpyxl.Workbook(write_only=True)
+        ws = wb.create_sheet("会員一覧")
+        ws.append([
+            "ID",
+            "グループID",
+            "会員ID",
+            "会員名",
+            "上位者ID",
+            "紹介者ID",
+            "ランク",
+            "ステータス",
+            "本登録FLG",
+            "法人FLG",
+            "仮登録日時",
+            "本登録日時",
+            "最終購入日",
+            "作成日時",
+            "更新日時",
+        ])
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            while True:
+                rows = cursor.fetchmany(self.EXPORT_FETCH_SIZE)
+                if not rows:
+                    break
+                for row in rows:
+                    ws.append([
+                        row[0],
+                        row[1],
+                        row[2],
+                        row[3],
+                        row[4],
+                        row[5],
+                        self._rank_label(row[6]),
+                        self._status_label(row[7]),
+                        self._activated_label(row[8]),
+                        self._company_label(row[11]),
+                        row[9],
+                        row[10],
+                        row[12],
+                        row[13],
+                        row[14],
+                    ])
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = 'attachment; filename="users.xlsx"'
+        wb.save(response)
+        return response
 
 
 

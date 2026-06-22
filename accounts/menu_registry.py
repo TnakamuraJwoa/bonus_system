@@ -27,9 +27,14 @@ MENU_GROUPS = (
 
 MENU_FEATURES = (
     # --- 会員 ---
-    MenuFeature("users", "会員一覧", "users", ("users",)),
-    MenuFeature("title_user", "ピンタイトル一覧", "users", ("title_user",)),
-    MenuFeature("active_user_search", "アクティブ会員検索", "users", ("active_user_search",)),
+    MenuFeature("users", "会員一覧", "users", ("users", "users_export")),
+    MenuFeature("title_user", "ピンタイトル一覧", "users", ("title_user", "title_user_export")),
+    MenuFeature(
+        "active_user_search",
+        "アクティブ会員検索",
+        "users",
+        ("active_user_search", "active_user_search_export"),
+    ),
     MenuFeature("placement_tree", "上位者 Tree", "users", ("placement_tree",)),
     # --- 注文 ---
     MenuFeature("orders", "注文一覧", "orders", ("orders", "order_detail")),

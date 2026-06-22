@@ -16,7 +16,23 @@
       <div class="card shadow-sm mb-3">
         <div class="card-body">
 
-          <h5 class="page-title mb-3">【会員 - アクティブ会員検索】</h5>
+          <div class="d-flex justify-content-between align-items-start flex-wrap mb-3">
+            <div>
+              <h5 class="page-title mb-1">【会員 - アクティブ会員検索】</h5>
+              <div class="text-muted small">アクティブ会員を検索し、表示データを確認します。</div>
+            </div>
+            {% if user_access.can_export %}
+              <a class="btn btn-sm btn-outline-success rounded-circle"
+                 href="{% url 'connect:active_user_search_export' %}{% if base_qs %}?{{ base_qs }}{% endif %}"
+                 aria-label="Excel出力"
+                 title="Excel出力"
+                 style="width: 1.8rem; height: 1.8rem; padding: 0; line-height: 1.65rem; text-align: center;">
+                <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                  <path fill="currentColor" d="M8.5 1.5A.5.5 0 0 0 8 1H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6.5a.5.5 0 0 0-.15-.35l-4.5-4.5a.5.5 0 0 0-.35-.15H8.5ZM9 2.7 12.3 6H10a1 1 0 0 1-1-1V2.7ZM5.1 8h1.1l.8 1.35L7.8 8h1.05l-1.3 2 1.38 2H7.82L7 10.58 6.17 12H5.1l1.36-2L5.1 8Z"/>
+                </svg>
+              </a>
+            {% endif %}
+          </div>
 
           <form method="get" class="d-flex align-items-end mb-0 flex-wrap">
 

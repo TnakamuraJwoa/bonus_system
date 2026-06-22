@@ -5,7 +5,7 @@ from .business_team_performance import (
     BusinessTeamMonthPerformanceView,
     BusinessTeamWeekPerformanceView,
 )
-from .active_user_search import ActiveUserSearchView
+from .active_user_search import ActiveUserSearchExportView, ActiveUserSearchView
 
 
 
@@ -30,8 +30,15 @@ urlpatterns = [
     path("cooling_off/", views.CoolingOffView.as_view(), name="cooling_off"),
 
     path('users/', views.UsersView.as_view(), name = "users"),
+    path("users/export/", views.UsersExportView.as_view(), name="users_export"),
     path('title_user/', views.TitleUserView.as_view(), name = "title_user"),
+    path("title_user/export/", views.TitleUserExportView.as_view(), name="title_user_export"),
     path("active_user_search/", ActiveUserSearchView.as_view(), name="active_user_search"),
+    path(
+        "active_user_search/export/",
+        ActiveUserSearchExportView.as_view(),
+        name="active_user_search_export",
+    ),
     path(
         "business_personal_performance/",
         views.BusinessPersonalMonthPerformanceView.as_view(),
