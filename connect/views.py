@@ -3050,6 +3050,7 @@ class RepurchaseLastMonthView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "repurchase_last_month.html"
     DEFAULT_PER_PAGE = 1000
     MAX_PER_PAGE = 2000
+    EXPORT_FETCH_SIZE = 5000
 
     def _get_month_choices(self):
         today = date.today().replace(day=1)
@@ -3416,6 +3417,89 @@ WHERE name = 'set_title'
 
         messages.success(request, f"{len(rows)}件登録完了")
         return redirect(redirect_url)
+
+
+class RepurchaseLastMonthExportView(RepurchaseLastMonthView):
+    def _order_type_label(self, order_type):
+        if order_type == 101:
+            return "再購入品"
+        if order_type == 102:
+            return "初回購入品"
+        if order_type == 103:
+            return "ランクアップ購入品"
+        if order_type == 105:
+            return "特別対応購入品"
+        if order_type == 200:
+            return "クーリングオフ"
+        return order_type
+
+    def get(self, request, *args, **kwargs):
+        try:
+            year, month = get_target_year_month_from_params(request.GET)
+        except (ValueError, TypeError):
+            messages.error(request, "年月の形式が不正です。年と月を正しく指定してください。")
+            return redirect("connect:repurchase_last_month")
+
+        params = self._build_query_params(year, month)
+        sql = f"""
+{REPURCHASE_LAST_MONTH}
+ORDER BY payment_date ASC, order_code ASC, jwoa_code ASC
+"""
+
+        wb = openpyxl.Workbook(write_only=True)
+        ws = wb.create_sheet("購入情報一覧")
+        ws.append([
+            "登録年",
+            "登録月",
+            "注文年",
+            "注文月",
+            "注文番号",
+            "注文区分",
+            "会員番号",
+            "会員名",
+            "total_bv",
+            "bv",
+            "BV反映日時",
+            "注文日時",
+            "ボーナス支払日",
+        ])
+
+        with connections["rds"].cursor() as cursor:
+            logger.info(
+                "ボーナス購入情報プレビューのExcel出力SQLを実行します。year=%s month=%s",
+                year,
+                month,
+            )
+            cursor.execute(sql, params)
+            columns = [col[0] for col in cursor.description]
+            while True:
+                rows = cursor.fetchmany(self.EXPORT_FETCH_SIZE)
+                if not rows:
+                    break
+                for row in rows:
+                    r = dict(zip(columns, row))
+                    ws.append([
+                        r.get("register_year"),
+                        r.get("register_month"),
+                        r.get("order_year"),
+                        r.get("order_month"),
+                        r.get("order_code"),
+                        self._order_type_label(r.get("order_type")),
+                        r.get("jwoa_code"),
+                        r.get("send_bv_name"),
+                        r.get("total_bv"),
+                        r.get("bv"),
+                        r.get("deposit_at"),
+                        r.get("order_at"),
+                        r.get("payment_date"),
+                    ])
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = 'attachment; filename="repurchase.xlsx"'
+        wb.save(response)
+        return response
 
 
 class RepurchaseExportView(RepurchaseListView):

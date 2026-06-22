@@ -144,7 +144,12 @@ MENU_FEATURES = (
     MenuFeature("kibetu_month", "期別（月）", "settings", ("kibetu_month",)),
     MenuFeature("settings", "設定", "settings", ("settings",)),
     MenuFeature("help_text", "ヘルプテキスト", "settings", ("help_text",)),
-    MenuFeature("repurchase_last_month", "ボーナス購入情報(登録/削除)", "settings", ("repurchase_last_month",)),
+    MenuFeature(
+        "repurchase_last_month",
+        "ボーナス購入情報(登録/削除)",
+        "settings",
+        ("repurchase_last_month", "repurchase_last_month_export"),
+    ),
     MenuFeature("user_target_rank", "ユーザーランク（指定月）", "settings", ("user_target_rank",)),
     MenuFeature("title_list", "タイトル表", "settings", ("title_list",)),
     MenuFeature("active_users", "アクティブ会員登録", "settings", ("active_users", "active_users_template")),
