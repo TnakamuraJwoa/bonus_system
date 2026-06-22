@@ -150,6 +150,12 @@ MENU_FEATURES = (
         "settings",
         ("repurchase_last_month", "repurchase_last_month_export"),
     ),
+    MenuFeature(
+        "orders_distribution_bv_update",
+        "BV振分変更",
+        "settings",
+        ("orders_distribution_bv_update",),
+    ),
     MenuFeature("user_target_rank", "ユーザーランク（指定月）", "settings", ("user_target_rank",)),
     MenuFeature("title_list", "タイトル表", "settings", ("title_list",)),
     MenuFeature("active_users", "アクティブ会員登録", "settings", ("active_users", "active_users_template")),

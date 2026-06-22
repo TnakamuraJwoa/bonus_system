@@ -56,6 +56,7 @@ from connect.sql.basic_bv_line_sql import BASIC_BV_LINE_SQL
 from connect.sql import register_sql
 
 from accounts.access import get_user_access
+from connect.audit import fetch_one_dict, record_change_audit
 from connect.bonus_help import list_bonus_help, save_bonus_help
 
 logger = logging.getLogger(__name__)
@@ -94,6 +95,22 @@ def insert_bonus_register_history(bonus_name, kibetu, username, comment_text):
                 comment_text,
             ],
         )
+    record_change_audit(
+        None,
+        screen_name="ボーナス登録",
+        action_type="execute",
+        target_table="bonus_register_history",
+        target_pk=f"{bonus_name}:{kibetu}",
+        summary=comment_text,
+        before_values=None,
+        after_values={
+            "bonus_name": bonus_name,
+            "kibetu": kibetu,
+            "registered_by": username,
+            "comment_text": comment_text,
+        },
+        changed_by=username,
+    )
 
 
 def get_rds_jst_now():
@@ -389,7 +406,23 @@ class BonusHelpTextView(generic.TemplateView):
         content = request.POST.get("content") or ""
 
         try:
+            before_rows = list_bonus_help()
+            before_row = next((row for row in before_rows if row.get("help_key") == help_key), None)
             save_bonus_help(help_key, title, content)
+            record_change_audit(
+                request,
+                screen_name="ヘルプテキスト",
+                action_type="update",
+                target_table="bonus_help_text",
+                target_pk=help_key,
+                summary=f"{help_key} のヘルプテキストを保存",
+                before_values=before_row,
+                after_values={
+                    "help_key": help_key,
+                    "title": title,
+                    "content": content,
+                },
+            )
             messages.success(request, "ヘルプテキストを保存しました。")
         except ValueError as exc:
             messages.error(request, str(exc))
@@ -1296,19 +1329,79 @@ class KibetuView(generic.ListView):
                         payment_date=payment_date,
                         completion_date=completion_date,
                     )
+                    record_change_audit(
+                        request,
+                        screen_name="期別(週)",
+                        action_type="create",
+                        target_table="period_master",
+                        target_pk=kibetu,
+                        summary=f"{kibetu} を追加",
+                        before_values=None,
+                        after_values={
+                            "kibetu": kibetu,
+                            "st_date": st_date,
+                            "end_date": end_date,
+                            "payment_date": payment_date,
+                            "completion_date": completion_date,
+                        },
+                    )
                     messages.success(request, f"{kibetu} を追加しました。")
 
                 elif action == "update":
                     obj = PeriodMaster.objects.using("rds").get(kibetu=kibetu)
+                    before_values = {
+                        "kibetu": obj.kibetu,
+                        "st_date": obj.st_date,
+                        "end_date": obj.end_date,
+                        "payment_date": obj.payment_date,
+                        "completion_date": obj.completion_date,
+                    }
                     obj.st_date = st_date
                     obj.end_date = end_date
                     obj.payment_date = payment_date
                     obj.completion_date = completion_date
                     obj.save(using="rds")
+                    record_change_audit(
+                        request,
+                        screen_name="期別(週)",
+                        action_type="update",
+                        target_table="period_master",
+                        target_pk=kibetu,
+                        summary=f"{kibetu} を変更",
+                        before_values=before_values,
+                        after_values={
+                            "kibetu": kibetu,
+                            "st_date": st_date,
+                            "end_date": end_date,
+                            "payment_date": payment_date,
+                            "completion_date": completion_date,
+                        },
+                    )
                     messages.success(request, f"{kibetu} を変更しました。")
 
                 elif action == "delete":
-                    PeriodMaster.objects.using("rds").filter(kibetu=kibetu).delete()
+                    before_obj = PeriodMaster.objects.using("rds").filter(kibetu=kibetu).first()
+                    before_values = None
+                    if before_obj:
+                        before_values = {
+                            "kibetu": before_obj.kibetu,
+                            "st_date": before_obj.st_date,
+                            "end_date": before_obj.end_date,
+                            "payment_date": before_obj.payment_date,
+                            "completion_date": before_obj.completion_date,
+                        }
+                    deleted_count, _ = PeriodMaster.objects.using("rds").filter(kibetu=kibetu).delete()
+                    if deleted_count:
+                        record_change_audit(
+                            request,
+                            screen_name="期別(週)",
+                            action_type="delete",
+                            target_table="period_master",
+                            target_pk=kibetu,
+                            summary=f"{kibetu} を削除",
+                            before_values=before_values,
+                            after_values=None,
+                        )
                     messages.success(request, f"{kibetu} を削除しました。")
 
                 else:
@@ -1379,6 +1472,16 @@ class KibetuView(generic.ListView):
         if errors:
             messages.error(request, " / ".join(errors))
         if updated_count:
+            record_change_audit(
+                request,
+                screen_name="期別(週)",
+                action_type="bulk_update",
+                target_table="period_master",
+                target_pk=None,
+                summary=f"期別(週)を {updated_count}件 一括変更",
+                before_values=None,
+                after_values={"count": updated_count},
+            )
             messages.success(request, f"{updated_count} 件を変更しました。")
         elif not errors:
             messages.info(request, "変更対象がありませんでした。")
@@ -1485,18 +1588,74 @@ class KibetuMonthView(generic.ListView):
                         month=month or None,
                         payment_date=parsed_payment_date,
                     )
+                    record_change_audit(
+                        request,
+                        screen_name="期別(月)",
+                        action_type="create",
+                        target_table="monthly_period",
+                        target_pk=kibetu,
+                        summary=f"{kibetu} を追加",
+                        before_values=None,
+                        after_values={
+                            "kibetu": kibetu,
+                            "year": year or None,
+                            "month": month or None,
+                            "payment_date": parsed_payment_date,
+                        },
+                    )
                     messages.success(request, f"{kibetu} を追加しました。")
 
                 elif action == "update":
                     obj = MonthlyPeriod.objects.using("rds").get(kibetu=kibetu)
+                    before_values = {
+                        "kibetu": obj.kibetu,
+                        "year": obj.year,
+                        "month": obj.month,
+                        "payment_date": obj.payment_date,
+                    }
                     obj.year = year or None
                     obj.month = month or None
                     obj.payment_date = parsed_payment_date
                     obj.save(using="rds")
+                    record_change_audit(
+                        request,
+                        screen_name="期別(月)",
+                        action_type="update",
+                        target_table="monthly_period",
+                        target_pk=kibetu,
+                        summary=f"{kibetu} を変更",
+                        before_values=before_values,
+                        after_values={
+                            "kibetu": kibetu,
+                            "year": year or None,
+                            "month": month or None,
+                            "payment_date": parsed_payment_date,
+                        },
+                    )
                     messages.success(request, f"{kibetu} を変更しました。")
 
                 elif action == "delete":
-                    MonthlyPeriod.objects.using("rds").filter(kibetu=kibetu).delete()
+                    before_obj = MonthlyPeriod.objects.using("rds").filter(kibetu=kibetu).first()
+                    before_values = None
+                    if before_obj:
+                        before_values = {
+                            "kibetu": before_obj.kibetu,
+                            "year": before_obj.year,
+                            "month": before_obj.month,
+                            "payment_date": before_obj.payment_date,
+                        }
+                    deleted_count, _ = MonthlyPeriod.objects.using("rds").filter(kibetu=kibetu).delete()
+                    if deleted_count:
+                        record_change_audit(
+                            request,
+                            screen_name="期別(月)",
+                            action_type="delete",
+                            target_table="monthly_period",
+                            target_pk=kibetu,
+                            summary=f"{kibetu} を削除",
+                            before_values=before_values,
+                            after_values=None,
+                        )
                     messages.success(request, f"{kibetu} を削除しました。")
 
                 else:
@@ -1567,6 +1726,16 @@ class KibetuMonthView(generic.ListView):
         if errors:
             messages.error(request, " / ".join(errors))
         if updated_count:
+            record_change_audit(
+                request,
+                screen_name="期別(月)",
+                action_type="bulk_update",
+                target_table="monthly_period",
+                target_pk=None,
+                summary=f"期別(月)を {updated_count}件 一括変更",
+                before_values=None,
+                after_values={"count": updated_count},
+            )
             messages.success(request, f"{updated_count} 件を変更しました。")
         elif not errors:
             messages.info(request, "変更対象がありませんでした。")
@@ -1763,7 +1932,14 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
 
     def _update_bv(self, row_id, bv):
         select_sql = """
-            SELECT order_code
+            SELECT
+                id,
+                register_year,
+                register_month,
+                order_code,
+                jwoa_code,
+                bv,
+                total_bv
             FROM bonus_db.purchase_info_list
             WHERE id = %s
             FOR UPDATE
@@ -1797,13 +1973,17 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
                 cursor.execute(select_sql, [row_id])
                 row = cursor.fetchone()
                 if not row:
-                    return 0
+                    return 0, None, None
 
-                order_code = row[0]
+                columns = [col[0] for col in cursor.description]
+                before_row = dict(zip(columns, row))
+                order_code = before_row["order_code"]
                 cursor.execute(update_bv_sql, [bv, row_id])
                 updated_count = cursor.rowcount
                 cursor.execute(update_total_bv_sql, [order_code, order_code])
-                return updated_count
+                after_row = dict(before_row)
+                after_row["bv"] = bv
+                return updated_count, before_row, after_row
 
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "")
@@ -1827,13 +2007,23 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
                 return redirect(next_url)
 
             try:
-                updated_count = self._update_bv(row_id, bv)
+                updated_count, before_row, after_row = self._update_bv(row_id, bv)
             except Exception as e:
                 logger.exception("購入情報登録一覧のBV更新エラー")
                 messages.error(request, f"BV更新中にエラーが発生しました: {e}")
                 return redirect(next_url)
 
             if updated_count:
+                record_change_audit(
+                    request,
+                    screen_name="ボーナス購入情報一覧",
+                    action_type="update",
+                    target_table="purchase_info_list",
+                    target_pk=row_id,
+                    summary=f"注文番号 {before_row.get('order_code')} のBVを更新",
+                    before_values=before_row,
+                    after_values=after_row,
+                )
                 messages.success(request, "BVを更新しました。")
             else:
                 messages.warning(request, "更新対象データがありません。")
@@ -2451,6 +2641,16 @@ WHERE jmoa_code = %s
             messages.error(request, "存在しないタイトルIDです。")
             return redirect(next_url)
 
+        before_row = fetch_one_dict(
+            "rds",
+            """
+SELECT jmoa_code, title_id, update_date
+FROM bonus_db.user_titles
+WHERE jmoa_code = %s
+            """,
+            [jmoa_code],
+        )
+
         try:
             with transaction.atomic(using="rds"):
                 updated_count = self._update_user_title(jmoa_code, title_id)
@@ -2460,6 +2660,25 @@ WHERE jmoa_code = %s
             return redirect(next_url)
 
         if updated_count:
+            after_row = fetch_one_dict(
+                "rds",
+                """
+SELECT jmoa_code, title_id, update_date
+FROM bonus_db.user_titles
+WHERE jmoa_code = %s
+                """,
+                [jmoa_code],
+            )
+            record_change_audit(
+                request,
+                screen_name="ピンタイトル一覧",
+                action_type="update",
+                target_table="user_titles",
+                target_pk=jmoa_code,
+                summary=f"{jmoa_code} のタイトルIDを {title_id} に変更",
+                before_values=before_row,
+                after_values=after_row,
+            )
             messages.success(request, f"{jmoa_code} のタイトルIDを {title_id} に変更しました。")
         else:
             messages.warning(request, "更新対象データがありません。")
@@ -3314,6 +3533,17 @@ WHERE name = 'set_title'
             try:
                 with transaction.atomic(using="rds"):
                     deleted_count = self._delete_all_registered()
+                    if deleted_count:
+                        record_change_audit(
+                            request,
+                            screen_name="ボーナス購入情報(登録/削除)",
+                            action_type="bulk_delete",
+                            target_table="purchase_info_list",
+                            target_pk=None,
+                            summary=f"購入情報を全件削除: {deleted_count}件",
+                            before_values={"count": deleted_count},
+                            after_values=None,
+                        )
             except Exception as e:
                 logger.exception("ボーナス購入情報登録の全件削除エラー")
                 messages.error(request, f"削除中にエラーが発生しました: {e}")
@@ -3359,7 +3589,19 @@ WHERE name = 'set_title'
 
             try:
                 with transaction.atomic(using="rds"):
+                    before_count = self._count_registered_rows(y, m)
                     deleted_count = self._delete_rows(y, m)
+                    if deleted_count:
+                        record_change_audit(
+                            request,
+                            screen_name="ボーナス購入情報(登録/削除)",
+                            action_type="bulk_delete",
+                            target_table="purchase_info_list",
+                            target_pk=f"{y}-{m:02d}",
+                            summary=f"{y}年{m}月 の購入情報を削除: {deleted_count}件",
+                            before_values={"year": y, "month": m, "count": before_count},
+                            after_values=None,
+                        )
             except Exception as e:
                 logger.exception("ボーナス購入情報登録の年月削除エラー")
                 messages.error(request, f"削除中にエラーが発生しました: {e}")
@@ -3409,6 +3651,16 @@ WHERE name = 'set_title'
                 self._delete_rows(y, m)
                 self._insert_rows(rows)
                 self._update_setting(y, m)
+                record_change_audit(
+                    request,
+                    screen_name="ボーナス購入情報(登録/削除)",
+                    action_type="bulk_create",
+                    target_table="purchase_info_list",
+                    target_pk=f"{y}-{m:02d}",
+                    summary=f"{y}年{m}月 の購入情報を登録: {len(rows)}件",
+                    before_values={"year": y, "month": m},
+                    after_values={"year": y, "month": m, "count": len(rows)},
+                )
 
         except Exception as e:
             logger.exception("ボーナス購入情報登録エラー")
@@ -3841,6 +4093,19 @@ LIMIT %s OFFSET %s
                                 order_code,
                             ],
                         )
+                    record_change_audit(
+                        request,
+                        screen_name="注文別ボーナス支払日",
+                        action_type="create",
+                        target_table="bonus_payment_date",
+                        target_pk=order_code,
+                        summary=f"注文番号 {order_code} のボーナス支払日を登録",
+                        before_values=None,
+                        after_values={
+                            "order_code": order_code,
+                            "bonus_payment_date": parsed_bonus_payment_date,
+                        },
+                    )
 
                 messages.success(request, "登録しました。")
             except Exception as e:
@@ -3872,6 +4137,16 @@ LIMIT %s OFFSET %s
 
             try:
                 self._bulk_upsert_rows(rows)
+                record_change_audit(
+                    request,
+                    screen_name="注文別ボーナス支払日",
+                    action_type="bulk_create",
+                    target_table="bonus_payment_date",
+                    target_pk=None,
+                    summary=f"ボーナス支払日を {len(rows)}件 一括登録/更新",
+                    before_values=None,
+                    after_values={"count": len(rows), "sample": rows[:5]},
+                )
                 messages.success(request, f"{len(rows)}件を一括登録しました。")
             except Exception as e:
                 messages.error(request, f"一括登録に失敗しました: {e}")
@@ -3900,9 +4175,19 @@ LIMIT %s OFFSET %s
             """
 
             try:
+                before_row = fetch_one_dict(
+                    "rds",
+                    """
+                        SELECT order_code, bonus_payment_date
+                        FROM bonus_db.bonus_payment_date
+                        WHERE order_code = %s
+                    """,
+                    [order_code],
+                )
                 with transaction.atomic(using="rds"):
                     with connections["rds"].cursor() as cursor:
                         cursor.execute(sql1, [parsed_bonus_payment_date, order_code])
+                        updated_count = cursor.rowcount
                         cursor.execute(
                             sql2,
                             [
@@ -3911,6 +4196,20 @@ LIMIT %s OFFSET %s
                                 payment_month,
                                 order_code,
                             ],
+                        )
+                    if updated_count:
+                        record_change_audit(
+                            request,
+                            screen_name="注文別ボーナス支払日",
+                            action_type="update",
+                            target_table="bonus_payment_date",
+                            target_pk=order_code,
+                            summary=f"注文番号 {order_code} のボーナス支払日を更新",
+                            before_values=before_row,
+                            after_values={
+                                "order_code": order_code,
+                                "bonus_payment_date": parsed_bonus_payment_date,
+                            },
                         )
 
                 messages.success(request, "更新しました。")
@@ -3930,8 +4229,29 @@ LIMIT %s OFFSET %s
             """
 
             try:
+                before_row = fetch_one_dict(
+                    "rds",
+                    """
+                        SELECT order_code, bonus_payment_date
+                        FROM bonus_db.bonus_payment_date
+                        WHERE order_code = %s
+                    """,
+                    [order_code],
+                )
                 with connections["rds"].cursor() as cursor:
                     cursor.execute(sql, [order_code])
+                    deleted_count = cursor.rowcount
+                if deleted_count:
+                    record_change_audit(
+                        request,
+                        screen_name="注文別ボーナス支払日",
+                        action_type="delete",
+                        target_table="bonus_payment_date",
+                        target_pk=order_code,
+                        summary=f"注文番号 {order_code} のボーナス支払日を削除",
+                        before_values=before_row,
+                        after_values=None,
+                    )
                 messages.success(request, "削除しました。")
             except Exception as e:
                 messages.error(request, f"削除に失敗しました: {e}")
@@ -4191,6 +4511,24 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
                         sql,
                         [jwoa_code, int(year), int(month), int(active_status)],
                     )
+                    created_id = cursor.lastrowid
+
+                record_change_audit(
+                    request,
+                    screen_name="アクティブ会員管理",
+                    action_type="create",
+                    target_table="active_users",
+                    target_pk=created_id,
+                    summary=f"{jwoa_code} {year}年{month}月 を登録",
+                    before_values=None,
+                    after_values={
+                        "id": created_id,
+                        "jwoa_code": jwoa_code,
+                        "year": int(year),
+                        "month": int(month),
+                        "active_status": int(active_status),
+                    },
+                )
 
             messages.success(request, "登録しました。")
 
@@ -4231,6 +4569,16 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
 
         try:
             self._bulk_upsert_rows(rows)
+            record_change_audit(
+                request,
+                screen_name="アクティブ会員管理",
+                action_type="bulk_create",
+                target_table="active_users",
+                target_pk=None,
+                summary=f"アクティブ会員を {len(rows)}件 一括登録/更新",
+                before_values=None,
+                after_values={"count": len(rows), "sample": rows[:5]},
+            )
             messages.success(request, f"{len(rows)}件を一括登録しました。")
         except IntegrityError:
             messages.error(request, "一括登録に失敗しました。会員コードが存在しない可能性があります。")
@@ -4379,6 +4727,16 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
             messages.error(request, error_message)
             return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month, q_active_status))
 
+        before_row = fetch_one_dict(
+            "rds",
+            """
+                SELECT id, jwoa_code, year, month, active_status, created_at
+                FROM active_users
+                WHERE id = %s
+            """,
+            [row_id_int],
+        )
+
         sql = """
             UPDATE active_users
             SET
@@ -4395,6 +4753,26 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
                     cursor.execute(
                         sql,
                         [jwoa_code, int(year), int(month), int(active_status), row_id_int],
+                    )
+                    updated_count = cursor.rowcount
+
+                if updated_count:
+                    after_row = {
+                        "id": row_id_int,
+                        "jwoa_code": jwoa_code,
+                        "year": int(year),
+                        "month": int(month),
+                        "active_status": int(active_status),
+                    }
+                    record_change_audit(
+                        request,
+                        screen_name="アクティブ会員管理",
+                        action_type="update",
+                        target_table="active_users",
+                        target_pk=row_id_int,
+                        summary=f"アクティブ会員 {row_id_int} を更新",
+                        before_values=before_row,
+                        after_values=after_row,
                     )
 
             messages.success(request, "更新しました。")
@@ -4432,8 +4810,30 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
 
         try:
             with transaction.atomic(using="rds"):
+                before_row = fetch_one_dict(
+                    "rds",
+                    """
+                        SELECT id, jwoa_code, year, month, active_status, created_at
+                        FROM active_users
+                        WHERE id = %s
+                    """,
+                    [row_id_int],
+                )
                 with connections["rds"].cursor() as cursor:
                     cursor.execute(sql, [row_id_int])
+                    deleted_count = cursor.rowcount
+
+                if deleted_count:
+                    record_change_audit(
+                        request,
+                        screen_name="アクティブ会員管理",
+                        action_type="delete",
+                        target_table="active_users",
+                        target_pk=row_id_int,
+                        summary=f"アクティブ会員 {row_id_int} を削除",
+                        before_values=before_row,
+                        after_values=None,
+                    )
 
             messages.success(request, "削除しました。")
 
@@ -4656,12 +5056,32 @@ FROM bonus_db.v_user_placement_tree
         try:
             if action == "copy":
                 inserted_count = self._copy_from_view()
+                record_change_audit(
+                    request,
+                    screen_name="上位者 Tree",
+                    action_type="bulk_create",
+                    target_table="C_users_placement_tree_cache",
+                    target_pk=None,
+                    summary=f"上位者 Treeテーブルへ {inserted_count}件コピー登録",
+                    before_values=None,
+                    after_values={"count": inserted_count},
+                )
                 messages.success(
                     request,
                     f"上位者 Treeテーブルへ {inserted_count} 件コピー登録しました。"
                 )
             elif action == "delete":
                 deleted_count = self._delete_all_cache()
+                record_change_audit(
+                    request,
+                    screen_name="上位者 Tree",
+                    action_type="bulk_delete",
+                    target_table="C_users_placement_tree_cache",
+                    target_pk=None,
+                    summary=f"上位者 Treeテーブルを全件削除: {deleted_count}件",
+                    before_values={"count": deleted_count},
+                    after_values=None,
+                )
                 messages.success(
                     request,
                     "上位者 Treeテーブルを全件削除しました。"
@@ -7776,6 +8196,99 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
             page=page,
             base_params=base_params,
         )
+
+
+class OrdersDistributionBvUpdateView(OrdersDistributionBvView):
+    template_name = "orders_distribution_bv_update.html"
+
+    def post(self, request, *args, **kwargs):
+        user_access = get_user_access(request.user)
+        if not user_access.can_menu("orders_distribution_bv_update") or not user_access.can_update:
+            return HttpResponse("権限がありません。", status=403)
+
+        row_id = (request.POST.get("id") or "").strip()
+        distribution_bv = (request.POST.get("distribution_bv") or "").strip()
+        next_query = (request.POST.get("next_query") or "").strip()
+        redirect_url = reverse("connect:orders_distribution_bv_update")
+        if next_query:
+            redirect_url = f"{redirect_url}?{next_query}"
+
+        try:
+            row_id_int = int(row_id)
+        except ValueError:
+            messages.error(request, "更新対象IDが不正です。")
+            return redirect(redirect_url)
+
+        try:
+            distribution_bv_int = int(distribution_bv)
+        except ValueError:
+            messages.error(request, "振分BVは整数で入力してください。")
+            return redirect(redirect_url)
+
+        if distribution_bv_int < 0:
+            messages.error(request, "振分BVは0以上で入力してください。")
+            return redirect(redirect_url)
+
+        before_row = fetch_one_dict(
+            "rds",
+            """
+                SELECT
+                    id,
+                    order_code,
+                    user_id,
+                    jwoa_code,
+                    distribution_bv,
+                    usage_fee
+                FROM bonus_db.orders_distribution_bv
+                WHERE id = %s
+            """,
+            [row_id_int],
+        )
+        if not before_row:
+            messages.error(request, "更新対象データが見つかりませんでした。")
+            return redirect(redirect_url)
+
+        sql = """
+            UPDATE bonus_db.orders_distribution_bv
+            SET distribution_bv = %s
+            WHERE id = %s
+        """
+
+        try:
+            with connections["rds"].cursor() as cursor:
+                logger.info(
+                    "BV振分変更画面から振分BV更新SQLを実行します。id=%s distribution_bv=%s",
+                    row_id_int,
+                    distribution_bv_int,
+                )
+                cursor.execute(sql, [distribution_bv_int, row_id_int])
+                updated_count = cursor.rowcount
+
+            if updated_count:
+                after_row = dict(before_row)
+                after_row["distribution_bv"] = distribution_bv_int
+                record_change_audit(
+                    request,
+                    screen_name="BV振分変更",
+                    action_type="update",
+                    target_table="orders_distribution_bv",
+                    target_pk=row_id_int,
+                    summary=(
+                        f"注文番号 {before_row.get('order_code')} / "
+                        f"JWOA会員ID {before_row.get('jwoa_code')} の振分BVを更新"
+                    ),
+                    before_values=before_row,
+                    after_values=after_row,
+                )
+                messages.success(request, "振分BVを更新しました。")
+            else:
+                messages.info(request, "振分BVは変更されていません。")
+        except Exception as e:
+            logger.exception("BV振分変更画面の振分BV更新エラー")
+            messages.error(request, f"振分BVの更新中にエラーが発生しました: {e}")
+
+        return redirect(redirect_url)
+
 
 class ApiUsersBvView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "api_users_bv.html"

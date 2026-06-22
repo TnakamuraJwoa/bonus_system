@@ -81,53 +81,28 @@
               <div class="text-muted small">対象年月の購入情報をプレビューし、登録・削除を行います。</div>
               <div class="text-muted small mt-1">★ = 登録済み</div>
             </div>
-            {% if user_access.can_export or user_access.can_delete %}
+            {% if user_access.can_export %}
             <div class="d-flex align-items-center gap-2">
-              {% if user_access.can_export %}
-                {% if selected_month %}
-                  <a class="btn btn-sm btn-outline-success rounded-circle"
-                     href="{% url 'connect:repurchase_last_month_export' %}?target_year={{ target_year }}&target_month={{ target_month }}"
-                     aria-label="Excel出力"
-                     title="Excel出力"
-                     style="width: 1.8rem; height: 1.8rem; padding: 0; line-height: 1.65rem; text-align: center;">
-                    <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                      <path fill="currentColor" d="M8.5 1.5A.5.5 0 0 0 8 1H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6.5a.5.5 0 0 0-.15-.35l-4.5-4.5a.5.5 0 0 0-.35-.15H8.5ZM9 2.7 12.3 6H10a1 1 0 0 1-1-1V2.7ZM5.1 8h1.1l.8 1.35L7.8 8h1.05l-1.3 2 1.38 2H7.82L7 10.58 6.17 12H5.1l1.36-2L5.1 8Z"/>
-                    </svg>
-                  </a>
-                {% else %}
-                  <button type="button"
-                          class="btn btn-sm btn-outline-success rounded-circle"
-                          aria-label="Excel出力"
-                          title="対象年月を選択してください"
-                          style="width: 1.8rem; height: 1.8rem; padding: 0; line-height: 1.65rem; text-align: center;"
-                          disabled>
-                    <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                      <path fill="currentColor" d="M8.5 1.5A.5.5 0 0 0 8 1H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6.5a.5.5 0 0 0-.15-.35l-4.5-4.5a.5.5 0 0 0-.35-.15H8.5ZM9 2.7 12.3 6H10a1 1 0 0 1-1-1V2.7ZM5.1 8h1.1l.8 1.35L7.8 8h1.05l-1.3 2 1.38 2H7.82L7 10.58 6.17 12H5.1l1.36-2L5.1 8Z"/>
-                    </svg>
-                  </button>
-                {% endif %}
-              {% endif %}
-              {% if user_access.can_delete %}
-                <button type="button"
-                        class="btn btn-sm btn-outline-danger rounded-circle"
-                        data-toggle="modal"
-                        data-target="#repurchaseRegisterDeleteMonthModal"
-                        aria-label="選択年月のデータを削除"
-                        title="選択年月のデータを削除"
-                        style="width: 1.8rem; height: 1.8rem; padding: 0; line-height: 1;"
-                        {% if not registered_month_options %}disabled{% endif %}>
+              {% if selected_month %}
+                <a class="btn btn-sm btn-outline-success rounded-circle"
+                   href="{% url 'connect:repurchase_last_month_export' %}?target_year={{ target_year }}&target_month={{ target_month }}"
+                   aria-label="Excel出力"
+                   title="Excel出力"
+                   style="width: 1.8rem; height: 1.8rem; padding: 0; line-height: 1.65rem; text-align: center;">
                   <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                    <path fill="currentColor" d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5Zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5Zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6Z"/>
-                    <path fill="currentColor" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1 0-2H5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1h2.5a1 1 0 0 1 1 1ZM4.1 4l.4 9.02A1 1 0 0 0 5.5 14h5a1 1 0 0 0 1-.98L11.9 4H4.1Z"/>
+                    <path fill="currentColor" d="M8.5 1.5A.5.5 0 0 0 8 1H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6.5a.5.5 0 0 0-.15-.35l-4.5-4.5a.5.5 0 0 0-.35-.15H8.5ZM9 2.7 12.3 6H10a1 1 0 0 1-1-1V2.7ZM5.1 8h1.1l.8 1.35L7.8 8h1.05l-1.3 2 1.38 2H7.82L7 10.58 6.17 12H5.1l1.36-2L5.1 8Z"/>
                   </svg>
-                </button>
+                </a>
+              {% else %}
                 <button type="button"
-                        class="btn btn-sm btn-outline-danger"
-                        data-toggle="modal"
-                        data-target="#repurchaseRegisterDeleteAllModal"
-                        aria-label="購入情報を全件削除"
-                        title="購入情報を全件削除">
-                  全件削除
+                        class="btn btn-sm btn-outline-success rounded-circle"
+                        aria-label="Excel出力"
+                        title="対象年月を選択してください"
+                        style="width: 1.8rem; height: 1.8rem; padding: 0; line-height: 1.65rem; text-align: center;"
+                        disabled>
+                  <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                    <path fill="currentColor" d="M8.5 1.5A.5.5 0 0 0 8 1H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6.5a.5.5 0 0 0-.15-.35l-4.5-4.5a.5.5 0 0 0-.35-.15H8.5ZM9 2.7 12.3 6H10a1 1 0 0 1-1-1V2.7ZM5.1 8h1.1l.8 1.35L7.8 8h1.05l-1.3 2 1.38 2H7.82L7 10.58 6.17 12H5.1l1.36-2L5.1 8Z"/>
+                  </svg>
                 </button>
               {% endif %}
             </div>
@@ -189,23 +164,17 @@
 
                 <button type="submit" class="btn btn-primary">選択</button>
               </div>
+              {% if selected_month %}
+                <div class="mt-2">
+                  {% include "com/_selection_indicator.html" with date_text=selected_month|jp_year_month %}
+                </div>
+              {% else %}
+                <div class="text-muted small mt-2">対象年月を選択してください。</div>
+              {% endif %}
             </form>
 
             <div class="repurchase-register-section repurchase-register-section--action">
               <div class="repurchase-register-section__title">操作</div>
-              {% if selected_month %}
-                <div class="mb-2">
-                  {% include "com/_selection_indicator.html" with date_text=selected_month|jp_year_month %}
-                  {% if is_registered_month %}
-                    <span class="badge badge-success ml-1">登録済み {{ registered_count }}件</span>
-                  {% else %}
-                    <span class="badge badge-secondary ml-1">未登録</span>
-                  {% endif %}
-                </div>
-              {% else %}
-                <div class="text-muted small mb-2">対象年月を選択してください。</div>
-              {% endif %}
-
               {% if user_access.can_execute or user_access.can_delete %}
               <div class="d-flex gap-2 flex-wrap align-items-center">
                 {% if user_access.can_execute %}
@@ -229,6 +198,13 @@
                         data-target="#repurchaseRegisterDeleteMonthModal"
                         {% if not registered_month_options %}disabled{% endif %}>
                   年月削除
+                </button>
+                <button type="button"
+                        class="btn btn-outline-danger"
+                        data-toggle="modal"
+                        data-target="#repurchaseRegisterDeleteAllModal"
+                        {% if total_registered_count == 0 %}disabled{% endif %}>
+                  全件削除
                 </button>
                 {% endif %}
               </div>

@@ -347,10 +347,10 @@
                     <td>{{ r.order_year }}</td>
                     <td>{{ r.order_month }}</td>
                     <td class="{% if r.order_member_matched %}orders-member-match{% endif %}">
-                      {{ r.jwoa_code }}
                       {% if r.order_member_matched %}
-                        <span class="orders-member-match-badge">会員ID一致</span>
+                        <span class="orders-member-match-badge">一致</span>
                       {% endif %}
+                      {{ r.jwoa_code }}
                     </td>
                     <td>{{ r.order_name }}</td>
                     <td class="text-end">

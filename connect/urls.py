@@ -73,6 +73,11 @@ urlpatterns = [
     path('orders/', views.OrdersView.as_view(), name = "orders"),
     path("orders/<int:pk>/", views.OrderDetailView.as_view(), name="order_detail"),
     path('orders_distribution_bv/', views.OrdersDistributionBvView.as_view(), name = "orders_distribution_bv"),
+    path(
+        "orders_distribution_bv/update/",
+        views.OrdersDistributionBvUpdateView.as_view(),
+        name="orders_distribution_bv_update",
+    ),
     path("api_users_bv/", views.ApiUsersBvView.as_view(), name="api_users_bv"),
 
     path('drive_bonus/', views.DriveBonusView.as_view(), name = "drive_bonus"),
