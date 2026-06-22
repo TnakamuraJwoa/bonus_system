@@ -20,6 +20,7 @@ is_active_users as (
 select *, 50 as bv
 from bonus_db.active_users
 where year = %s and month = %s
+  and active_status = 1
 ),
 
 

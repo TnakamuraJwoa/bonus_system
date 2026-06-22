@@ -29,6 +29,8 @@ MENU_FEATURES = (
     # --- 会員 ---
     MenuFeature("users", "会員一覧", "users", ("users",)),
     MenuFeature("title_user", "ピンタイトル一覧", "users", ("title_user",)),
+    MenuFeature("active_user_search", "アクティブ会員検索", "users", ("active_user_search",)),
+    MenuFeature("placement_tree", "上位者 Tree", "users", ("placement_tree",)),
     # --- 注文 ---
     MenuFeature("orders", "注文一覧", "orders", ("orders", "order_detail")),
     MenuFeature(
@@ -140,9 +142,8 @@ MENU_FEATURES = (
     MenuFeature("help_text", "ヘルプテキスト", "settings", ("help_text",)),
     MenuFeature("user_target_rank", "ユーザーランク（指定月）", "settings", ("user_target_rank",)),
     MenuFeature("title_list", "タイトル表", "settings", ("title_list",)),
-    MenuFeature("active_users", "アクティブ会員登録", "settings", ("active_users",)),
+    MenuFeature("active_users", "アクティブ会員登録", "settings", ("active_users", "active_users_template")),
     MenuFeature("title_registration", "タイトルユーザー登録", "settings", ("title_registration",)),
-    MenuFeature("placement_tree", "上位者ツリー", "settings", ("placement_tree",)),
 )
 
 MENU_BY_KEY = {feature.key: feature for feature in MENU_FEATURES}

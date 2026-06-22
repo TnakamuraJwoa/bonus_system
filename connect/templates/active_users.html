@@ -333,6 +333,7 @@
                                 <input type="hidden" name="q_jwoa_code" value="{{ q_jwoa_code|default:'' }}">
                                 <input type="hidden" name="q_year" value="{{ q_year|default:'' }}">
                                 <input type="hidden" name="q_month" value="{{ q_month|default:'' }}">
+                                <input type="hidden" name="q_active_status" value="{{ q_active_status|default:'' }}">
 
                                 <div class="active-users-inline-form">
                                     <div class="active-users-field--code">
@@ -370,6 +371,14 @@
                                             max="12"
                                             required
                                         >
+                                    </div>
+
+                                    <div class="active-users-field--month">
+                                        <label class="sub-label">ステータス</label>
+                                        <select name="active_status" class="form-control" required>
+                                            <option value="1">アクティブ</option>
+                                            <option value="0">非アクティブ</option>
+                                        </select>
                                     </div>
 
                                     <button type="submit" class="btn btn-soft-success">登録</button>
@@ -421,6 +430,15 @@
                                         >
                                     </div>
 
+                                    <div class="active-users-field--month">
+                                        <label class="sub-label">ステータス</label>
+                                        <select name="q_active_status" class="form-control">
+                                            <option value="">全て</option>
+                                            <option value="1" {% if q_active_status == "1" %}selected{% endif %}>アクティブ</option>
+                                            <option value="0" {% if q_active_status == "0" %}selected{% endif %}>非アクティブ</option>
+                                        </select>
+                                    </div>
+
                                     <button type="submit" class="btn btn-soft-primary">検索</button>
                                     <a href="{% url 'connect:active_users' %}" class="btn btn-outline-secondary">リセット</a>
                                 </div>
@@ -443,6 +461,7 @@
                                         <th class="col-name">会員名</th>
                                         <th class="col-created-at">作成日時</th>
                                         <th class="col-display-month">アクティブ年月</th>
+                                        <th class="col-display-month">ステータス</th>
                                         <th class="col-update">更新</th>
                                         <th class="col-action">操作</th>
                                     </tr>
@@ -465,6 +484,14 @@
 
                                             <td class="col-display-month">
                                                 {{ r.year }}/{{ r.month }}
+                                            </td>
+
+                                            <td class="col-display-month">
+                                                {% if r.active_status == 1 %}
+                                                    <span class="badge badge-success">アクティブ</span>
+                                                {% else %}
+                                                    <span class="badge badge-secondary">非アクティブ</span>
+                                                {% endif %}
                                             </td>
 
                                             <td class="col-update">
@@ -494,6 +521,7 @@
                                                                 <input type="hidden" name="q_jwoa_code" value="{{ q_jwoa_code|default:'' }}">
                                                                 <input type="hidden" name="q_year" value="{{ q_year|default:'' }}">
                                                                 <input type="hidden" name="q_month" value="{{ q_month|default:'' }}">
+                                                                <input type="hidden" name="q_active_status" value="{{ q_active_status|default:'' }}">
 
                                                                 <div class="modal-header">
                                                                     <h5 class="modal-title" id="updateModalLabel{{ r.id }}">
@@ -553,6 +581,14 @@
                                                                             >
                                                                         </div>
                                                                     </div>
+
+                                                                    <div class="mb-3 mt-3">
+                                                                        <label class="form-label">ステータス</label>
+                                                                        <select name="active_status" class="form-control" required>
+                                                                            <option value="1" {% if r.active_status == 1 %}selected{% endif %}>アクティブ</option>
+                                                                            <option value="0" {% if r.active_status == 0 %}selected{% endif %}>非アクティブ</option>
+                                                                        </select>
+                                                                    </div>
                                                                 </div>
 
                                                                 <div class="modal-footer">
@@ -580,6 +616,7 @@
                                                     <input type="hidden" name="q_jwoa_code" value="{{ q_jwoa_code|default:'' }}">
                                                     <input type="hidden" name="q_year" value="{{ q_year|default:'' }}">
                                                     <input type="hidden" name="q_month" value="{{ q_month|default:'' }}">
+                                                    <input type="hidden" name="q_active_status" value="{{ q_active_status|default:'' }}">
 
                                                     <button type="submit" class="btn btn-sm btn-soft-danger">
                                                         削除
@@ -610,17 +647,20 @@
         <div class="modal-content">
             <form method="post"
                   enctype="multipart/form-data"
-                  data-confirm="選択したファイルで一括登録しますか？既に同じ会員コード・年・月がある場合はそのまま扱います。">
+                  data-confirm="選択したファイルで一括登録しますか？既に同じ会員コード・年・月がある場合はステータスを更新します。"
+                  data-loading-message="一括登録中です..."
+                  data-loading-target="#activeUsersBulkLoadingOverlay">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="bulk_create">
                 <input type="hidden" name="q_jwoa_code" value="{{ q_jwoa_code|default:'' }}">
                 <input type="hidden" name="q_year" value="{{ q_year|default:'' }}">
                 <input type="hidden" name="q_month" value="{{ q_month|default:'' }}">
+                <input type="hidden" name="q_active_status" value="{{ q_active_status|default:'' }}">
 
                 <div class="modal-header">
                     <div>
                         <h5 class="modal-title" id="activeUsersBulkCreateModalLabel">アクティブ会員 一括登録</h5>
-                        <div class="small text-muted">会員コード・年・月の3列ファイルを取り込みます。</div>
+                        <div class="small text-muted">会員コード・年・月・ステータスのファイルを取り込みます。</div>
                     </div>
                     <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
                         <span aria-hidden="true">&times;</span>
@@ -638,17 +678,35 @@
                     </div>
                     <div class="border rounded p-3 bg-light small">
                         <div class="font-weight-bold mb-1">ファイル形式</div>
-                        <div>1列目: 会員コード / 2列目: 年 / 3列目: 月</div>
-                        <div>例: JP05215357, 2025, 7</div>
+                        <div>1列目: 会員コード / 2列目: 年 / 3列目: 月 / 4列目: ステータス（任意）</div>
+                        <div>例: JP05215357, 2025, 7, 1</div>
+                        <div class="text-muted mt-1">ステータスは 1=アクティブ、0=非アクティブ。未指定時はアクティブです。</div>
                         <div class="text-muted mt-1">CSV / Excel（xlsx, xlsm）に対応しています。</div>
+                        <div class="mt-3">
+                            <a class="btn btn-sm btn-outline-primary"
+                               href="{% url 'connect:active_users_template' %}">
+                                ひな形ファイルをダウンロード
+                            </a>
+                        </div>
                     </div>
                 </div>
 
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
-                    <button type="submit" class="btn btn-success">一括登録</button>
+                    <button type="submit" class="btn btn-success" data-loading-button>一括登録</button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<div class="bonus-calculating-overlay" id="activeUsersBulkLoadingOverlay" aria-hidden="true">
+    <div class="bonus-calculating-box">
+        <div class="bonus-calculating-spinner" aria-hidden="true"></div>
+        <div class="fw-bold mb-1" data-loading-message>一括登録中です...</div>
+        <div class="small text-muted">
+            10万行規模の場合は数分かかることがあります。<br>
+            画面を閉じずにお待ちください。
         </div>
     </div>
 </div>

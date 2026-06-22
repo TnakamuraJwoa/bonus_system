@@ -16,6 +16,7 @@ LEFT JOIN (
     SELECT DISTINCT jwoa_code
     FROM bonus_db.active_users
     WHERE year = %s AND month = %s
+      AND active_status = 1
 ) AS b
 ON a.jmoa_code = b.jwoa_code
 LEFT JOIN bonus_db.user_titles as ut

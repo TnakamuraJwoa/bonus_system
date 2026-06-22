@@ -68,7 +68,7 @@ def build_member_tree_view(jwoa_code):
     member_code = (jwoa_code or "").strip()
     if not member_code:
         result["tree_unavailable_reason"] = (
-            "ツリー表示するには会員コードを入力して検索してください。"
+            "Enter a member code and search to display the tree."
         )
         return result
 

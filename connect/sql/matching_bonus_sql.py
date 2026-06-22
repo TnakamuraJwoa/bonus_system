@@ -18,6 +18,7 @@ HAVING SUM(IFNULL(p.bv, 0)) >= 50
 active_users as (
 select jwoa_code
 from bonus_db.active_users
+where active_status = 1
 union
 select jwoa_code
 from sum_prev_purchasers_list

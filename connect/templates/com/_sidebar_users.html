@@ -14,6 +14,16 @@
         <a class="list-group-item list-group-item-action {% if active_menu == 'title_user' %}active{% endif %}"
            href="{% url 'connect:title_user' %}">ピンタイトル一覧</a>
         {% endif %}
+
+        {% if user_access|can_menu:"active_user_search" %}
+        <a class="list-group-item list-group-item-action {% if active_menu == 'active_user_search' %}active{% endif %}"
+           href="{% url 'connect:active_user_search' %}">アクティブ会員検索</a>
+        {% endif %}
+
+        {% if user_access|can_menu:"placement_tree" %}
+        <a class="list-group-item list-group-item-action {% if active_menu == 'placement_tree' %}active{% endif %}"
+           href="{% url 'connect:placement_tree' %}">上位者 Tree</a>
+        {% endif %}
       </div>
     </div>
 

@@ -5,6 +5,7 @@ from .business_team_performance import (
     BusinessTeamMonthPerformanceView,
     BusinessTeamWeekPerformanceView,
 )
+from .active_user_search import ActiveUserSearchView
 
 
 
@@ -25,10 +26,12 @@ urlpatterns = [
     path("bonus_payment_date/", views.BonusPaymentDateView.as_view(), name="bonus_payment_date"),
     path("bonus_payment_date/template/", views.BonusPaymentDateTemplateView.as_view(), name="bonus_payment_date_template"),
     path("active_users/", views.ActiveUsersView.as_view(), name="active_users"),
+    path("active_users/template/", views.ActiveUsersTemplateView.as_view(), name="active_users_template"),
     path("cooling_off/", views.CoolingOffView.as_view(), name="cooling_off"),
 
     path('users/', views.UsersView.as_view(), name = "users"),
     path('title_user/', views.TitleUserView.as_view(), name = "title_user"),
+    path("active_user_search/", ActiveUserSearchView.as_view(), name="active_user_search"),
     path(
         "business_personal_performance/",
         views.BusinessPersonalMonthPerformanceView.as_view(),

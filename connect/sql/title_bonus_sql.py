@@ -63,6 +63,7 @@ SELECT
     created_at
 FROM bonus_db.active_users
 WHERE year = %s AND month = %s
+  AND active_status = 1
 ),
 
 
@@ -76,6 +77,7 @@ SELECT
     created_at
 FROM bonus_db.active_users
 WHERE year = %s AND month = %s
+  AND active_status = 1
 ),
 
 -- 当月購入リスト
