@@ -4,6 +4,20 @@
 
 {% block head %}
 <link href="{% static 'css/common.css' %}" rel="stylesheet">
+<style>
+  .orders-distribution-back-btn {
+    background-color: #f5e6c8;
+    border-color: #d8bd8a;
+    color: #5f4722;
+  }
+
+  .orders-distribution-back-btn:hover,
+  .orders-distribution-back-btn:focus {
+    background-color: #ecd6a8;
+    border-color: #c7a86e;
+    color: #4a3518;
+  }
+</style>
 {% endblock %}
 
 {% block contents %}
@@ -20,12 +34,22 @@
 
         <div class="card-body">
 
-          <h5 class="page-title mb-3">
-            【注文管理 - BV振分一覧】
-          </h5>
+          <div class="d-flex justify-content-between align-items-start flex-nowrap mb-3">
+            <h5 class="page-title mb-0">
+              【注文管理 - BV振分一覧】
+            </h5>
+            {% if return_to %}
+              <a href="{{ return_to }}" class="btn btn-sm orders-distribution-back-btn ml-auto text-nowrap">
+                注文一覧に戻る
+              </a>
+            {% endif %}
+          </div>
 
           <form method="get"
                 class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+            {% if return_to %}
+              <input type="hidden" name="return_to" value="{{ return_to }}">
+            {% endif %}
 
             <div>
               <label class="form-label mb-0 small text-muted">

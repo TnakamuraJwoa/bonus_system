@@ -7367,7 +7367,20 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
             params.append(f"%{q_order_code}%")
 
         if q_jwoa_code:
-            where.append("o.jwoa_code LIKE %s")
+            where.append(
+                """
+                (
+                    o.jwoa_code LIKE %s
+                    OR EXISTS (
+                        SELECT 1
+                        FROM bonus_db.orders_distribution_bv d
+                        WHERE d.order_code = o.order_code
+                          AND d.jwoa_code LIKE %s
+                    )
+                )
+                """
+            )
+            params.append(f"%{q_jwoa_code}%")
             params.append(f"%{q_jwoa_code}%")
 
         if q_name:
@@ -7420,6 +7433,29 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
 
     def _fetch_rows(self, limit=200, offset=0, **filters):
         where_sql, params = self._build_where(**filters)
+        q_jwoa_code = (filters.get("q_jwoa_code") or "").strip()
+        match_select_params = []
+
+        if q_jwoa_code:
+            member_match_select = """
+                CASE WHEN o.jwoa_code LIKE %s THEN 1 ELSE 0 END AS order_member_matched,
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM bonus_db.orders_distribution_bv d_match
+                        WHERE d_match.order_code = o.order_code
+                          AND d_match.jwoa_code LIKE %s
+                    )
+                    THEN 1
+                    ELSE 0
+                END AS distribution_member_matched,
+            """
+            match_select_params.extend([f"%{q_jwoa_code}%", f"%{q_jwoa_code}%"])
+        else:
+            member_match_select = """
+                0 AS order_member_matched,
+                0 AS distribution_member_matched,
+            """
 
         sql = f"""
             SELECT
@@ -7440,15 +7476,33 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
                 o.deposit_at,
                 o.delivery_date_at,
                 o.created_at,
-                o.updated_at
+                o.updated_at,
+                {member_match_select}
+                COALESCE(bv_dist.distribution_count, 0) AS distribution_count,
+                COALESCE(bv_dist.distribution_bv_total, 0) AS distribution_bv_total,
+                bv_dist.distribution_jwoa_codes AS distribution_jwoa_codes
             FROM nexus_production.orders o
+            LEFT JOIN (
+                SELECT
+                    d.order_code,
+                    COUNT(*) AS distribution_count,
+                    COALESCE(SUM(d.distribution_bv), 0) AS distribution_bv_total,
+                    GROUP_CONCAT(
+                        DISTINCT d.jwoa_code
+                        ORDER BY d.jwoa_code
+                        SEPARATOR ', '
+                    ) AS distribution_jwoa_codes
+                FROM bonus_db.orders_distribution_bv d
+                GROUP BY d.order_code
+            ) bv_dist
+                ON bv_dist.order_code = o.order_code
             {where_sql}
             ORDER BY o.id
             LIMIT %s OFFSET %s
         """
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, params + [limit, offset])
+            cursor.execute(sql, match_select_params + params + [limit, offset])
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
 
@@ -7683,6 +7737,9 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
             "q_created_from": (self.request.GET.get("q_created_from") or "").strip(),
             "q_created_to": (self.request.GET.get("q_created_to") or "").strip(),
         }
+        return_to = (self.request.GET.get("return_to") or "").strip()
+        if not return_to.startswith("/") or return_to.startswith("//"):
+            return_to = ""
 
         per_page = self.get_per_page()
 
@@ -7698,11 +7755,14 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
         )
 
         ctx.update(filters)
+        ctx["return_to"] = return_to
 
         base_params = {
             k: v for k, v in filters.items()
             if v
         }
+        if return_to:
+            base_params["return_to"] = return_to
 
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
