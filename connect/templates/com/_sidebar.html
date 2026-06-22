@@ -26,6 +26,11 @@
            href="{% url 'connect:help_text' %}">ヘルプテキスト</a>
         {% endif %}
 
+        {% if user_access|can_menu:"repurchase_last_month" %}
+        <a class="list-group-item list-group-item-action {% if active_menu == 'repurchase_last_month' %}active{% endif %}"
+           href="{% url 'connect:repurchase_last_month' %}">ボーナス購入情報(登録/削除)</a>
+        {% endif %}
+
         {% if user_access|can_menu:"user_target_rank" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'user_target_rank' %}active{% endif %}"
            href="{% url 'connect:user_target_rank' %}">ユーザーランク(指定月)</a>
@@ -38,17 +43,12 @@
 
         {% if user_access|can_menu:"active_users" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'active_users' %}active{% endif %}"
-           href="{% url 'connect:active_users' %}">アクティブ会員登録</a>
+           href="{% url 'connect:active_users' %}">アクティブ会員管理</a>
         {% endif %}
 
         {% if user_access|can_menu:"title_registration" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'title_registration' %}active{% endif %}"
            href="{% url 'connect:title_registration' %}">ピンタイトルタイトル登録</a>
-        {% endif %}
-
-        {% if user_access|can_menu:"placement_tree" %}
-        <a class="list-group-item list-group-item-action {% if active_menu == 'placement_tree' %}active{% endif %}"
-           href="{% url 'connect:placement_tree' %}">上位者ツリー(登録&表示)</a>
         {% endif %}
 
       </div>

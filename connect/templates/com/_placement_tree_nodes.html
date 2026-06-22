@@ -15,7 +15,7 @@
       {% endif %}
       <span class="font-weight-bold">{{ node.jwoa_code }}</span>
       <span class="text-muted mx-1">{{ node.send_bv_name|default:"-" }}</span>
-      <span class="badge {{ node.new_rank|rank_badge_class }}">{{ node.new_rank|rank_label }}</span>
+      <span class="badge {{ node.rank|rank_badge_class }}">{{ node.rank|rank_label }}</span>
     </div>
     {% if node.children %}
       <div class="placement-tree-children is-collapsed">

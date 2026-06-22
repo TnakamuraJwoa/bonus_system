@@ -27,8 +27,15 @@ MENU_GROUPS = (
 
 MENU_FEATURES = (
     # --- 会員 ---
-    MenuFeature("users", "会員一覧", "users", ("users",)),
-    MenuFeature("title_user", "ピンタイトル一覧", "users", ("title_user",)),
+    MenuFeature("users", "会員一覧", "users", ("users", "users_export")),
+    MenuFeature("title_user", "ピンタイトル一覧", "users", ("title_user", "title_user_export")),
+    MenuFeature(
+        "active_user_search",
+        "アクティブ会員検索",
+        "users",
+        ("active_user_search", "active_user_search_export"),
+    ),
+    MenuFeature("placement_tree", "上位者 Tree", "users", ("placement_tree",)),
     # --- 注文 ---
     MenuFeature("orders", "注文一覧", "orders", ("orders", "order_detail")),
     MenuFeature(
@@ -38,7 +45,6 @@ MENU_FEATURES = (
         ("orders_distribution_bv",),
     ),
     MenuFeature("api_users_bv", "会員BV特別反映情報", "orders", ("api_users_bv",)),
-    MenuFeature("repurchase_last_month", "ボーナス購入情報(登録/削除)", "orders", ("repurchase_last_month",)),
     MenuFeature("repurchase_list", "ボーナス購入情報一覧", "orders", ("repurchase_list",)),
     MenuFeature("bonus_payment_date", "注文別ボーナス支払日", "orders", ("bonus_payment_date",)),
     MenuFeature("cooling_off", "クーリングオフ", "orders", ("cooling_off",)),
@@ -138,11 +144,16 @@ MENU_FEATURES = (
     MenuFeature("kibetu_month", "期別（月）", "settings", ("kibetu_month",)),
     MenuFeature("settings", "設定", "settings", ("settings",)),
     MenuFeature("help_text", "ヘルプテキスト", "settings", ("help_text",)),
+    MenuFeature(
+        "repurchase_last_month",
+        "ボーナス購入情報(登録/削除)",
+        "settings",
+        ("repurchase_last_month", "repurchase_last_month_export"),
+    ),
     MenuFeature("user_target_rank", "ユーザーランク（指定月）", "settings", ("user_target_rank",)),
     MenuFeature("title_list", "タイトル表", "settings", ("title_list",)),
-    MenuFeature("active_users", "アクティブ会員登録", "settings", ("active_users",)),
+    MenuFeature("active_users", "アクティブ会員登録", "settings", ("active_users", "active_users_template")),
     MenuFeature("title_registration", "タイトルユーザー登録", "settings", ("title_registration",)),
-    MenuFeature("placement_tree", "上位者ツリー", "settings", ("placement_tree",)),
 )
 
 MENU_BY_KEY = {feature.key: feature for feature in MENU_FEATURES}

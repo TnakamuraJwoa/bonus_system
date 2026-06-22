@@ -5,6 +5,7 @@ from allauth.account.forms import LoginForm
 import csv
 import io
 import logging
+import time
 from decimal import Decimal, InvalidOperation
 from django.views import generic
 from django.contrib import messages
@@ -18,7 +19,7 @@ from django.db import connections, transaction
 from django.shortcuts import redirect
 import math
 from urllib.parse import urlencode
-from django.db import connections, transaction, IntegrityError
+from django.db import connections, transaction, IntegrityError, OperationalError
 import traceback
 from django.http import HttpResponse
 from openpyxl import Workbook
@@ -2301,6 +2302,7 @@ class TitleUserView(KeysetPaginationMixin, generic.TemplateView):
 
     DEFAULT_PER_PAGE = 200
     MAX_PER_PAGE = 500
+    EXPORT_FETCH_SIZE = 5000
 
     def _build_where(self, title_id: str, q_jpid: str):
         where = []
@@ -2510,6 +2512,51 @@ WHERE jmoa_code = %s
             page=page,
             base_params=base_params,
         )
+
+
+class TitleUserExportView(TitleUserView):
+    def get(self, request, *args, **kwargs):
+        title_id = (request.GET.get("title_id") or "").strip()
+        q_jpid = (request.GET.get("q_jpid") or "").strip()
+        where_sql, params = self._build_where(title_id, q_jpid)
+
+        sql = f"""
+SELECT
+  ut.jmoa_code AS jmoa_code,
+  u.send_bv_name AS jwoa_name,
+  ut.title_id AS title_id,
+  COALESCE(tm.title_name, 'タイトルなし') AS title_name,
+  ut.update_date AS update_date
+FROM bonus_db.user_titles ut
+LEFT JOIN bonus_db.users u
+  ON ut.jmoa_code = u.jmoa_code
+LEFT JOIN bonus_db.title_master tm
+  ON ut.title_id = tm.title_id
+{where_sql}
+ORDER BY ut.title_id, ut.jmoa_code
+        """
+
+        wb = openpyxl.Workbook(write_only=True)
+        ws = wb.create_sheet("ピンタイトル一覧")
+        ws.append(["jmoa_code", "jwoa_name", "title_id", "title_name", "update_date"])
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            while True:
+                rows = cursor.fetchmany(self.EXPORT_FETCH_SIZE)
+                if not rows:
+                    break
+                for row in rows:
+                    ws.append(list(row))
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = (
+            'attachment; filename="title_user.xlsx"'
+        )
+        wb.save(response)
+        return response
 
 
 
@@ -3003,6 +3050,7 @@ class RepurchaseLastMonthView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "repurchase_last_month.html"
     DEFAULT_PER_PAGE = 1000
     MAX_PER_PAGE = 2000
+    EXPORT_FETCH_SIZE = 5000
 
     def _get_month_choices(self):
         today = date.today().replace(day=1)
@@ -3369,6 +3417,89 @@ WHERE name = 'set_title'
 
         messages.success(request, f"{len(rows)}件登録完了")
         return redirect(redirect_url)
+
+
+class RepurchaseLastMonthExportView(RepurchaseLastMonthView):
+    def _order_type_label(self, order_type):
+        if order_type == 101:
+            return "再購入品"
+        if order_type == 102:
+            return "初回購入品"
+        if order_type == 103:
+            return "ランクアップ購入品"
+        if order_type == 105:
+            return "特別対応購入品"
+        if order_type == 200:
+            return "クーリングオフ"
+        return order_type
+
+    def get(self, request, *args, **kwargs):
+        try:
+            year, month = get_target_year_month_from_params(request.GET)
+        except (ValueError, TypeError):
+            messages.error(request, "年月の形式が不正です。年と月を正しく指定してください。")
+            return redirect("connect:repurchase_last_month")
+
+        params = self._build_query_params(year, month)
+        sql = f"""
+{REPURCHASE_LAST_MONTH}
+ORDER BY payment_date ASC, order_code ASC, jwoa_code ASC
+"""
+
+        wb = openpyxl.Workbook(write_only=True)
+        ws = wb.create_sheet("購入情報一覧")
+        ws.append([
+            "登録年",
+            "登録月",
+            "注文年",
+            "注文月",
+            "注文番号",
+            "注文区分",
+            "会員番号",
+            "会員名",
+            "total_bv",
+            "bv",
+            "BV反映日時",
+            "注文日時",
+            "ボーナス支払日",
+        ])
+
+        with connections["rds"].cursor() as cursor:
+            logger.info(
+                "ボーナス購入情報プレビューのExcel出力SQLを実行します。year=%s month=%s",
+                year,
+                month,
+            )
+            cursor.execute(sql, params)
+            columns = [col[0] for col in cursor.description]
+            while True:
+                rows = cursor.fetchmany(self.EXPORT_FETCH_SIZE)
+                if not rows:
+                    break
+                for row in rows:
+                    r = dict(zip(columns, row))
+                    ws.append([
+                        r.get("register_year"),
+                        r.get("register_month"),
+                        r.get("order_year"),
+                        r.get("order_month"),
+                        r.get("order_code"),
+                        self._order_type_label(r.get("order_type")),
+                        r.get("jwoa_code"),
+                        r.get("send_bv_name"),
+                        r.get("total_bv"),
+                        r.get("bv"),
+                        r.get("deposit_at"),
+                        r.get("order_at"),
+                        r.get("payment_date"),
+                    ])
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = 'attachment; filename="repurchase.xlsx"'
+        wb.save(response)
+        return response
 
 
 class RepurchaseExportView(RepurchaseListView):
@@ -3829,12 +3960,39 @@ class BonusPaymentDateTemplateView(generic.View):
         return response
 
 
+class ActiveUsersTemplateView(generic.View):
+    def get(self, request, *args, **kwargs):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "アクティブ会員"
+        ws.append(["会員コード", "年", "月", "ステータス"])
+        ws.append(["JP05215357", 2025, 7, 1])
+        ws.append(["JP05215358", 2025, 7, 0])
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = (
+            'attachment; filename="active_users_template.xlsx"'
+        )
+        wb.save(response)
+        return response
+
+
 class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "active_users.html"
     DEFAULT_PER_PAGE = 500
     MAX_PER_PAGE = 500
+    BULK_UPSERT_CHUNK_SIZE = 1000
+    BULK_UPSERT_MAX_RETRIES = 3
+    BULK_UPSERT_RETRY_WAIT_SECONDS = 2
 
-    def _build_where(self, q_jwoa_code="", q_year="", q_month=""):
+    ACTIVE_STATUS_CHOICES = (
+        ("1", "アクティブ"),
+        ("0", "非アクティブ"),
+    )
+
+    def _build_where(self, q_jwoa_code="", q_year="", q_month="", q_active_status=""):
         where_clauses = []
         params = []
 
@@ -3850,14 +4008,19 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
             where_clauses.append("a.month = %s")
             params.append(int(q_month))
 
+        if q_active_status != "":
+            where_clauses.append("a.active_status = %s")
+            params.append(int(q_active_status))
+
         where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
         return where_sql, params
 
-    def _count_rows(self, q_jwoa_code="", q_year="", q_month=""):
+    def _count_rows(self, q_jwoa_code="", q_year="", q_month="", q_active_status=""):
         where_sql, params = self._build_where(
             q_jwoa_code=q_jwoa_code,
             q_year=q_year,
             q_month=q_month,
+            q_active_status=q_active_status,
         )
         sql = f"""
             SELECT COUNT(*)
@@ -3869,11 +4032,20 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
             row = cursor.fetchone()
             return int(row[0]) if row else 0
 
-    def _fetch_rows(self, q_jwoa_code="", q_year="", q_month="", limit=500, offset=0):
+    def _fetch_rows(
+        self,
+        q_jwoa_code="",
+        q_year="",
+        q_month="",
+        q_active_status="",
+        limit=500,
+        offset=0,
+    ):
         where_sql, params = self._build_where(
             q_jwoa_code=q_jwoa_code,
             q_year=q_year,
             q_month=q_month,
+            q_active_status=q_active_status,
         )
 
         sql = f"""
@@ -3882,6 +4054,7 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
                 a.jwoa_code,
                 a.year,
                 a.month,
+                a.active_status,
                 a.created_at,
                 u.send_bv_name
             FROM active_users a
@@ -3904,15 +4077,23 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
         q_jwoa_code = self.request.GET.get("q_jwoa_code", "").strip()
         q_year = self.request.GET.get("q_year", "").strip()
         q_month = self.request.GET.get("q_month", "").strip()
+        q_active_status = self.request.GET.get("q_active_status", "").strip()
 
         ctx["q_jwoa_code"] = q_jwoa_code
         ctx["q_year"] = q_year
         ctx["q_month"] = q_month
+        ctx["q_active_status"] = q_active_status
+        ctx["active_status_choices"] = self.ACTIVE_STATUS_CHOICES
 
         try:
-            total_count = self._count_rows(q_jwoa_code, q_year, q_month)
+            total_count = self._count_rows(
+                q_jwoa_code,
+                q_year,
+                q_month,
+                q_active_status,
+            )
         except ValueError:
-            messages.error(self.request, "年・月は数値で入力してください。")
+            messages.error(self.request, "年・月・ステータスは数値で入力してください。")
             total_count = 0
 
         per_page = self.get_per_page()
@@ -3926,6 +4107,7 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
                 q_jwoa_code=q_jwoa_code,
                 q_year=q_year,
                 q_month=q_month,
+                q_active_status=q_active_status,
                 limit=per_page,
                 offset=offset,
             )
@@ -3937,6 +4119,8 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
             base_params["q_year"] = q_year
         if q_month:
             base_params["q_month"] = q_month
+        if q_active_status != "":
+            base_params["q_active_status"] = q_active_status
 
         ctx = self.set_page_context(
             ctx=ctx,
@@ -3956,36 +4140,43 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
         q_jwoa_code = request.POST.get("q_jwoa_code", "").strip()
         q_year = request.POST.get("q_year", "").strip()
         q_month = request.POST.get("q_month", "").strip()
+        q_active_status = request.POST.get("q_active_status", "").strip()
 
         if action == "create":
-            return self._create(request, q_jwoa_code, q_year, q_month)
+            return self._create(request, q_jwoa_code, q_year, q_month, q_active_status)
+
+        if action == "bulk_create":
+            return self._bulk_create(request, q_jwoa_code, q_year, q_month, q_active_status)
 
         if action == "update":
-            return self._update(request, q_jwoa_code, q_year, q_month)
+            return self._update(request, q_jwoa_code, q_year, q_month, q_active_status)
 
         if action == "delete":
-            return self._delete(request, q_jwoa_code, q_year, q_month)
+            return self._delete(request, q_jwoa_code, q_year, q_month, q_active_status)
 
         messages.error(request, "不正な操作です。")
-        return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+        return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month, q_active_status))
 
-    def _create(self, request, q_jwoa_code, q_year, q_month):
+    def _create(self, request, q_jwoa_code, q_year, q_month, q_active_status):
         jwoa_code = request.POST.get("jwoa_code", "").strip()
         year = request.POST.get("year", "").strip()
         month = request.POST.get("month", "").strip()
+        active_status = request.POST.get("active_status", "1").strip()
 
-        error_message = self._validate_input(jwoa_code, year, month)
+        error_message = self._validate_input(jwoa_code, year, month, active_status)
         if error_message:
             messages.error(request, error_message)
-            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month, q_active_status))
 
         sql = """
             INSERT INTO active_users (
                 jwoa_code,
                 year,
                 month,
+                active_status,
                 created_at
             ) VALUES (
+                %s,
                 %s,
                 %s,
                 %s,
@@ -3996,7 +4187,10 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
         try:
             with transaction.atomic(using="rds"):
                 with connections["rds"].cursor() as cursor:
-                    cursor.execute(sql, [jwoa_code, int(year), int(month)])
+                    cursor.execute(
+                        sql,
+                        [jwoa_code, int(year), int(month), int(active_status)],
+                    )
 
             messages.success(request, "登録しました。")
 
@@ -4011,42 +4205,197 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
         except Exception as e:
             messages.error(request, f"登録中にエラーが発生しました: {e}")
 
-        return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+        return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month, q_active_status))
 
-    def _update(self, request, q_jwoa_code, q_year, q_month):
+    def _bulk_create(self, request, q_jwoa_code, q_year, q_month, q_active_status):
+        uploaded_file = request.FILES.get("active_users_file")
+        if not uploaded_file:
+            messages.error(request, "一括登録ファイルを選択してください。")
+            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month, q_active_status))
+
+        try:
+            rows, errors = self._parse_uploaded_rows(uploaded_file)
+        except Exception as e:
+            messages.error(request, f"ファイルの読み込みに失敗しました: {e}")
+            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month, q_active_status))
+
+        if errors:
+            messages.error(request, " / ".join(errors[:5]))
+            if len(errors) > 5:
+                messages.error(request, f"他 {len(errors) - 5} 件のエラーがあります。")
+            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month, q_active_status))
+
+        if not rows:
+            messages.error(request, "登録できるデータがありません。")
+            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month, q_active_status))
+
+        try:
+            self._bulk_upsert_rows(rows)
+            messages.success(request, f"{len(rows)}件を一括登録しました。")
+        except IntegrityError:
+            messages.error(request, "一括登録に失敗しました。会員コードが存在しない可能性があります。")
+        except Exception as e:
+            messages.error(request, f"一括登録中にエラーが発生しました: {e}")
+
+        return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month, q_active_status))
+
+    def _parse_uploaded_rows(self, uploaded_file):
+        filename = (uploaded_file.name or "").lower()
+
+        if filename.endswith((".xlsx", ".xlsm")):
+            workbook = openpyxl.load_workbook(uploaded_file, read_only=True, data_only=True)
+            sheet = workbook.active
+            source_rows = sheet.iter_rows(values_only=True)
+        else:
+            raw = uploaded_file.read()
+            try:
+                text = raw.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                text = raw.decode("cp932")
+            source_rows = csv.reader(io.StringIO(text))
+
+        rows = []
+        errors = []
+
+        for row_no, row in enumerate(source_rows, start=1):
+            values = list(row or [])
+            if not any(str(value or "").strip() for value in values):
+                continue
+
+            if len(values) < 3:
+                errors.append(f"{row_no}行目: 会員コード・年・月を指定してください。")
+                continue
+
+            jwoa_code = str(values[0] or "").strip()
+            year = self._normalize_bulk_number(values[1])
+            month = self._normalize_bulk_number(values[2])
+            active_status = self._normalize_bulk_status(values[3]) if len(values) >= 4 else "1"
+
+            if row_no == 1 and (
+                "会員" in jwoa_code
+                or "jwoa" in jwoa_code.lower()
+                or "code" in jwoa_code.lower()
+            ):
+                continue
+
+            error_message = self._validate_input(jwoa_code, year, month, active_status)
+            if error_message:
+                errors.append(f"{row_no}行目: {error_message}")
+                continue
+
+            rows.append(
+                {
+                    "jwoa_code": jwoa_code,
+                    "year": int(year),
+                    "month": int(month),
+                    "active_status": int(active_status),
+                }
+            )
+
+        return rows, errors
+
+    def _normalize_bulk_number(self, value):
+        if value in (None, ""):
+            return ""
+        if isinstance(value, float) and value.is_integer():
+            return str(int(value))
+        return str(value).strip()
+
+    def _normalize_bulk_status(self, value):
+        raw_value = self._normalize_bulk_number(value)
+        normalized = raw_value.lower()
+        if normalized in ("", "1", "active", "アクティブ"):
+            return "1"
+        if normalized in ("0", "inactive", "非アクティブ"):
+            return "0"
+        return raw_value
+
+    def _bulk_upsert_rows(self, rows):
+        sql = """
+            INSERT INTO active_users (
+                jwoa_code,
+                year,
+                month,
+                active_status,
+                created_at
+            ) VALUES (
+                %s,
+                %s,
+                %s,
+                %s,
+                NOW()
+            )
+            ON DUPLICATE KEY UPDATE
+                active_status = VALUES(active_status)
+        """
+
+        for start in range(0, len(rows), self.BULK_UPSERT_CHUNK_SIZE):
+            chunk = rows[start:start + self.BULK_UPSERT_CHUNK_SIZE]
+            data = [
+                (
+                    row["jwoa_code"],
+                    row["year"],
+                    row["month"],
+                    row["active_status"],
+                )
+                for row in chunk
+            ]
+            self._execute_bulk_upsert_chunk(sql, data)
+
+    def _execute_bulk_upsert_chunk(self, sql, data):
+        for attempt in range(1, self.BULK_UPSERT_MAX_RETRIES + 1):
+            try:
+                with transaction.atomic(using="rds"):
+                    with connections["rds"].cursor() as cursor:
+                        cursor.executemany(sql, data)
+                return
+            except OperationalError as e:
+                if not self._is_lock_wait_timeout(e) or attempt >= self.BULK_UPSERT_MAX_RETRIES:
+                    raise
+                time.sleep(self.BULK_UPSERT_RETRY_WAIT_SECONDS)
+
+    def _is_lock_wait_timeout(self, error):
+        return any("1205" in str(arg) for arg in getattr(error, "args", ()))
+
+    def _update(self, request, q_jwoa_code, q_year, q_month, q_active_status):
         row_id = request.POST.get("id", "").strip()
         jwoa_code = request.POST.get("jwoa_code", "").strip()
         year = request.POST.get("year", "").strip()
         month = request.POST.get("month", "").strip()
+        active_status = request.POST.get("active_status", "1").strip()
 
         if not row_id:
             messages.error(request, "更新対象IDがありません。")
-            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month, q_active_status))
 
         try:
             row_id_int = int(row_id)
         except ValueError:
             messages.error(request, "更新対象IDが不正です。")
-            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month, q_active_status))
 
-        error_message = self._validate_input(jwoa_code, year, month)
+        error_message = self._validate_input(jwoa_code, year, month, active_status)
         if error_message:
             messages.error(request, error_message)
-            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month, q_active_status))
 
         sql = """
             UPDATE active_users
             SET
                 jwoa_code = %s,
                 year = %s,
-                month = %s
+                month = %s,
+                active_status = %s
             WHERE id = %s
         """
 
         try:
             with transaction.atomic(using="rds"):
                 with connections["rds"].cursor() as cursor:
-                    cursor.execute(sql, [jwoa_code, int(year), int(month), row_id_int])
+                    cursor.execute(
+                        sql,
+                        [jwoa_code, int(year), int(month), int(active_status), row_id_int],
+                    )
 
             messages.success(request, "更新しました。")
 
@@ -4061,20 +4410,20 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
         except Exception as e:
             messages.error(request, f"更新中にエラーが発生しました: {e}")
 
-        return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+        return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month, q_active_status))
 
-    def _delete(self, request, q_jwoa_code, q_year, q_month):
+    def _delete(self, request, q_jwoa_code, q_year, q_month, q_active_status):
         row_id = request.POST.get("id", "").strip()
 
         if not row_id:
             messages.error(request, "削除対象IDがありません。")
-            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month, q_active_status))
 
         try:
             row_id_int = int(row_id)
         except ValueError:
             messages.error(request, "削除対象IDが不正です。")
-            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+            return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month, q_active_status))
 
         sql = """
             DELETE FROM active_users
@@ -4091,9 +4440,9 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
         except Exception as e:
             messages.error(request, f"削除中にエラーが発生しました: {e}")
 
-        return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month))
+        return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month, q_active_status))
 
-    def _validate_input(self, jwoa_code, year, month):
+    def _validate_input(self, jwoa_code, year, month, active_status="1"):
         if not jwoa_code:
             return "会員コードを入力してください。"
 
@@ -4119,9 +4468,17 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
         if month_int < 1 or month_int > 12:
             return "月は 1〜12 の範囲で入力してください。"
 
+        try:
+            active_status_int = int(active_status)
+        except ValueError:
+            return "ステータスは 0 または 1 を指定してください。"
+
+        if active_status_int not in (0, 1):
+            return "ステータスは 0 または 1 を指定してください。"
+
         return None
 
-    def _get_redirect_url(self, q_jwoa_code, q_year, q_month):
+    def _get_redirect_url(self, q_jwoa_code, q_year, q_month, q_active_status=""):
         base_url = "/active_users/"
 
         query_params = {}
@@ -4134,6 +4491,9 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
 
         if q_month:
             query_params["q_month"] = q_month
+
+        if q_active_status != "":
+            query_params["q_active_status"] = q_active_status
 
         if query_params:
             return base_url + "?" + urlencode(query_params)
@@ -4176,7 +4536,7 @@ class PlacementTreeView(KeysetPaginationMixin, generic.TemplateView):
             params.append(q_placement_rank)
 
         if q_rank:
-            where.append("c.new_rank = %s")
+            where.append("c.`rank` = %s")
             params.append(q_rank)
 
         where_sql = ("WHERE " + " AND ".join(where)) if where else ""
@@ -4234,7 +4594,7 @@ SELECT
     c.placement_rank,
     c.jwoa_code,
     c.send_bv_name,
-    c.new_rank,
+    c.`rank`,
     c.tree_level,
     c.created_at
 FROM bonus_db.C_users_placement_tree_cache c
@@ -4258,7 +4618,7 @@ INSERT INTO bonus_db.C_users_placement_tree_cache (
     placement_rank,
     jwoa_code,
     send_bv_name,
-    new_rank,
+    `rank`,
     tree_level
 )
 SELECT
@@ -4267,7 +4627,7 @@ SELECT
     placement_rank,
     jmoa_code,
     send_bv_name,
-    new_rank,
+    `rank`,
     tree_level
 FROM bonus_db.v_user_placement_tree
         """
@@ -4298,13 +4658,13 @@ FROM bonus_db.v_user_placement_tree
                 inserted_count = self._copy_from_view()
                 messages.success(
                     request,
-                    f"上位者ツリーテーブル へ {inserted_count} 件コピー登録しました。"
+                    f"上位者 Treeテーブルへ {inserted_count} 件コピー登録しました。"
                 )
             elif action == "delete":
                 deleted_count = self._delete_all_cache()
                 messages.success(
                     request,
-                    f"上位者ツリーテーブルを全件削除しました。"
+                    "上位者 Treeテーブルを全件削除しました。"
                 )
             else:
                 messages.warning(request, "不正な操作です。")
@@ -6303,6 +6663,7 @@ class BusinessPersonalWeekPerformanceView(KeysetPaginationMixin, generic.Templat
 
 class UsersView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "users.html"
+    EXPORT_FETCH_SIZE = 5000
 
     def _build_where(
         self,
@@ -6502,6 +6863,126 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             page=page,
             base_params=base_params,
         )
+
+
+class UsersExportView(UsersView):
+    RANK_LABELS = {
+        1: "シルバー",
+        2: "ゴールド",
+        3: "プラチナ",
+        4: "ダイヤ",
+        9: "一般会員",
+    }
+    STATUS_LABELS = {
+        1: "アクティブ",
+        2: "凍結",
+        3: "退会",
+        4: "中途解約",
+        5: "非アクティブ",
+    }
+
+    def _rank_label(self, value):
+        return self.RANK_LABELS.get(value, "-")
+
+    def _status_label(self, value):
+        return self.STATUS_LABELS.get(value, "-")
+
+    def _activated_label(self, value):
+        return "本登録" if value == 1 else "仮登録中"
+
+    def _company_label(self, value):
+        return "法人" if value == 1 else "-"
+
+    def get(self, request, *args, **kwargs):
+        q_jpid = (request.GET.get("q_jpid") or "").strip()
+        q_name = (request.GET.get("q_name") or "").strip()
+        q_introducer = (request.GET.get("q_introducer") or "").strip()
+        q_placement = (request.GET.get("q_placement") or "").strip()
+        q_status = (request.GET.get("q_status") or "").strip()
+        q_rank = (request.GET.get("q_rank") or "").strip()
+
+        where_sql, params = self._build_where(
+            q_jpid=q_jpid,
+            q_name=q_name,
+            q_introducer=q_introducer,
+            q_placement=q_placement,
+            q_status=q_status,
+            q_rank=q_rank,
+        )
+
+        sql = f"""
+            SELECT
+                u.id,
+                u.group_code,
+                u.jmoa_code,
+                u.send_bv_name,
+                u.introducer_code,
+                u.placement_code,
+                u.rank,
+                u.status_code,
+                u.activated,
+                u.interim_at,
+                u.activated_at,
+                u.company,
+                u.last_purchase_at,
+                u.created_at,
+                u.updated_at
+            FROM nexus_production.users u
+            {where_sql}
+            ORDER BY u.status_code, u.jmoa_code
+        """
+
+        wb = openpyxl.Workbook(write_only=True)
+        ws = wb.create_sheet("会員一覧")
+        ws.append([
+            "ID",
+            "グループID",
+            "会員ID",
+            "会員名",
+            "上位者ID",
+            "紹介者ID",
+            "ランク",
+            "ステータス",
+            "本登録FLG",
+            "法人FLG",
+            "仮登録日時",
+            "本登録日時",
+            "最終購入日",
+            "作成日時",
+            "更新日時",
+        ])
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            while True:
+                rows = cursor.fetchmany(self.EXPORT_FETCH_SIZE)
+                if not rows:
+                    break
+                for row in rows:
+                    ws.append([
+                        row[0],
+                        row[1],
+                        row[2],
+                        row[3],
+                        row[4],
+                        row[5],
+                        self._rank_label(row[6]),
+                        self._status_label(row[7]),
+                        self._activated_label(row[8]),
+                        self._company_label(row[11]),
+                        row[9],
+                        row[10],
+                        row[12],
+                        row[13],
+                        row[14],
+                    ])
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = 'attachment; filename="users.xlsx"'
+        wb.save(response)
+        return response
 
 
 

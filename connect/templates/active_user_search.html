@@ -1,0 +1,190 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block head %}
+  <link href="{% static 'css/common.css' %}" rel="stylesheet">
+{% endblock %}
+
+{% block contents %}
+<div class="container-fluid mt-3 list-page-viewport">
+  <div class="row g-1 h-100">
+
+    {% include "com/_sidebar_users.html" with active_menu="active_user_search" %}
+
+    <main class="col-12 col-md-9 col-lg-10 list-page-main">
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+
+          <div class="d-flex justify-content-between align-items-start flex-wrap mb-3">
+            <div>
+              <h5 class="page-title mb-1">【会員 - アクティブ会員検索】</h5>
+              <div class="text-muted small">アクティブ会員を検索し、表示データを確認します。</div>
+            </div>
+            {% if user_access.can_export %}
+              <a class="btn btn-sm btn-outline-success rounded-circle"
+                 href="{% url 'connect:active_user_search_export' %}{% if base_qs %}?{{ base_qs }}{% endif %}"
+                 aria-label="Excel出力"
+                 title="Excel出力"
+                 style="width: 1.8rem; height: 1.8rem; padding: 0; line-height: 1.65rem; text-align: center;">
+                <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                  <path fill="currentColor" d="M8.5 1.5A.5.5 0 0 0 8 1H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6.5a.5.5 0 0 0-.15-.35l-4.5-4.5a.5.5 0 0 0-.35-.15H8.5ZM9 2.7 12.3 6H10a1 1 0 0 1-1-1V2.7ZM5.1 8h1.1l.8 1.35L7.8 8h1.05l-1.3 2 1.38 2H7.82L7 10.58 6.17 12H5.1l1.36-2L5.1 8Z"/>
+                </svg>
+              </a>
+            {% endif %}
+          </div>
+
+          <form method="get" class="d-flex align-items-end mb-0 flex-wrap">
+
+            <div class="mr-2 mb-2">
+              <label class="form-label mb-0 small text-muted">会員コード</label>
+              <input type="text"
+                     name="q_jwoa_code"
+                     class="form-control"
+                     value="{{ q_jwoa_code|default:'' }}"
+                     placeholder="例: JP05198407">
+            </div>
+
+            <div class="mr-2 mb-2">
+              <label class="form-label mb-0 small text-muted">会員名</label>
+              <input type="text"
+                     name="q_name"
+                     class="form-control"
+                     value="{{ q_name|default:'' }}"
+                     placeholder="例: 山田">
+            </div>
+
+            <div class="mr-2 mb-2" style="width: 120px;">
+              <label class="form-label mb-0 small text-muted">年</label>
+              <input type="number"
+                     name="q_year"
+                     class="form-control"
+                     value="{{ q_year|default:'' }}"
+                     placeholder="例: 2026"
+                     min="1900"
+                     max="2100">
+            </div>
+
+            <div class="mr-2 mb-2" style="width: 100px;">
+              <label class="form-label mb-0 small text-muted">月</label>
+              <input type="number"
+                     name="q_month"
+                     class="form-control"
+                     value="{{ q_month|default:'' }}"
+                     placeholder="1〜12"
+                     min="1"
+                     max="12">
+            </div>
+
+            <div class="mr-2 mb-2" style="width: 150px;">
+              <label class="form-label mb-0 small text-muted">ステータス</label>
+              <select name="q_active_status" class="form-control">
+                <option value="">全て</option>
+                <option value="1" {% if q_active_status == "1" %}selected{% endif %}>アクティブ</option>
+                <option value="0" {% if q_active_status == "0" %}selected{% endif %}>非アクティブ</option>
+              </select>
+            </div>
+
+            <div class="mr-2 mb-2" style="width: 110px;">
+              <label class="form-label mb-0 small text-muted">表示件数</label>
+              <select name="per_page" class="form-control">
+                <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+              </select>
+            </div>
+
+            <div class="mb-2 mr-2">
+              <button type="submit" class="btn btn-primary">検索</button>
+            </div>
+
+            <div class="mb-2">
+              <a class="btn btn-outline-secondary" href="{% url 'connect:active_user_search' %}">リセット</a>
+            </div>
+          </form>
+
+          {% if q_jwoa_code or q_name or q_year or q_month or q_active_status %}
+            <div class="text-muted small mt-3">
+              絞り込み中：
+              {% if q_jwoa_code %}
+                <span class="badge badge-info">会員コード={{ q_jwoa_code }}</span>
+              {% endif %}
+              {% if q_name %}
+                <span class="badge badge-secondary">会員名={{ q_name }}</span>
+              {% endif %}
+              {% if q_year %}
+                <span class="badge badge-primary">年={{ q_year }}</span>
+              {% endif %}
+              {% if q_month %}
+                <span class="badge badge-primary">月={{ q_month }}</span>
+              {% endif %}
+              {% if q_active_status == "1" %}
+                <span class="badge badge-success">ステータス=アクティブ</span>
+              {% elif q_active_status == "0" %}
+                <span class="badge badge-secondary">ステータス=非アクティブ</span>
+              {% endif %}
+            </div>
+          {% else %}
+            <div class="text-muted small mt-3">全件表示中</div>
+          {% endif %}
+
+        </div>
+      </div>
+
+      <div class="card shadow-sm">
+        <div class="card-body">
+
+          {% if rows %}
+            {% include "com/_list_summary.html" %}
+
+            <div class="table-responsive">
+              <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
+                <thead class="table-light">
+                  <tr>
+                    <th class="text-center">ID</th>
+                    <th class="text-center">会員コード</th>
+                    <th class="text-center">会員名</th>
+                    <th class="text-center">年</th>
+                    <th class="text-center">月</th>
+                    <th class="text-center">アクティブ年月</th>
+                    <th class="text-center">ステータス</th>
+                    <th class="text-center">作成日時</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for r in rows %}
+                    <tr>
+                      <td class="text-end">{{ r.id }}</td>
+                      <td>{{ r.jwoa_code }}</td>
+                      <td>{{ r.send_bv_name|default:"" }}</td>
+                      <td class="text-center">{{ r.year }}</td>
+                      <td class="text-center">{{ r.month }}</td>
+                      <td class="text-center">{{ r.year }}/{{ r.month }}</td>
+                      <td class="text-center">
+                        {% if r.active_status == 1 %}
+                          <span class="badge badge-success">アクティブ</span>
+                        {% else %}
+                          <span class="badge badge-secondary">非アクティブ</span>
+                        {% endif %}
+                      </td>
+                      <td>{{ r.created_at|date:"Y-m-d H:i:s" }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            {% include "com/_pagination.html" %}
+
+          {% else %}
+            <p class="mb-0 text-muted">該当データがありません。</p>
+          {% endif %}
+
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+{% endblock %}

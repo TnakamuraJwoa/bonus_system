@@ -5,6 +5,7 @@ from .business_team_performance import (
     BusinessTeamMonthPerformanceView,
     BusinessTeamWeekPerformanceView,
 )
+from .active_user_search import ActiveUserSearchExportView, ActiveUserSearchView
 
 
 
@@ -18,6 +19,11 @@ urlpatterns = [
     path('placement_tree/', views.PlacementTreeView.as_view(), name = "placement_tree"),
     path('settings/', views.SettingsView.as_view(), name = "settings"),
     path('repurchase_last_month/', views.RepurchaseLastMonthView.as_view(), name = "repurchase_last_month"),
+    path(
+        "repurchase_last_month/export/",
+        views.RepurchaseLastMonthExportView.as_view(),
+        name="repurchase_last_month_export",
+    ),
     path('repurchase_list/', views.RepurchaseListView.as_view(), name = "repurchase_list"),
     path('inquiry/', views.InquiryView.as_view(), name = "inquiry"),
     path('user_target_rank/', views.UserTargetRankView.as_view(), name = "user_target_rank"),
@@ -25,10 +31,19 @@ urlpatterns = [
     path("bonus_payment_date/", views.BonusPaymentDateView.as_view(), name="bonus_payment_date"),
     path("bonus_payment_date/template/", views.BonusPaymentDateTemplateView.as_view(), name="bonus_payment_date_template"),
     path("active_users/", views.ActiveUsersView.as_view(), name="active_users"),
+    path("active_users/template/", views.ActiveUsersTemplateView.as_view(), name="active_users_template"),
     path("cooling_off/", views.CoolingOffView.as_view(), name="cooling_off"),
 
     path('users/', views.UsersView.as_view(), name = "users"),
+    path("users/export/", views.UsersExportView.as_view(), name="users_export"),
     path('title_user/', views.TitleUserView.as_view(), name = "title_user"),
+    path("title_user/export/", views.TitleUserExportView.as_view(), name="title_user_export"),
+    path("active_user_search/", ActiveUserSearchView.as_view(), name="active_user_search"),
+    path(
+        "active_user_search/export/",
+        ActiveUserSearchExportView.as_view(),
+        name="active_user_search_export",
+    ),
     path(
         "business_personal_performance/",
         views.BusinessPersonalMonthPerformanceView.as_view(),

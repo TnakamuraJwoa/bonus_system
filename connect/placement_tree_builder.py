@@ -39,7 +39,7 @@ def _node_from_row(row):
     return {
         "jwoa_code": row.get("jwoa_code") or "",
         "send_bv_name": row.get("send_bv_name") or "",
-        "new_rank": row.get("new_rank"),
+        "rank": row.get("rank"),
         "placement_code": row.get("placement_code") or "",
         "rel_level": row.get("rel_level", 0),
         "children": [],
@@ -68,7 +68,7 @@ def build_member_tree_view(jwoa_code):
     member_code = (jwoa_code or "").strip()
     if not member_code:
         result["tree_unavailable_reason"] = (
-            "ツリー表示するには会員コードを入力して検索してください。"
+            "Enter a member code and search to display the tree."
         )
         return result
 

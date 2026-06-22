@@ -12,7 +12,7 @@ PLACEMENT_TREE_FOCUS_SQL = """
         c.placement_rank,
         c.jwoa_code,
         c.send_bv_name,
-        c.new_rank,
+        c.`rank`,
         c.tree_level,
         c.created_at
     FROM bonus_db.C_users_placement_tree_cache c
@@ -30,7 +30,7 @@ WITH RECURSIVE upline AS (
         c.placement_rank,
         c.jwoa_code,
         c.send_bv_name,
-        c.new_rank,
+        c.`rank`,
         c.tree_level,
         c.created_at,
         0 AS rel_level
@@ -46,7 +46,7 @@ WITH RECURSIVE upline AS (
         c.placement_rank,
         c.jwoa_code,
         c.send_bv_name,
-        c.new_rank,
+        c.`rank`,
         c.tree_level,
         c.created_at,
         u.rel_level - 1 AS rel_level
@@ -64,7 +64,7 @@ SELECT
     placement_rank,
     jwoa_code,
     send_bv_name,
-    new_rank,
+    `rank`,
     tree_level,
     created_at,
     rel_level
@@ -83,7 +83,7 @@ WITH RECURSIVE downline AS (
         c.placement_rank,
         c.jwoa_code,
         c.send_bv_name,
-        c.new_rank,
+        c.`rank`,
         c.tree_level,
         c.created_at,
         1 AS rel_level
@@ -99,7 +99,7 @@ WITH RECURSIVE downline AS (
         c.placement_rank,
         c.jwoa_code,
         c.send_bv_name,
-        c.new_rank,
+        c.`rank`,
         c.tree_level,
         c.created_at,
         d.rel_level + 1 AS rel_level
@@ -115,7 +115,7 @@ SELECT
     placement_rank,
     jwoa_code,
     send_bv_name,
-    new_rank,
+    `rank`,
     tree_level,
     created_at,
     rel_level

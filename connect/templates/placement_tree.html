@@ -90,7 +90,7 @@
 <div class="container-fluid mt-3 list-page-viewport">
   <div class="row g-1 h-100">
 
-    {% include "com/_sidebar.html" with active_menu="placement_tree" %}
+    {% include "com/_sidebar_users.html" with active_menu="placement_tree" %}
 
     <main class="col-12 col-md-9 col-lg-10 list-page-main">
 
@@ -99,12 +99,8 @@
 
           <div class="d-flex justify-content-between align-items-start flex-wrap mb-3">
             <div>
-              <h5 class="page-title mb-2">【上位者ツリー】</h5>
-              <p class="text-muted small mb-0">会員コードを起点に、上位チェーンと下位組織を確認できます。ランクは new_rank を表示します。</p>
-            </div>
-            <div class="text-muted small mt-1">
-              ランク：
-              <span class="badge badge-info">new_rank</span>
+              <h5 class="page-title mb-2">【上位者 Tree】</h5>
+              <p class="text-muted small mb-0">会員コードを起点に、上位チェーンと下位組織を確認できます。ランクは rank を表示します。</p>
             </div>
           </div>
 
@@ -233,7 +229,7 @@
               </a>
               <a class="btn btn-sm {% if view_mode == 'tree' %}btn-primary{% else %}btn-outline-primary{% endif %}"
                  href="{% url 'connect:placement_tree' %}?{{ tree_tab_query }}">
-                ツリー
+                Tree
               </a>
             </div>
             {% if view_mode == "tree" and tree_node_count %}
@@ -251,7 +247,7 @@
           {% if view_mode == "tree" %}
             <div class="placement-tree-panel" id="placementTreePanel">
               <div class="placement-tree-fullscreen-header">
-                <div class="font-weight-bold">上位者ツリー</div>
+                <div class="font-weight-bold">上位者 Tree</div>
                 <button type="button" class="btn btn-sm btn-outline-secondary js-tree-exit-fullscreen">全画面を閉じる</button>
               </div>
               {% if tree_unavailable_reason %}
@@ -269,7 +265,7 @@
                       <span class="placement-tree-toggle-spacer mr-1"></span>
                       <span class="font-weight-bold">{{ node.jwoa_code }}</span>
                       <span class="text-muted mx-1">{{ node.send_bv_name|default:"-" }}</span>
-                      <span class="badge {{ node.new_rank|rank_badge_class }}">{{ node.new_rank|rank_label }}</span>
+                      <span class="badge {{ node.rank|rank_badge_class }}">{{ node.rank|rank_label }}</span>
                       <span class="badge badge-secondary ml-1">上位</span>
                     </div>
                   </div>
@@ -290,7 +286,7 @@
                       {% endif %}
                       <span class="font-weight-bold">{{ tree_focus.jwoa_code }}</span>
                       <span class="text-muted mx-1">{{ tree_focus.send_bv_name|default:"-" }}</span>
-                      <span class="badge {{ tree_focus.new_rank|rank_badge_class }}">{{ tree_focus.new_rank|rank_label }}</span>
+                      <span class="badge {{ tree_focus.rank|rank_badge_class }}">{{ tree_focus.rank|rank_label }}</span>
                       <span class="badge badge-primary ml-1">起点</span>
                     </div>
                     {% if tree_children %}
@@ -302,7 +298,7 @@
                 {% endif %}
 
                 {% if not tree_focus and not tree_ancestors %}
-                  <p class="mb-0 text-muted">ツリーを表示するデータがありません。</p>
+                  <p class="mb-0 text-muted">No tree data to display.</p>
                 {% endif %}
               {% endif %}
             </div>
@@ -334,7 +330,7 @@
                       <td class="text-end">{{ r.placement_rank|rank_label }}</td>
                       <td class="font-weight-bold">{{ r.jwoa_code }}</td>
                       <td>{{ r.send_bv_name|default:"-" }}</td>
-                      <td class="text-end">{{ r.new_rank|rank_label }}</td>
+                      <td class="text-end">{{ r.rank|rank_label }}</td>
                       <td class="text-end">{{ r.tree_level }}</td>
                       <td>{{ r.created_at }}</td>
                     </tr>
