@@ -10,6 +10,7 @@ AUTH_USER_MODEL = 'accounts.CustomUser'
 ACCOUNT_FORMS = {
     'login': 'accounts.forms.CustomLoginForm',
 }
+ACCOUNT_ADAPTER = 'accounts.adapter.LastVisitedAccountAdapter'
 
 NUMBER_GROUPING = 3
 
@@ -29,7 +30,7 @@ ACCOUNT_EMAIL_REQUIRED = False
 ACCOUNT_EMAIL_VERIFICATION = 'none'
 
 # ログイン/ログアウト後の遷移先を設定
-LOGIN_REDIRECT_URL = 'connect:kibetu'
+LOGIN_REDIRECT_URL = 'connect:users'
 ACCOUNT_LOGOUT_REDIRECT_URL = 'account_login'
 
 # ログアウトリンクのクリック一発でログアウトする設定
@@ -94,6 +95,7 @@ MIDDLEWARE = [
     'connect.middleware.LoginRequiredMiddleware',
     'connect.middleware.SessionIdleTimeoutMiddleware',
     'connect.middleware.UserPermissionMiddleware',
+    'connect.middleware.LastVisitedPageMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]

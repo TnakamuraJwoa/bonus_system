@@ -7859,22 +7859,11 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
         if q_jwoa_code:
             member_match_select = """
                 CASE WHEN o.jwoa_code LIKE %s THEN 1 ELSE 0 END AS order_member_matched,
-                CASE
-                    WHEN EXISTS (
-                        SELECT 1
-                        FROM bonus_db.orders_distribution_bv d_match
-                        WHERE d_match.order_code = o.order_code
-                          AND d_match.jwoa_code LIKE %s
-                    )
-                    THEN 1
-                    ELSE 0
-                END AS distribution_member_matched,
             """
-            match_select_params.extend([f"%{q_jwoa_code}%", f"%{q_jwoa_code}%"])
+            match_select_params.append(f"%{q_jwoa_code}%")
         else:
             member_match_select = """
                 0 AS order_member_matched,
-                0 AS distribution_member_matched,
             """
 
         sql = f"""
@@ -7898,24 +7887,12 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
                 o.created_at,
                 o.updated_at,
                 {member_match_select}
-                COALESCE(bv_dist.distribution_count, 0) AS distribution_count,
-                COALESCE(bv_dist.distribution_bv_total, 0) AS distribution_bv_total,
-                bv_dist.distribution_jwoa_codes AS distribution_jwoa_codes
+                (
+                    SELECT COUNT(*)
+                    FROM bonus_db.orders_distribution_bv d_count
+                    WHERE d_count.order_code = o.order_code
+                ) AS distribution_count
             FROM nexus_production.orders o
-            LEFT JOIN (
-                SELECT
-                    d.order_code,
-                    COUNT(*) AS distribution_count,
-                    COALESCE(SUM(d.distribution_bv), 0) AS distribution_bv_total,
-                    GROUP_CONCAT(
-                        DISTINCT d.jwoa_code
-                        ORDER BY d.jwoa_code
-                        SEPARATOR ', '
-                    ) AS distribution_jwoa_codes
-                FROM bonus_db.orders_distribution_bv d
-                GROUP BY d.order_code
-            ) bv_dist
-                ON bv_dist.order_code = o.order_code
             {where_sql}
             ORDER BY o.id
             LIMIT %s OFFSET %s

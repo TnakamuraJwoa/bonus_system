@@ -9,6 +9,19 @@
       min-width: 90px;
     }
 
+    .orders-table th,
+    .orders-table td {
+      padding-top: 0.3rem;
+      padding-bottom: 0.3rem;
+      line-height: 1.2;
+    }
+
+    .orders-table .btn-sm {
+      padding-top: 0.12rem;
+      padding-bottom: 0.12rem;
+      line-height: 1.2;
+    }
+
     .orders-member-match {
       background: #fff7d6;
     }
@@ -254,7 +267,7 @@
             {% include "com/_list_summary.html" %}
 
             <div class="table-responsive">
-              <table class="table table-bordered table-sm align-middle mb-0"
+              <table class="table table-bordered table-sm align-middle mb-0 orders-table"
                      style="white-space: nowrap;">
 
                 <thead class="table-light">
