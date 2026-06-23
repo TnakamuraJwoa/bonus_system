@@ -1930,109 +1930,6 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
                 for row in cursor.fetchall()
             ]
 
-    def _update_bv(self, row_id, bv):
-        select_sql = """
-            SELECT
-                id,
-                register_year,
-                register_month,
-                order_code,
-                jwoa_code,
-                bv,
-                total_bv
-            FROM bonus_db.purchase_info_list
-            WHERE id = %s
-            FOR UPDATE
-        """
-        update_bv_sql = """
-            UPDATE bonus_db.purchase_info_list
-            SET
-                bv = %s,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = %s
-        """
-        update_total_bv_sql = """
-            UPDATE bonus_db.purchase_info_list p
-            JOIN (
-                SELECT
-                    order_code,
-                    SUM(bv) AS total_bv
-                FROM bonus_db.purchase_info_list
-                WHERE order_code = %s
-                GROUP BY order_code
-            ) total
-              ON p.order_code = total.order_code
-            SET
-                p.total_bv = total.total_bv,
-                p.updated_at = CURRENT_TIMESTAMP
-            WHERE p.order_code = %s
-        """
-
-        with transaction.atomic(using="rds"):
-            with connections["rds"].cursor() as cursor:
-                cursor.execute(select_sql, [row_id])
-                row = cursor.fetchone()
-                if not row:
-                    return 0, None, None
-
-                columns = [col[0] for col in cursor.description]
-                before_row = dict(zip(columns, row))
-                order_code = before_row["order_code"]
-                cursor.execute(update_bv_sql, [bv, row_id])
-                updated_count = cursor.rowcount
-                cursor.execute(update_total_bv_sql, [order_code, order_code])
-                after_row = dict(before_row)
-                after_row["bv"] = bv
-                return updated_count, before_row, after_row
-
-    def post(self, request, *args, **kwargs):
-        action = request.POST.get("action", "")
-        next_query = (request.POST.get("next_query") or "").strip()
-        list_url = redirect("connect:repurchase_list").url
-        next_url = f"{list_url}?{next_query}" if next_query else list_url
-
-        if action == "update_bv":
-            row_id = (request.POST.get("row_id") or "").strip()
-            bv_value = (request.POST.get("bv") or "").strip()
-
-            if not row_id:
-                messages.error(request, "更新対象が不正です。")
-                return redirect(next_url)
-
-            try:
-                row_id = int(row_id)
-                bv = Decimal(bv_value)
-            except (ValueError, InvalidOperation):
-                messages.error(request, "BVは数値で入力してください。")
-                return redirect(next_url)
-
-            try:
-                updated_count, before_row, after_row = self._update_bv(row_id, bv)
-            except Exception as e:
-                logger.exception("購入情報登録一覧のBV更新エラー")
-                messages.error(request, f"BV更新中にエラーが発生しました: {e}")
-                return redirect(next_url)
-
-            if updated_count:
-                record_change_audit(
-                    request,
-                    screen_name="ボーナス購入情報一覧",
-                    action_type="update",
-                    target_table="purchase_info_list",
-                    target_pk=row_id,
-                    summary=f"注文番号 {before_row.get('order_code')} のBVを更新",
-                    before_values=before_row,
-                    after_values=after_row,
-                )
-                messages.success(request, "BVを更新しました。")
-            else:
-                messages.warning(request, "更新対象データがありません。")
-
-            return redirect(next_url)
-
-        messages.error(request, "不正な操作です。")
-        return redirect(next_url)
-
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
@@ -3269,7 +3166,6 @@ class RepurchaseLastMonthView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "repurchase_last_month.html"
     DEFAULT_PER_PAGE = 1000
     MAX_PER_PAGE = 2000
-    EXPORT_FETCH_SIZE = 5000
 
     def _get_month_choices(self):
         today = date.today().replace(day=1)
@@ -3449,6 +3345,262 @@ VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         with connections["rds"].cursor() as cursor:
             cursor.executemany(insert_sql, data)
 
+    def _parse_manual_int(self, request, field_name, label, min_value=None, max_value=None):
+        raw_value = (request.POST.get(field_name) or "").strip()
+        if raw_value == "":
+            raise ValueError(f"{label}を入力してください。")
+
+        try:
+            value = int(raw_value)
+        except ValueError as exc:
+            raise ValueError(f"{label}は数値で入力してください。") from exc
+
+        if min_value is not None and value < min_value:
+            raise ValueError(f"{label}は{min_value}以上で入力してください。")
+        if max_value is not None and value > max_value:
+            raise ValueError(f"{label}は{max_value}以下で入力してください。")
+        return value
+
+    def _parse_manual_datetime(self, request, field_name, label):
+        raw_value = (request.POST.get(field_name) or "").strip()
+        if not raw_value:
+            return None
+
+        normalized = raw_value.replace("/", "-")
+        if "T" in normalized:
+            normalized = normalized.replace("T", " ")
+        if len(normalized) == 16:
+            normalized = f"{normalized}:00"
+
+        try:
+            return datetime.fromisoformat(normalized)
+        except ValueError as exc:
+            raise ValueError(
+                f"{label}は YYYY-MM-DD HH:MM または YYYY/MM/DD HH:MM 形式で入力してください。"
+            ) from exc
+
+    def _build_manual_purchase_row(self, request):
+        row = {
+            "register_year": self._parse_manual_int(request, "manual_register_year", "登録年", 1900, 2100),
+            "register_month": self._parse_manual_int(request, "manual_register_month", "登録月", 1, 12),
+            "order_year": self._parse_manual_int(request, "manual_order_year", "注文年", 1900, 2100),
+            "order_month": self._parse_manual_int(request, "manual_order_month", "注文月", 1, 12),
+            "order_code": (request.POST.get("manual_order_code") or "").strip(),
+            "order_type": self._parse_manual_int(request, "manual_order_type", "注文区分", 1),
+            "jwoa_code": (request.POST.get("manual_jwoa_code") or "").strip(),
+            "send_bv_name": (request.POST.get("manual_send_bv_name") or "").strip(),
+            "total_bv": self._parse_manual_int(request, "manual_total_bv", "total_bv", 0),
+            "bv": self._parse_manual_int(request, "manual_bv", "bv", 0),
+            "deposit_at": self._parse_manual_datetime(request, "manual_deposit_at", "BV反映日時"),
+            "order_at": self._parse_manual_datetime(request, "manual_order_at", "注文日時"),
+            "payment_date": parse_input_date(request.POST.get("manual_bonus_payment_date")),
+        }
+
+        if not row["order_code"]:
+            raise ValueError("注文番号を入力してください。")
+        if not row["jwoa_code"]:
+            raise ValueError("会員番号を入力してください。")
+        if not row["send_bv_name"]:
+            raise ValueError("会員名を入力してください。")
+        if row["payment_date"] is None:
+            raise ValueError("ボーナス支払日を入力してください。")
+
+        return row
+
+    def _insert_manual_purchase_row(self, row):
+        insert_sql = """
+INSERT INTO bonus_db.purchase_info_list
+(
+    register_year,
+    register_month,
+    order_year,
+    order_month,
+    jwoa_code,
+    send_bv_name,
+    order_code,
+    total_bv,
+    bv,
+    order_type,
+    deposit_at,
+    order_at,
+    bonus_payment_date
+)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+"""
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(
+                insert_sql,
+                [
+                    row["register_year"],
+                    row["register_month"],
+                    row["order_year"],
+                    row["order_month"],
+                    row["jwoa_code"],
+                    row["send_bv_name"],
+                    row["order_code"],
+                    row["total_bv"],
+                    row["bv"],
+                    row["order_type"],
+                    row["deposit_at"],
+                    row["order_at"],
+                    row["payment_date"],
+                ],
+            )
+            return cursor.lastrowid
+
+    def _build_registered_search_context(self, ctx):
+        selected_year = str(ctx.get("target_year") or "")
+        selected_month = str(ctx.get("target_month") or "")
+        filters = {
+            "edit_register_year": (self.request.GET.get("edit_register_year") or selected_year or "").strip(),
+            "edit_register_month": (self.request.GET.get("edit_register_month") or selected_month or "").strip(),
+            "edit_order_code": (self.request.GET.get("edit_order_code") or "").strip(),
+            "edit_jwoa_code": (self.request.GET.get("edit_jwoa_code") or "").strip(),
+            "edit_name": (self.request.GET.get("edit_name") or "").strip(),
+        }
+        panel_opened = self.request.GET.get("edit_panel") == "1"
+        submitted = any(key in self.request.GET for key in filters)
+
+        ctx.update(filters)
+        ctx["registered_edit_panel_open"] = panel_opened or submitted
+        ctx["registered_edit_searched"] = submitted
+        ctx["registered_edit_rows"] = self._fetch_registered_edit_rows(filters) if submitted else []
+        keep_params = {}
+        for key in ("target_year", "target_month", "per_page"):
+            value = ctx.get(key)
+            if value not in ("", None):
+                keep_params[key] = value
+        if ctx["registered_edit_panel_open"]:
+            keep_params["edit_panel"] = "1"
+        for key, value in filters.items():
+            if value:
+                keep_params[key] = value
+        ctx["registered_edit_query"] = urlencode(keep_params)
+        return ctx
+
+    def _fetch_registered_edit_rows(self, filters):
+        where = []
+        params = []
+
+        if filters["edit_register_year"]:
+            where.append("register_year = %s")
+            params.append(filters["edit_register_year"])
+        if filters["edit_register_month"]:
+            where.append("register_month = %s")
+            params.append(filters["edit_register_month"])
+        if filters["edit_order_code"]:
+            where.append("order_code LIKE %s")
+            params.append(f"%{filters['edit_order_code']}%")
+        if filters["edit_jwoa_code"]:
+            where.append("jwoa_code LIKE %s")
+            params.append(f"%{filters['edit_jwoa_code']}%")
+        if filters["edit_name"]:
+            where.append("send_bv_name LIKE %s")
+            params.append(f"%{filters['edit_name']}%")
+
+        if not where:
+            return []
+
+        sql = f"""
+            SELECT
+                id,
+                register_year,
+                register_month,
+                order_year,
+                order_month,
+                order_code,
+                order_type,
+                jwoa_code,
+                send_bv_name,
+                total_bv,
+                bv,
+                deposit_at,
+                order_at,
+                bonus_payment_date,
+                created_at,
+                updated_at
+            FROM bonus_db.purchase_info_list
+            WHERE {" AND ".join(where)}
+            ORDER BY register_year DESC, register_month DESC, id DESC
+            LIMIT 100
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            cols = [c[0] for c in cursor.description]
+            return [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+    def _fetch_manual_purchase_row_for_update(self, cursor, row_id):
+        sql = """
+            SELECT
+                id,
+                register_year,
+                register_month,
+                order_year,
+                order_month,
+                order_code,
+                order_type,
+                jwoa_code,
+                send_bv_name,
+                total_bv,
+                bv,
+                deposit_at,
+                order_at,
+                bonus_payment_date,
+                created_at,
+                updated_at
+            FROM bonus_db.purchase_info_list
+            WHERE id = %s
+            FOR UPDATE
+        """
+        cursor.execute(sql, [row_id])
+        row = cursor.fetchone()
+        if not row:
+            return None
+        columns = [col[0] for col in cursor.description]
+        return dict(zip(columns, row))
+
+    def _update_manual_purchase_row(self, cursor, row_id, row):
+        update_sql = """
+            UPDATE bonus_db.purchase_info_list
+            SET
+                register_year = %s,
+                register_month = %s,
+                order_year = %s,
+                order_month = %s,
+                jwoa_code = %s,
+                send_bv_name = %s,
+                order_code = %s,
+                total_bv = %s,
+                bv = %s,
+                order_type = %s,
+                deposit_at = %s,
+                order_at = %s,
+                bonus_payment_date = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+        """
+        cursor.execute(
+            update_sql,
+            [
+                row["register_year"],
+                row["register_month"],
+                row["order_year"],
+                row["order_month"],
+                row["jwoa_code"],
+                row["send_bv_name"],
+                row["order_code"],
+                row["total_bv"],
+                row["bv"],
+                row["order_type"],
+                row["deposit_at"],
+                row["order_at"],
+                row["payment_date"],
+                row_id,
+            ],
+        )
+        return cursor.rowcount
+
     def _update_setting(self, year, month):
         value = f"{year}{month:02d}"
 
@@ -3478,7 +3630,6 @@ WHERE name = 'set_title'
         ctx["registered_count"] = 0
         ctx["total_registered_count"] = self._count_all_registered()
         ctx["is_registered_month"] = False
-        ctx["delete_target_month"] = ""
 
         if selected_choice or target_year or target_month:
             try:
@@ -3488,10 +3639,6 @@ WHERE name = 'set_title'
                 ctx["target_year"] = y
                 ctx["target_month"] = m
                 self._enrich_month_context(ctx, y, m)
-                if ctx["is_registered_month"]:
-                    ctx["delete_target_month"] = ctx["selected_month"]
-                elif ctx["registered_month_options"]:
-                    ctx["delete_target_month"] = ctx["registered_month_options"][0]["value"]
                 per_page = self.get_per_page()
                 total_count = self._count_rows(y, m)
                 total_pages = max(1, math.ceil(total_count / per_page))
@@ -3503,7 +3650,7 @@ WHERE name = 'set_title'
                     "target_month": m,
                     "per_page": per_page,
                 }
-                return self.set_page_context(
+                ctx = self.set_page_context(
                     ctx=ctx,
                     rows=rows,
                     per_page=per_page,
@@ -3512,18 +3659,171 @@ WHERE name = 'set_title'
                     page=page,
                     base_params=base_params,
                 )
+                return self._build_registered_search_context(ctx)
             except (ValueError, TypeError):
                 messages.error(self.request, "年月の形式が不正です。年と月を正しく指定してください。")
                 ctx["rows"] = []
 
-        if not ctx["delete_target_month"] and ctx["registered_month_options"]:
-            ctx["delete_target_month"] = ctx["registered_month_options"][0]["value"]
-
-        return ctx
+        return self._build_registered_search_context(ctx)
 
     def post(self, request, *args, **kwargs):
         action = (request.POST.get("action") or "register").strip()
         user_access = get_user_access(request.user)
+
+        if action == "manual_create":
+            if not user_access.can_create:
+                messages.error(request, "登録権限がありません。")
+                return redirect(self._redirect_url())
+
+            try:
+                row = self._build_manual_purchase_row(request)
+            except ValueError as e:
+                messages.error(request, str(e))
+                return redirect(self._redirect_url())
+
+            redirect_url = self._redirect_url(row["register_year"], row["register_month"])
+
+            try:
+                with transaction.atomic(using="rds"):
+                    created_id = self._insert_manual_purchase_row(row)
+                    after_values = dict(row)
+                    after_values["id"] = created_id
+                    record_change_audit(
+                        request,
+                        screen_name="ボーナス購入情報(登録/削除)",
+                        action_type="create",
+                        target_table="purchase_info_list",
+                        target_pk=created_id,
+                        summary=(
+                            f"注文番号 {row['order_code']} / "
+                            f"会員番号 {row['jwoa_code']} の購入情報を手入力登録"
+                        ),
+                        before_values=None,
+                        after_values=after_values,
+                    )
+            except IntegrityError:
+                logger.exception("ボーナス購入情報の手入力登録重複エラー")
+                messages.error(request, "同じ登録年月・会員番号・注文番号のデータは既に登録されています。")
+                return redirect(redirect_url)
+            except Exception as e:
+                logger.exception("ボーナス購入情報の手入力登録エラー")
+                messages.error(request, f"登録中にエラーが発生しました: {e}")
+                return redirect(redirect_url)
+
+            messages.success(request, "購入情報を1件登録しました。")
+            return redirect(redirect_url)
+
+        if action == "manual_update":
+            if not user_access.can_update:
+                messages.error(request, "更新権限がありません。")
+                return redirect(self._redirect_url())
+
+            next_query = (request.POST.get("next_query") or "").strip()
+            row_id_text = (request.POST.get("manual_row_id") or "").strip()
+            try:
+                row_id = int(row_id_text)
+            except ValueError:
+                messages.error(request, "更新対象IDが不正です。")
+                return redirect(self._redirect_url())
+
+            try:
+                row = self._build_manual_purchase_row(request)
+            except ValueError as e:
+                messages.error(request, str(e))
+                return redirect(self._redirect_url())
+
+            if next_query:
+                redirect_url = f"{self._redirect_url()}?{next_query}"
+            else:
+                redirect_url = self._redirect_url(row["register_year"], row["register_month"])
+
+            try:
+                with transaction.atomic(using="rds"):
+                    with connections["rds"].cursor() as cursor:
+                        before_row = self._fetch_manual_purchase_row_for_update(cursor, row_id)
+                        if not before_row:
+                            messages.error(request, "更新対象データが見つかりませんでした。")
+                            return redirect(redirect_url)
+
+                        updated_count = self._update_manual_purchase_row(cursor, row_id, row)
+                        if updated_count:
+                            after_values = dict(row)
+                            after_values["id"] = row_id
+                            record_change_audit(
+                                request,
+                                screen_name="ボーナス購入情報(登録/削除)",
+                                action_type="update",
+                                target_table="purchase_info_list",
+                                target_pk=row_id,
+                                summary=(
+                                    f"注文番号 {row['order_code']} / "
+                                    f"会員番号 {row['jwoa_code']} の購入情報を編集"
+                                ),
+                                before_values=before_row,
+                                after_values=after_values,
+                            )
+            except IntegrityError:
+                logger.exception("ボーナス購入情報の手入力編集重複エラー")
+                messages.error(request, "同じ登録年月・会員番号・注文番号のデータは既に登録されています。")
+                return redirect(redirect_url)
+            except Exception as e:
+                logger.exception("ボーナス購入情報の手入力編集エラー")
+                messages.error(request, f"更新中にエラーが発生しました: {e}")
+                return redirect(redirect_url)
+
+            messages.success(request, "購入情報を更新しました。")
+            return redirect(redirect_url)
+
+        if action == "manual_delete":
+            if not user_access.can_delete:
+                messages.error(request, "削除権限がありません。")
+                return redirect(self._redirect_url())
+
+            next_query = (request.POST.get("next_query") or "").strip()
+            row_id_text = (request.POST.get("manual_row_id") or "").strip()
+            try:
+                row_id = int(row_id_text)
+            except ValueError:
+                messages.error(request, "削除対象IDが不正です。")
+                return redirect(self._redirect_url())
+
+            redirect_url = f"{self._redirect_url()}?{next_query}" if next_query else self._redirect_url()
+
+            try:
+                with transaction.atomic(using="rds"):
+                    with connections["rds"].cursor() as cursor:
+                        before_row = self._fetch_manual_purchase_row_for_update(cursor, row_id)
+                        if not before_row:
+                            messages.error(request, "削除対象データが見つかりませんでした。")
+                            return redirect(redirect_url)
+
+                        cursor.execute(
+                            "DELETE FROM bonus_db.purchase_info_list WHERE id = %s",
+                            [row_id],
+                        )
+                        deleted_count = cursor.rowcount
+
+                    if deleted_count:
+                        record_change_audit(
+                            request,
+                            screen_name="ボーナス購入情報(登録/削除)",
+                            action_type="delete",
+                            target_table="purchase_info_list",
+                            target_pk=row_id,
+                            summary=(
+                                f"注文番号 {before_row.get('order_code')} / "
+                                f"会員番号 {before_row.get('jwoa_code')} の購入情報を削除"
+                            ),
+                            before_values=before_row,
+                            after_values=None,
+                        )
+            except Exception as e:
+                logger.exception("ボーナス購入情報の手入力削除エラー")
+                messages.error(request, f"削除中にエラーが発生しました: {e}")
+                return redirect(redirect_url)
+
+            messages.success(request, "購入情報を1件削除しました。")
+            return redirect(redirect_url)
 
         if action == "delete_all":
             if not user_access.can_delete:
@@ -3563,27 +3863,19 @@ WHERE name = 'set_title'
                 messages.error(request, "削除権限がありません。")
                 return redirect(self._redirect_url())
 
-            delete_target = (request.POST.get("delete_target_month") or "").strip()
-            if delete_target:
-                try:
-                    y, m = parse_target_month(delete_target)
-                except (ValueError, TypeError):
-                    messages.error(request, "削除年月の形式が不正です。")
-                    return redirect(self._redirect_url())
-            else:
-                if not (
-                    request.POST.get("target_month_choice")
-                    or request.POST.get("target_year")
-                    or request.POST.get("target_month")
-                ):
-                    messages.error(request, "削除する年月を選択してください。")
-                    return redirect(self._redirect_url())
+            if not (
+                request.POST.get("target_month_choice")
+                or request.POST.get("target_year")
+                or request.POST.get("target_month")
+            ):
+                messages.error(request, "削除する年月を指定してください。")
+                return redirect(self._redirect_url())
 
-                try:
-                    y, m = get_target_year_month_from_params(request.POST)
-                except (ValueError, TypeError):
-                    messages.error(request, "年月の形式が不正です。年と月を正しく指定してください。")
-                    return redirect(self._redirect_url())
+            try:
+                y, m = get_target_year_month_from_params(request.POST)
+            except (ValueError, TypeError):
+                messages.error(request, "年月の形式が不正です。年と月を正しく指定してください。")
+                return redirect(self._redirect_url())
 
             redirect_url = self._redirect_url(y, m)
 
@@ -3669,89 +3961,6 @@ WHERE name = 'set_title'
 
         messages.success(request, f"{len(rows)}件登録完了")
         return redirect(redirect_url)
-
-
-class RepurchaseLastMonthExportView(RepurchaseLastMonthView):
-    def _order_type_label(self, order_type):
-        if order_type == 101:
-            return "再購入品"
-        if order_type == 102:
-            return "初回購入品"
-        if order_type == 103:
-            return "ランクアップ購入品"
-        if order_type == 105:
-            return "特別対応購入品"
-        if order_type == 200:
-            return "クーリングオフ"
-        return order_type
-
-    def get(self, request, *args, **kwargs):
-        try:
-            year, month = get_target_year_month_from_params(request.GET)
-        except (ValueError, TypeError):
-            messages.error(request, "年月の形式が不正です。年と月を正しく指定してください。")
-            return redirect("connect:repurchase_last_month")
-
-        params = self._build_query_params(year, month)
-        sql = f"""
-{REPURCHASE_LAST_MONTH}
-ORDER BY payment_date ASC, order_code ASC, jwoa_code ASC
-"""
-
-        wb = openpyxl.Workbook(write_only=True)
-        ws = wb.create_sheet("購入情報一覧")
-        ws.append([
-            "登録年",
-            "登録月",
-            "注文年",
-            "注文月",
-            "注文番号",
-            "注文区分",
-            "会員番号",
-            "会員名",
-            "total_bv",
-            "bv",
-            "BV反映日時",
-            "注文日時",
-            "ボーナス支払日",
-        ])
-
-        with connections["rds"].cursor() as cursor:
-            logger.info(
-                "ボーナス購入情報プレビューのExcel出力SQLを実行します。year=%s month=%s",
-                year,
-                month,
-            )
-            cursor.execute(sql, params)
-            columns = [col[0] for col in cursor.description]
-            while True:
-                rows = cursor.fetchmany(self.EXPORT_FETCH_SIZE)
-                if not rows:
-                    break
-                for row in rows:
-                    r = dict(zip(columns, row))
-                    ws.append([
-                        r.get("register_year"),
-                        r.get("register_month"),
-                        r.get("order_year"),
-                        r.get("order_month"),
-                        r.get("order_code"),
-                        self._order_type_label(r.get("order_type")),
-                        r.get("jwoa_code"),
-                        r.get("send_bv_name"),
-                        r.get("total_bv"),
-                        r.get("bv"),
-                        r.get("deposit_at"),
-                        r.get("order_at"),
-                        r.get("payment_date"),
-                    ])
-
-        response = HttpResponse(
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-        response["Content-Disposition"] = 'attachment; filename="repurchase.xlsx"'
-        wb.save(response)
-        return response
 
 
 class RepurchaseExportView(RepurchaseListView):

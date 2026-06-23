@@ -19,11 +19,6 @@ urlpatterns = [
     path('placement_tree/', views.PlacementTreeView.as_view(), name = "placement_tree"),
     path('settings/', views.SettingsView.as_view(), name = "settings"),
     path('repurchase_last_month/', views.RepurchaseLastMonthView.as_view(), name = "repurchase_last_month"),
-    path(
-        "repurchase_last_month/export/",
-        views.RepurchaseLastMonthExportView.as_view(),
-        name="repurchase_last_month_export",
-    ),
     path('repurchase_list/', views.RepurchaseListView.as_view(), name = "repurchase_list"),
     path('inquiry/', views.InquiryView.as_view(), name = "inquiry"),
     path('user_target_rank/', views.UserTargetRankView.as_view(), name = "user_target_rank"),

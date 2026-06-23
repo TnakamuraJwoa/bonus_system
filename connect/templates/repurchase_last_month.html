@@ -55,6 +55,32 @@
     min-width: max-content;
   }
 
+  .repurchase-operation-buttons .btn {
+    min-width: 5.8rem;
+  }
+
+  .repurchase-registered-search {
+    border-left: 4px solid #0ea5e9;
+  }
+
+  .repurchase-registered-table {
+    white-space: nowrap;
+    min-width: max-content;
+  }
+
+  .repurchase-registered-table th,
+  .repurchase-registered-table td {
+    padding-top: 0.3rem;
+    padding-bottom: 0.3rem;
+    line-height: 1.2;
+  }
+
+  .repurchase-registered-table .btn-sm {
+    padding-top: 0.12rem;
+    padding-bottom: 0.12rem;
+    line-height: 1.2;
+  }
+
   @media (max-width: 991.98px) {
     .repurchase-register-sections {
       grid-template-columns: 1fr;
@@ -81,37 +107,13 @@
               <div class="text-muted small">対象年月の購入情報をプレビューし、登録・削除を行います。</div>
               <div class="text-muted small mt-1">★ = 登録済み</div>
             </div>
-            {% if user_access.can_export %}
-            <div class="d-flex align-items-center gap-2">
-              {% if selected_month %}
-                <a class="btn btn-sm btn-outline-success rounded-circle"
-                   href="{% url 'connect:repurchase_last_month_export' %}?target_year={{ target_year }}&target_month={{ target_month }}"
-                   aria-label="Excel出力"
-                   title="Excel出力"
-                   style="width: 1.8rem; height: 1.8rem; padding: 0; line-height: 1.65rem; text-align: center;">
-                  <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                    <path fill="currentColor" d="M8.5 1.5A.5.5 0 0 0 8 1H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6.5a.5.5 0 0 0-.15-.35l-4.5-4.5a.5.5 0 0 0-.35-.15H8.5ZM9 2.7 12.3 6H10a1 1 0 0 1-1-1V2.7ZM5.1 8h1.1l.8 1.35L7.8 8h1.05l-1.3 2 1.38 2H7.82L7 10.58 6.17 12H5.1l1.36-2L5.1 8Z"/>
-                  </svg>
-                </a>
-              {% else %}
-                <button type="button"
-                        class="btn btn-sm btn-outline-success rounded-circle"
-                        aria-label="Excel出力"
-                        title="対象年月を選択してください"
-                        style="width: 1.8rem; height: 1.8rem; padding: 0; line-height: 1.65rem; text-align: center;"
-                        disabled>
-                  <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                    <path fill="currentColor" d="M8.5 1.5A.5.5 0 0 0 8 1H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6.5a.5.5 0 0 0-.15-.35l-4.5-4.5a.5.5 0 0 0-.35-.15H8.5ZM9 2.7 12.3 6H10a1 1 0 0 1-1-1V2.7ZM5.1 8h1.1l.8 1.35L7.8 8h1.05l-1.3 2 1.38 2H7.82L7 10.58 6.17 12H5.1l1.36-2L5.1 8Z"/>
-                  </svg>
-                </button>
-              {% endif %}
-            </div>
-            {% endif %}
           </div>
 
           <div class="repurchase-register-sections">
             <form method="get"
-                  class="repurchase-register-section repurchase-register-section--select mb-0 repurchase-register-filter">
+                  class="repurchase-register-section repurchase-register-section--select mb-0 repurchase-register-filter js-repurchase-search-form js-target-month-search-form"
+                  data-loading-message="検索中..."
+                  data-loading-target="#repurchaseSearchOverlay">
               <div class="repurchase-register-section__title">対象年月の選択</div>
               <div class="d-flex gap-2 align-items-end flex-wrap">
                 <div style="min-width: 220px;">
@@ -153,6 +155,17 @@
                          placeholder="mm">
                 </div>
 
+                <div>
+                  <label class="form-label mb-1 small text-muted d-block">&nbsp;</label>
+                  <button type="button"
+                          class="btn btn-outline-secondary"
+                          data-toggle="modal"
+                          data-target="#repurchaseRegisteredMonthSelectModal"
+                          {% if not registered_month_options %}disabled{% endif %}>
+                    登録済みから選択
+                  </button>
+                </div>
+
                 <div style="width: 110px;">
                   <label class="form-label mb-1 small text-muted">表示件数</label>
                   <select name="per_page" class="form-select">
@@ -162,7 +175,7 @@
                   </select>
                 </div>
 
-                <button type="submit" class="btn btn-primary">選択</button>
+                <button type="submit" class="btn btn-primary" data-loading-button>検索</button>
               </div>
               {% if selected_month %}
                 <div class="mt-2">
@@ -175,8 +188,28 @@
 
             <div class="repurchase-register-section repurchase-register-section--action">
               <div class="repurchase-register-section__title">操作</div>
-              {% if user_access.can_execute or user_access.can_delete %}
-              <div class="d-flex gap-2 flex-wrap align-items-center">
+              {% if user_access.can_create or user_access.can_execute or user_access.can_delete %}
+              <div class="d-flex gap-2 flex-wrap align-items-center repurchase-operation-buttons">
+                {% if user_access.can_create %}
+                <button type="button"
+                        class="btn btn-outline-success"
+                        data-toggle="modal"
+                        data-target="#repurchaseManualCreateModal">
+                  新規登録
+                </button>
+                {% endif %}
+
+                {% if user_access.can_update %}
+                <button type="button"
+                        class="btn btn-outline-primary"
+                        data-toggle="collapse"
+                        data-target="#repurchaseRegisteredSearchPanel"
+                        aria-expanded="{% if registered_edit_panel_open %}true{% else %}false{% endif %}"
+                        aria-controls="repurchaseRegisteredSearchPanel">
+                  検索・編集
+                </button>
+                {% endif %}
+
                 {% if user_access.can_execute %}
                 <form method="post" class="mb-0">
                   {% csrf_token %}
@@ -196,7 +229,7 @@
                         class="btn btn-outline-danger"
                         data-toggle="modal"
                         data-target="#repurchaseRegisterDeleteMonthModal"
-                        {% if not registered_month_options %}disabled{% endif %}>
+                        {% if not target_year or not target_month %}disabled{% endif %}>
                   年月削除
                 </button>
                 <button type="button"
@@ -213,6 +246,147 @@
           </div>
 
         </div>
+      </div>
+
+      <div class="collapse {% if registered_edit_panel_open %}show{% endif %}" id="repurchaseRegisteredSearchPanel">
+      <div class="card shadow-sm mb-3">
+        <div class="card-body repurchase-registered-search">
+          <div class="d-flex justify-content-between align-items-start flex-wrap mb-2">
+            <div>
+              <h5 class="page-title mb-1">登録済みデータ検索・編集</h5>
+              <div class="text-muted small">登録済みの購入情報を検索し、必要に応じて内容を編集します。</div>
+            </div>
+          </div>
+
+          <form method="get"
+                class="d-flex gap-2 align-items-end mb-3 flex-wrap repurchase-register-filter js-repurchase-search-form js-registered-edit-search-form"
+                data-loading-message="検索中..."
+                data-loading-target="#repurchaseSearchOverlay">
+            {% if target_year %}
+              <input type="hidden" name="target_year" value="{{ target_year }}">
+            {% endif %}
+            {% if target_month %}
+              <input type="hidden" name="target_month" value="{{ target_month }}">
+            {% endif %}
+            {% if per_page %}
+              <input type="hidden" name="per_page" value="{{ per_page }}">
+            {% endif %}
+
+            <div style="width: 110px;">
+              <label class="form-label mb-1 small text-muted">登録年</label>
+              <input type="text" name="edit_register_year" class="form-control" value="{{ edit_register_year }}">
+            </div>
+            <div style="width: 90px;">
+              <label class="form-label mb-1 small text-muted">登録月</label>
+              <input type="text" name="edit_register_month" class="form-control" value="{{ edit_register_month }}">
+            </div>
+            <div style="width: 180px;">
+              <label class="form-label mb-1 small text-muted">注文番号</label>
+              <input type="text" name="edit_order_code" class="form-control" value="{{ edit_order_code }}">
+            </div>
+            <div style="width: 145px;">
+              <label class="form-label mb-1 small text-muted">会員番号</label>
+              <input type="text" name="edit_jwoa_code" class="form-control" value="{{ edit_jwoa_code }}">
+            </div>
+            <div style="width: 160px;">
+              <label class="form-label mb-1 small text-muted">会員名</label>
+              <input type="text" name="edit_name" class="form-control" value="{{ edit_name }}">
+            </div>
+            <button type="submit" class="btn btn-primary" data-loading-button>検索</button>
+            <a class="btn btn-outline-secondary" href="{% url 'connect:repurchase_last_month' %}?edit_panel=1">クリア</a>
+          </form>
+
+          {% if registered_edit_searched %}
+            {% if registered_edit_rows %}
+              <div class="table-responsive">
+                <table class="table table-bordered table-sm align-middle mb-0 repurchase-registered-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th>ID</th>
+                      <th>登録年</th>
+                      <th>登録月</th>
+                      <th>注文番号</th>
+                      <th>注文区分</th>
+                      <th>会員番号</th>
+                      <th>会員名</th>
+                      <th>total_bv</th>
+                      <th>bv</th>
+                      <th>ボーナス支払日</th>
+                      <th>編集</th>
+                      <th>削除</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for r in registered_edit_rows %}
+                      <tr>
+                        <td class="text-right">{{ r.id }}</td>
+                        <td>{{ r.register_year }}</td>
+                        <td>{{ r.register_month }}</td>
+                        <td>{{ r.order_code }}</td>
+                        <td>{{ r.order_type }}</td>
+                        <td>{{ r.jwoa_code }}</td>
+                        <td>{{ r.send_bv_name }}</td>
+                        <td class="text-right">{{ r.total_bv }}</td>
+                        <td class="text-right">{{ r.bv }}</td>
+                        <td>{{ r.bonus_payment_date }}</td>
+                        <td class="text-center">
+                          {% if user_access.can_update %}
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-primary"
+                                    data-toggle="modal"
+                                    data-target="#repurchaseManualEditModal"
+                                    data-manual-edit-button
+                                    data-row-id="{{ r.id }}"
+                                    data-register-year="{{ r.register_year }}"
+                                    data-register-month="{{ r.register_month }}"
+                                    data-order-year="{{ r.order_year }}"
+                                    data-order-month="{{ r.order_month }}"
+                                    data-order-code="{{ r.order_code }}"
+                                    data-order-type="{{ r.order_type }}"
+                                    data-jwoa-code="{{ r.jwoa_code }}"
+                                    data-send-bv-name="{{ r.send_bv_name }}"
+                                    data-total-bv="{{ r.total_bv }}"
+                                    data-bv="{{ r.bv }}"
+                                    data-bonus-payment-date="{{ r.bonus_payment_date|date:'Y-m-d' }}"
+                                    data-deposit-at="{{ r.deposit_at|date:'Y-m-d\\TH:i' }}"
+                                    data-order-at="{{ r.order_at|date:'Y-m-d\\TH:i' }}">
+                              編集
+                            </button>
+                          {% else %}
+                            <span class="text-muted">-</span>
+                          {% endif %}
+                        </td>
+                        <td class="text-center">
+                          {% if user_access.can_delete %}
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-danger"
+                                    data-toggle="modal"
+                                    data-target="#repurchaseManualDeleteModal"
+                                    data-manual-delete-button
+                                    data-row-id="{{ r.id }}"
+                                    data-order-code="{{ r.order_code }}"
+                                    data-jwoa-code="{{ r.jwoa_code }}"
+                                    data-send-bv-name="{{ r.send_bv_name }}">
+                              削除
+                            </button>
+                          {% else %}
+                            <span class="text-muted">-</span>
+                          {% endif %}
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+              <div class="text-muted small mt-2">最大100件まで表示します。条件を絞って検索してください。</div>
+            {% else %}
+              <p class="mb-0 text-muted">登録済みデータが見つかりませんでした。</p>
+            {% endif %}
+          {% else %}
+            <p class="mb-0 text-muted">条件を指定して「検索」を押してください。</p>
+          {% endif %}
+        </div>
+      </div>
       </div>
 
       <div class="card shadow-sm flex-grow-1">
@@ -294,6 +468,342 @@
   </div>
 </div>
 
+{% if user_access.can_create %}
+<div class="modal fade"
+     id="repurchaseManualCreateModal"
+     tabindex="-1"
+     role="dialog"
+     aria-labelledby="repurchaseManualCreateModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="manual_create">
+        <div class="modal-header">
+          <div>
+            <h5 class="modal-title" id="repurchaseManualCreateModalLabel">購入情報の新規登録</h5>
+            <div class="small text-muted">購入情報を1件手入力で登録します。</div>
+          </div>
+          <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group col-md-3">
+              <label class="form-label small text-muted">登録年</label>
+              <input type="number"
+                     name="manual_register_year"
+                     class="form-control"
+                     value="{{ target_year|default:'' }}"
+                     min="1900"
+                     max="2100"
+                     required>
+            </div>
+            <div class="form-group col-md-3">
+              <label class="form-label small text-muted">登録月</label>
+              <input type="number"
+                     name="manual_register_month"
+                     class="form-control"
+                     value="{{ target_month|default:'' }}"
+                     min="1"
+                     max="12"
+                     required>
+            </div>
+            <div class="form-group col-md-3">
+              <label class="form-label small text-muted">注文年</label>
+              <input type="number"
+                     name="manual_order_year"
+                     class="form-control"
+                     value="{{ target_year|default:'' }}"
+                     min="1900"
+                     max="2100"
+                     required>
+            </div>
+            <div class="form-group col-md-3">
+              <label class="form-label small text-muted">注文月</label>
+              <input type="number"
+                     name="manual_order_month"
+                     class="form-control"
+                     value="{{ target_month|default:'' }}"
+                     min="1"
+                     max="12"
+                     required>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-md-6">
+              <label class="form-label small text-muted">注文番号</label>
+              <input type="text" name="manual_order_code" class="form-control" required>
+            </div>
+            <div class="form-group col-md-3">
+              <label class="form-label small text-muted">注文区分</label>
+              <select name="manual_order_type" class="form-control" required>
+                <option value="101">101：再購入品</option>
+                <option value="102">102：初回購入品</option>
+                <option value="103">103：ランクアップ購入品</option>
+                <option value="105">105：特別対応購入品</option>
+                <option value="200">200：クーリングオフ</option>
+              </select>
+            </div>
+            <div class="form-group col-md-3">
+              <label class="form-label small text-muted">ボーナス支払日</label>
+              <input type="date" name="manual_bonus_payment_date" class="form-control js-date-paste-normalize" required>
+              <div class="text-warning small mt-1 d-none js-bonus-payment-date-warning">
+                ボーナス支払日の年月が登録年月と異なります。
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-md-4">
+              <label class="form-label small text-muted">会員番号</label>
+              <input type="text" name="manual_jwoa_code" class="form-control" required>
+            </div>
+            <div class="form-group col-md-8">
+              <label class="form-label small text-muted">会員名</label>
+              <input type="text" name="manual_send_bv_name" class="form-control" required>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-md-3">
+              <label class="form-label small text-muted">total_bv</label>
+              <input type="number" name="manual_total_bv" class="form-control text-right" value="0" min="0" required>
+            </div>
+            <div class="form-group col-md-3">
+              <label class="form-label small text-muted">bv</label>
+              <input type="number" name="manual_bv" class="form-control text-right" value="0" min="0" required>
+            </div>
+            <div class="form-group col-md-3">
+              <label class="form-label small text-muted">BV反映日時</label>
+              <input type="datetime-local" name="manual_deposit_at" class="form-control js-datetime-paste-normalize">
+            </div>
+            <div class="form-group col-md-3">
+              <label class="form-label small text-muted">注文日時</label>
+              <input type="datetime-local" name="manual_order_at" class="form-control js-datetime-paste-normalize">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
+          <button type="submit" class="btn btn-success">登録する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if user_access.can_update %}
+<div class="modal fade"
+     id="repurchaseManualEditModal"
+     tabindex="-1"
+     role="dialog"
+     aria-labelledby="repurchaseManualEditModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="manual_update">
+        <input type="hidden" name="manual_row_id" id="manualEditRowId">
+        <input type="hidden" name="next_query" value="{{ registered_edit_query }}">
+        <div class="modal-header">
+          <div>
+            <h5 class="modal-title" id="repurchaseManualEditModalLabel">購入情報の編集</h5>
+            <div class="small text-muted">登録済み購入情報を編集します。</div>
+          </div>
+          <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group col-md-3">
+              <label class="form-label small text-muted">登録年</label>
+              <input type="number" name="manual_register_year" id="manualEditRegisterYear" class="form-control" min="1900" max="2100" required>
+            </div>
+            <div class="form-group col-md-3">
+              <label class="form-label small text-muted">登録月</label>
+              <input type="number" name="manual_register_month" id="manualEditRegisterMonth" class="form-control" min="1" max="12" required>
+            </div>
+            <div class="form-group col-md-3">
+              <label class="form-label small text-muted">注文年</label>
+              <input type="number" name="manual_order_year" id="manualEditOrderYear" class="form-control" min="1900" max="2100" required>
+            </div>
+            <div class="form-group col-md-3">
+              <label class="form-label small text-muted">注文月</label>
+              <input type="number" name="manual_order_month" id="manualEditOrderMonth" class="form-control" min="1" max="12" required>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-md-6">
+              <label class="form-label small text-muted">注文番号</label>
+              <input type="text" name="manual_order_code" id="manualEditOrderCode" class="form-control" required>
+            </div>
+            <div class="form-group col-md-3">
+              <label class="form-label small text-muted">注文区分</label>
+              <select name="manual_order_type" id="manualEditOrderType" class="form-control" required>
+                <option value="101">101：再購入品</option>
+                <option value="102">102：初回購入品</option>
+                <option value="103">103：ランクアップ購入品</option>
+                <option value="105">105：特別対応購入品</option>
+                <option value="200">200：クーリングオフ</option>
+              </select>
+            </div>
+            <div class="form-group col-md-3">
+              <label class="form-label small text-muted">ボーナス支払日</label>
+              <input type="date" name="manual_bonus_payment_date" id="manualEditBonusPaymentDate" class="form-control js-date-paste-normalize" required>
+              <div class="text-warning small mt-1 d-none js-bonus-payment-date-warning">
+                ボーナス支払日の年月が登録年月と異なります。
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-md-4">
+              <label class="form-label small text-muted">会員番号</label>
+              <input type="text" name="manual_jwoa_code" id="manualEditJwoaCode" class="form-control" required>
+            </div>
+            <div class="form-group col-md-8">
+              <label class="form-label small text-muted">会員名</label>
+              <input type="text" name="manual_send_bv_name" id="manualEditSendBvName" class="form-control" required>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-md-3">
+              <label class="form-label small text-muted">total_bv</label>
+              <input type="number" name="manual_total_bv" id="manualEditTotalBv" class="form-control text-right" min="0" required>
+            </div>
+            <div class="form-group col-md-3">
+              <label class="form-label small text-muted">bv</label>
+              <input type="number" name="manual_bv" id="manualEditBv" class="form-control text-right" min="0" required>
+            </div>
+            <div class="form-group col-md-3">
+              <label class="form-label small text-muted">BV反映日時</label>
+              <input type="datetime-local" name="manual_deposit_at" id="manualEditDepositAt" class="form-control js-datetime-paste-normalize">
+            </div>
+            <div class="form-group col-md-3">
+              <label class="form-label small text-muted">注文日時</label>
+              <input type="datetime-local" name="manual_order_at" id="manualEditOrderAt" class="form-control js-datetime-paste-normalize">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
+          <button type="submit" class="btn btn-primary">更新する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if user_access.can_delete %}
+<div class="modal fade"
+     id="repurchaseManualDeleteModal"
+     tabindex="-1"
+     role="dialog"
+     aria-labelledby="repurchaseManualDeleteModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="manual_delete">
+        <input type="hidden" name="manual_row_id" id="manualDeleteRowId">
+        <input type="hidden" name="next_query" value="{{ registered_edit_query }}">
+        <div class="modal-header">
+          <div>
+            <h5 class="modal-title" id="repurchaseManualDeleteModalLabel">購入情報の削除</h5>
+            <div class="small text-danger">この操作は元に戻せません。</div>
+          </div>
+          <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-2">以下の購入情報を削除します。</p>
+          <div class="border rounded p-3 bg-light">
+            <div class="mb-1">注文番号：<strong id="manualDeleteOrderCode"></strong></div>
+            <div class="mb-1">会員番号：<strong id="manualDeleteJwoaCode"></strong></div>
+            <div>会員名：<strong id="manualDeleteSendBvName"></strong></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
+          <button type="submit" class="btn btn-danger">削除する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="modal fade"
+     id="repurchaseRegisteredMonthSelectModal"
+     tabindex="-1"
+     role="dialog"
+     aria-labelledby="repurchaseRegisteredMonthSelectModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title" id="repurchaseRegisteredMonthSelectModalLabel">登録済み年月の選択</h5>
+          <div class="small text-muted">選択した年月で自動的に検索し、プレビューを表示します。</div>
+        </div>
+        <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body p-0">
+        {% if registered_month_options %}
+          <div class="table-responsive">
+            <table class="table table-bordered table-sm align-middle mb-0 repurchase-registered-table">
+              <thead class="thead-light">
+                <tr>
+                  <th class="text-nowrap">年月</th>
+                  <th class="text-nowrap text-right" style="width: 90px;">件数</th>
+                  <th class="text-nowrap text-center" style="width: 80px;">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for obj in registered_month_options %}
+                  <tr{% if obj.value == selected_month %} class="table-active"{% endif %}>
+                    <td class="text-nowrap">
+                      {% if obj.value == selected_month %}★ {% endif %}{{ obj.year }}年{{ obj.month }}月
+                    </td>
+                    <td class="text-right">{{ obj.count }}</td>
+                    <td class="text-center">
+                      <button type="button"
+                              class="btn btn-sm btn-outline-primary js-registered-month-pick"
+                              data-year="{{ obj.year }}"
+                              data-month="{{ obj.month }}">
+                        選択
+                      </button>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="mb-0 p-3 text-muted">登録済み年月がありません。</p>
+        {% endif %}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">閉じる</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% if user_access.can_delete %}
 <div class="modal fade"
      id="repurchaseRegisterDeleteMonthModal"
@@ -316,33 +826,22 @@
           </button>
         </div>
         <div class="modal-body">
-          {% if registered_month_options %}
-            <div class="form-group">
-              <label class="form-label small text-muted" for="deleteTargetMonthSelect">削除対象年月</label>
-              <select id="deleteTargetMonthSelect"
-                      name="delete_target_month"
-                      class="form-control js-delete-target-month">
-                {% for obj in registered_month_options %}
-                  <option value="{{ obj.value }}"
-                          data-count="{{ obj.count }}"
-                          {% if obj.value == delete_target_month %}selected{% endif %}>
-                    {{ obj.year }}年{{ obj.month }}月（{{ obj.count }}件）
-                  </option>
-                {% endfor %}
-              </select>
-            </div>
-            <p class="mb-0 text-muted small js-delete-target-summary">
-              選択した年月の登録済み購入情報をすべて削除します。
-            </p>
-          {% else %}
-            <p class="mb-0 text-muted">削除対象の登録済み年月がありません。</p>
-          {% endif %}
+          <input type="hidden" name="target_year" class="js-delete-target-year" value="{{ target_year|default:'' }}">
+          <input type="hidden" name="target_month" class="js-delete-target-month" value="{{ target_month|default:'' }}">
+          <p class="mb-2 js-delete-target-summary">
+            <span class="js-delete-target-label">
+              {% if target_year and target_month %}{{ target_year }}年{{ target_month }}月{% endif %}
+            </span><span class="js-delete-target-message">
+              {% if target_year and target_month %} の登録済み購入情報をすべて削除します。{% else %}削除する年月を指定してください。{% endif %}
+            </span>
+          </p>
+          <p class="mb-0 text-muted small">対象年月の選択で指定した年・月のデータを削除します。</p>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
           <button type="submit"
-                  class="btn btn-danger"
-                  {% if not registered_month_options %}disabled{% endif %}>
+                  class="btn btn-danger js-delete-target-submit"
+                  {% if not target_year or not target_month %}disabled{% endif %}>
             削除する
           </button>
         </div>
@@ -392,11 +891,54 @@
   </div>
 </div>
 {% endif %}
+
+<div class="bonus-calculating-overlay" id="repurchaseSearchOverlay" aria-live="polite" aria-hidden="true">
+  <div class="bonus-calculating-box">
+    <div class="bonus-calculating-spinner" aria-hidden="true"></div>
+    <div class="fw-bold mb-1" data-loading-message>検索中...</div>
+    <div class="small text-muted">完了するまでこのままお待ちください。</div>
+  </div>
+</div>
 {% endblock %}
 
 {% block script %}
 <script>
 (function () {
+  var overlay = document.getElementById("repurchaseSearchOverlay");
+
+  function showSearchLoading(form) {
+    if (!overlay) {
+      return;
+    }
+
+    var message = (form && form.getAttribute("data-loading-message")) || "検索中...";
+    var messageEl = overlay.querySelector("[data-loading-message]");
+    if (messageEl) {
+      messageEl.textContent = message;
+    }
+    overlay.classList.add("is-active");
+    overlay.setAttribute("aria-hidden", "false");
+
+    if (!form) {
+      return;
+    }
+
+    form.querySelectorAll("button, input[type='submit']").forEach(function (button) {
+      button.disabled = true;
+    });
+
+    var loadingButton = form.querySelector("[data-loading-button]");
+    if (loadingButton) {
+      loadingButton.textContent = message;
+    }
+  }
+
+  document.querySelectorAll(".js-repurchase-search-form").forEach(function (form) {
+    form.addEventListener("submit", function () {
+      showSearchLoading(form);
+    });
+  });
+
   var choice = document.querySelector(".js-target-month-choice");
   var manualFields = document.querySelectorAll(".js-target-manual");
 
@@ -416,28 +958,358 @@
       }
     });
   });
+
+  document.querySelectorAll(".js-registered-month-pick").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var filterForm = document.querySelector(".js-target-month-search-form");
+      var yearField = document.querySelector('input[name="target_year"]');
+      var monthField = document.querySelector('input[name="target_month"]');
+      if (yearField) {
+        yearField.value = button.dataset.year || "";
+      }
+      if (monthField) {
+        monthField.value = button.dataset.month || "";
+      }
+      if (choice) {
+        choice.value = "";
+      }
+      if (window.jQuery) {
+        window.jQuery("#repurchaseRegisteredMonthSelectModal").modal("hide");
+      }
+      if (filterForm) {
+        showSearchLoading(filterForm);
+        filterForm.submit();
+      }
+    });
+  });
 })();
 
 (function () {
-  var select = document.querySelector(".js-delete-target-month");
-  var summary = document.querySelector(".js-delete-target-summary");
+  function setValue(id, value) {
+    var element = document.getElementById(id);
+    if (element) {
+      element.value = value || "";
+    }
+  }
 
-  if (!select || !summary) {
+  document.querySelectorAll("[data-manual-edit-button]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      setValue("manualEditRowId", button.dataset.rowId);
+      setValue("manualEditRegisterYear", button.dataset.registerYear);
+      setValue("manualEditRegisterMonth", button.dataset.registerMonth);
+      setValue("manualEditOrderYear", button.dataset.orderYear);
+      setValue("manualEditOrderMonth", button.dataset.orderMonth);
+      setValue("manualEditOrderCode", button.dataset.orderCode);
+      setValue("manualEditOrderType", button.dataset.orderType);
+      setValue("manualEditJwoaCode", button.dataset.jwoaCode);
+      setValue("manualEditSendBvName", button.dataset.sendBvName);
+      setValue("manualEditTotalBv", button.dataset.totalBv);
+      setValue("manualEditBv", button.dataset.bv);
+      setValue("manualEditBonusPaymentDate", button.dataset.bonusPaymentDate);
+      setValue("manualEditDepositAt", button.dataset.depositAt);
+      setValue("manualEditOrderAt", button.dataset.orderAt);
+
+      var editForm = document.getElementById("manualEditRowId").closest("form");
+      if (editForm) {
+        updateBonusPaymentDateWarning(editForm);
+      }
+    });
+  });
+})();
+
+(function () {
+  function setText(id, value) {
+    var element = document.getElementById(id);
+    if (element) {
+      element.textContent = value || "";
+    }
+  }
+
+  document.querySelectorAll("[data-manual-delete-button]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var rowIdInput = document.getElementById("manualDeleteRowId");
+      if (rowIdInput) {
+        rowIdInput.value = button.dataset.rowId || "";
+      }
+      setText("manualDeleteOrderCode", button.dataset.orderCode);
+      setText("manualDeleteJwoaCode", button.dataset.jwoaCode);
+      setText("manualDeleteSendBvName", button.dataset.sendBvName);
+    });
+  });
+})();
+
+(function () {
+  function valueOf(form, name) {
+    var field = form.querySelector('[name="' + name + '"]');
+    return field ? (field.value || "").trim() : "";
+  }
+
+  function setValue(form, name, value) {
+    var field = form.querySelector('[name="' + name + '"]');
+    if (field) {
+      field.value = value || "";
+    }
+  }
+
+  function updateBonusPaymentDateWarning(form) {
+    var warning = form.querySelector(".js-bonus-payment-date-warning");
+    if (!warning) {
+      return;
+    }
+
+    var registerYear = valueOf(form, "manual_register_year");
+    var registerMonth = String(Number(valueOf(form, "manual_register_month") || 0));
+    var paymentDate = valueOf(form, "manual_bonus_payment_date");
+
+    if (!registerYear || !registerMonth || !paymentDate) {
+      warning.classList.add("d-none");
+      return;
+    }
+
+    var parts = paymentDate.split("-");
+    var paymentYear = parts[0] || "";
+    var paymentMonth = String(Number(parts[1] || 0));
+
+    if (paymentYear !== registerYear || paymentMonth !== registerMonth) {
+      warning.classList.remove("d-none");
+    } else {
+      warning.classList.add("d-none");
+    }
+  }
+
+  window.updateBonusPaymentDateWarning = updateBonusPaymentDateWarning;
+
+  document.querySelectorAll('form [name="manual_register_year"]').forEach(function (registerYearInput) {
+    var form = registerYearInput.closest("form");
+    if (!form) return;
+
+    var registerMonthInput = form.querySelector('[name="manual_register_month"]');
+    var paymentDateInput = form.querySelector('[name="manual_bonus_payment_date"]');
+
+    function syncOrderYear() {
+      setValue(form, "manual_order_year", valueOf(form, "manual_register_year"));
+      updateBonusPaymentDateWarning(form);
+    }
+
+    function syncOrderMonth() {
+      setValue(form, "manual_order_month", valueOf(form, "manual_register_month"));
+      updateBonusPaymentDateWarning(form);
+    }
+
+    registerYearInput.addEventListener("input", syncOrderYear);
+    registerYearInput.addEventListener("change", syncOrderYear);
+
+    if (registerMonthInput) {
+      registerMonthInput.addEventListener("input", syncOrderMonth);
+      registerMonthInput.addEventListener("change", syncOrderMonth);
+    }
+
+    if (paymentDateInput) {
+      paymentDateInput.addEventListener("input", function () {
+        updateBonusPaymentDateWarning(form);
+      });
+      paymentDateInput.addEventListener("change", function () {
+        updateBonusPaymentDateWarning(form);
+      });
+    }
+
+    updateBonusPaymentDateWarning(form);
+  });
+})();
+
+(function () {
+  function normalizeDateText(value) {
+    var text = (value || "").trim();
+    var match;
+
+    if (/^\d{8}$/.test(text)) {
+      match = [text, text.slice(0, 4), text.slice(4, 6), text.slice(6, 8)];
+    } else {
+      match = text.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/)
+        || text.match(/^(\d{4})年\s*(\d{1,2})月\s*(\d{1,2})日?$/);
+    }
+
+    if (!match) {
+      return "";
+    }
+
+    var year = Number(match[1]);
+    var month = Number(match[2]);
+    var day = Number(match[3]);
+    var date = new Date(year, month - 1, day);
+
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) {
+      return "";
+    }
+
+    return [
+      String(year).padStart(4, "0"),
+      String(month).padStart(2, "0"),
+      String(day).padStart(2, "0")
+    ].join("-");
+  }
+
+  function normalizeDateTimeText(value) {
+    var text = (value || "").trim();
+    var match = text.match(
+      /^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})(?:[ T](\d{1,2})(?::(\d{1,2}))?(?::\d{1,2})?)?$/
+    ) || text.match(
+      /^(\d{4})年\s*(\d{1,2})月\s*(\d{1,2})日?(?:\s*(\d{1,2})時(?:\s*(\d{1,2})分?)?)?$/
+    );
+
+    if (/^\d{8}$/.test(text)) {
+      match = [text, text.slice(0, 4), text.slice(4, 6), text.slice(6, 8), "0", "0"];
+    } else if (/^\d{12}$/.test(text)) {
+      match = [
+        text,
+        text.slice(0, 4),
+        text.slice(4, 6),
+        text.slice(6, 8),
+        text.slice(8, 10),
+        text.slice(10, 12)
+      ];
+    }
+
+    if (!match) {
+      return "";
+    }
+
+    var datePart = normalizeDateText([match[1], match[2], match[3]].join("-"));
+    if (!datePart) {
+      return "";
+    }
+
+    var hour = Number(match[4] || 0);
+    var minute = Number(match[5] || 0);
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      return "";
+    }
+
+    return datePart + "T" + String(hour).padStart(2, "0") + ":" + String(minute).padStart(2, "0");
+  }
+
+  function attachPasteNormalizer(selector, normalizer, copyFormatter) {
+    document.querySelectorAll(selector).forEach(function (input) {
+      input.addEventListener("paste", function (event) {
+        var pastedText = (event.clipboardData || window.clipboardData).getData("text");
+        var normalized = normalizer(pastedText);
+
+        if (!normalized) {
+          return;
+        }
+
+        event.preventDefault();
+        input.value = normalized;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+
+      input.addEventListener("copy", function (event) {
+        if (!input.value) {
+          return;
+        }
+
+        event.preventDefault();
+        event.clipboardData.setData("text/plain", copyFormatter(input.value));
+      });
+    });
+  }
+
+  attachPasteNormalizer(".js-date-paste-normalize", normalizeDateText, function (value) {
+    return value.replace(/-/g, "/");
+  });
+  attachPasteNormalizer(".js-datetime-paste-normalize", normalizeDateTimeText, function (value) {
+    return value.replace("T", " ").replace(/-/g, "/");
+  });
+})();
+
+(function () {
+  var modal = document.getElementById("repurchaseManualCreateModal");
+  if (!modal) {
     return;
   }
 
-  function updateSummary() {
-    var option = select.options[select.selectedIndex];
-    if (!option) {
-      return;
-    }
-    var label = option.textContent.trim();
-    var count = option.getAttribute("data-count") || "0";
-    summary.textContent = label + " の登録済み購入情報 " + count + "件 をすべて削除します。";
+  var paymentDateInput = modal.querySelector('[name="manual_bonus_payment_date"]');
+  var depositAtInput = modal.querySelector('[name="manual_deposit_at"]');
+  var orderAtInput = modal.querySelector('[name="manual_order_at"]');
+
+  if (!paymentDateInput) {
+    return;
   }
 
-  select.addEventListener("change", updateSummary);
-  updateSummary();
+  function syncDatetimeFields() {
+    if (!paymentDateInput.value) {
+      return;
+    }
+
+    var datetimeValue = paymentDateInput.value + "T00:00";
+    if (depositAtInput && !depositAtInput.value) {
+      depositAtInput.value = datetimeValue;
+    }
+    if (orderAtInput && !orderAtInput.value) {
+      orderAtInput.value = datetimeValue;
+    }
+  }
+
+  paymentDateInput.addEventListener("input", syncDatetimeFields);
+  paymentDateInput.addEventListener("change", syncDatetimeFields);
+})();
+
+(function () {
+  var yearInput = document.querySelector('input[name="target_year"].js-target-manual');
+  var monthInput = document.querySelector('input[name="target_month"].js-target-manual');
+  var deleteModal = document.getElementById("repurchaseRegisterDeleteMonthModal");
+  var deleteYearInput = document.querySelector(".js-delete-target-year");
+  var deleteMonthInput = document.querySelector(".js-delete-target-month");
+  var deleteLabel = document.querySelector(".js-delete-target-label");
+  var deleteMessage = document.querySelector(".js-delete-target-message");
+  var deleteSubmit = document.querySelector(".js-delete-target-submit");
+  var deleteButton = document.querySelector('[data-target="#repurchaseRegisterDeleteMonthModal"]');
+
+  if (!deleteModal || !yearInput || !monthInput) {
+    return;
+  }
+
+  function syncDeleteTargetFromForm() {
+    var year = (yearInput.value || "").trim();
+    var month = (monthInput.value || "").trim();
+    var hasTarget = year !== "" && month !== "";
+
+    if (deleteYearInput) {
+      deleteYearInput.value = year;
+    }
+    if (deleteMonthInput) {
+      deleteMonthInput.value = month;
+    }
+    if (deleteLabel) {
+      deleteLabel.textContent = hasTarget ? year + "年" + month + "月" : "";
+    }
+    if (deleteMessage) {
+      deleteMessage.textContent = hasTarget
+        ? " の登録済み購入情報をすべて削除します。"
+        : "削除する年月を指定してください。";
+    }
+    if (deleteSubmit) {
+      deleteSubmit.disabled = !hasTarget;
+    }
+    if (deleteButton) {
+      deleteButton.disabled = !hasTarget;
+    }
+  }
+
+  if (window.jQuery) {
+    window.jQuery(deleteModal).on("show.bs.modal", syncDeleteTargetFromForm);
+  }
+
+  yearInput.addEventListener("input", syncDeleteTargetFromForm);
+  yearInput.addEventListener("change", syncDeleteTargetFromForm);
+  monthInput.addEventListener("input", syncDeleteTargetFromForm);
+  monthInput.addEventListener("change", syncDeleteTargetFromForm);
+  syncDeleteTargetFromForm();
 })();
 </script>
 {% endblock %}

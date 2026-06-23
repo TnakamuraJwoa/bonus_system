@@ -148,7 +148,7 @@ MENU_FEATURES = (
         "repurchase_last_month",
         "ボーナス購入情報(登録/削除)",
         "settings",
-        ("repurchase_last_month", "repurchase_last_month_export"),
+        ("repurchase_last_month",),
     ),
     MenuFeature(
         "orders_distribution_bv_update",
