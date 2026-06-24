@@ -9,6 +9,7 @@ from .business_team_performance import (
     BusinessTeamWeekPerformanceView,
 )
 from .active_user_search import ActiveUserSearchExportView, ActiveUserSearchView
+from .introducer_tree import IntroducerTreeExportView, IntroducerTreeView
 
 
 
@@ -20,6 +21,17 @@ urlpatterns = [
     path('kibetu_month/', views.KibetuMonthView.as_view(), name = "kibetu_month"),
     path('title_list/', views.TitleListView.as_view(), name = "title_list"),
     path('placement_tree/', views.PlacementTreeView.as_view(), name = "placement_tree"),
+    path(
+        "placement_tree/export/",
+        views.PlacementTreeExportView.as_view(),
+        name="placement_tree_export",
+    ),
+    path('introducer_tree/', IntroducerTreeView.as_view(), name="introducer_tree"),
+    path(
+        "introducer_tree/export/",
+        IntroducerTreeExportView.as_view(),
+        name="introducer_tree_export",
+    ),
     path('settings/', views.SettingsView.as_view(), name = "settings"),
     path('repurchase_last_month/', views.RepurchaseLastMonthView.as_view(), name = "repurchase_last_month"),
     path('repurchase_list/', views.RepurchaseListView.as_view(), name = "repurchase_list"),

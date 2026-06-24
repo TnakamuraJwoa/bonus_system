@@ -1,3 +1,62 @@
+PLACEMENT_TREE_REBUILD_CACHE_SQL = """
+INSERT INTO bonus_db.C_users_placement_tree_cache (
+    placement_code,
+    placement_name,
+    placement_rank,
+    jwoa_code,
+    send_bv_name,
+    `rank`,
+    tree_level
+)
+WITH RECURSIVE user_tree (
+    placement_code,
+    placement_name,
+    placement_rank,
+    jmoa_code,
+    send_bv_name,
+    `rank`,
+    tree_level
+) AS (
+    SELECT
+        u.placement_code,
+        CAST(NULL AS CHAR(50) CHARSET cp932),
+        CAST(NULL AS SIGNED),
+        u.jmoa_code,
+        u.send_bv_name,
+        u.`rank`,
+        0
+    FROM bonus_db.users u
+    WHERE u.jmoa_code = 'JP1873001'
+
+    UNION ALL
+
+    SELECT
+        u.placement_code,
+        parent.send_bv_name,
+        parent.`rank`,
+        u.jmoa_code,
+        u.send_bv_name,
+        u.`rank`,
+        ut.tree_level + 1
+    FROM user_tree ut
+    INNER JOIN bonus_db.users_target_rank u
+        ON u.placement_code = ut.jmoa_code
+    LEFT JOIN bonus_db.users_target_rank parent
+        ON parent.jmoa_code = u.placement_code
+)
+SELECT
+    placement_code,
+    placement_name,
+    placement_rank,
+    jmoa_code,
+    send_bv_name,
+    `rank`,
+    tree_level
+FROM user_tree
+ORDER BY tree_level, jmoa_code
+"""
+
+
 PLACEMENT_TREE_MEMBER_COUNT_SQL = """
     SELECT COUNT(*)
     FROM bonus_db.C_users_placement_tree_cache

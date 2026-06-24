@@ -1,4 +1,4 @@
-﻿{% extends 'base.html' %}
+{% extends 'base.html' %}
 {% load static custom_filters %}
 
 {% block head %}
@@ -90,7 +90,7 @@
 <div class="container-fluid mt-3 list-page-viewport">
   <div class="row g-1 h-100">
 
-    {% include "com/_sidebar_users.html" with active_menu="placement_tree" %}
+    {% include "com/_sidebar_users.html" with active_menu="introducer_tree" %}
 
     <main class="col-12 col-md-9 col-lg-10 list-page-main">
 
@@ -99,12 +99,12 @@
 
           <div class="d-flex justify-content-between align-items-start flex-wrap mb-3">
             <div>
-              <h5 class="page-title mb-2">【上位者 Tree】</h5>
-              <p class="text-muted small mb-0">会員コードを起点に、上位チェーンと下位組織を確認できます。ランクは rank を表示します。</p>
+              <h5 class="page-title mb-2">【紹介者 Tree】</h5>
+              <p class="text-muted small mb-0">会員コードを起点に、紹介者チェーンと紹介下位組織を確認できます。ランクは rank を表示します。</p>
             </div>
             {% if user_access.can_export %}
               <a class="btn btn-sm btn-outline-success rounded-circle"
-                 href="{% url 'connect:placement_tree_export' %}{% if base_qs %}?{{ base_qs }}{% endif %}"
+                 href="{% url 'connect:introducer_tree_export' %}{% if base_qs %}?{{ base_qs }}{% endif %}"
                  aria-label="Excel出力"
                  title="Excel出力"
                  style="width: 1.8rem; height: 1.8rem; padding: 0; line-height: 1.65rem; text-align: center;">
@@ -116,7 +116,7 @@
           </div>
 
           <div class="bonus-calc-form">
-            <form method="get" id="placementTreeSearchForm" class="mb-0">
+            <form method="get" id="introducerTreeSearchForm" class="mb-0">
               {% if view_mode == "tree" %}
                 <input type="hidden" name="view" value="tree">
               {% endif %}
@@ -140,23 +140,23 @@
                 </div>
 
                 <div class="mr-2 mb-2">
-                  <label class="form-label mb-0 small text-muted">上位者コード</label>
+                  <label class="form-label mb-0 small text-muted">紹介者コード</label>
                   <input type="text"
-                         name="q_placement_code"
+                         name="q_introducer_code"
                          class="form-control"
-                         value="{{ q_placement_code|default:'' }}"
+                         value="{{ q_introducer_code|default:'' }}"
                          placeholder="例: JP00000001">
                 </div>
 
                 <div class="mr-2 mb-2" style="width: 150px;">
-                  <label class="form-label mb-0 small text-muted">上位者ランク</label>
-                  <select name="q_placement_rank" class="form-control">
+                  <label class="form-label mb-0 small text-muted">紹介者ランク</label>
+                  <select name="q_introducer_rank" class="form-control">
                     <option value="">全て</option>
-                    <option value="1" {% if q_placement_rank == "1" %}selected{% endif %}>シルバー</option>
-                    <option value="2" {% if q_placement_rank == "2" %}selected{% endif %}>ゴールド</option>
-                    <option value="3" {% if q_placement_rank == "3" %}selected{% endif %}>プラチナ</option>
-                    <option value="4" {% if q_placement_rank == "4" %}selected{% endif %}>ダイヤ</option>
-                    <option value="9" {% if q_placement_rank == "9" %}selected{% endif %}>一般会員</option>
+                    <option value="1" {% if q_introducer_rank == "1" %}selected{% endif %}>シルバー</option>
+                    <option value="2" {% if q_introducer_rank == "2" %}selected{% endif %}>ゴールド</option>
+                    <option value="3" {% if q_introducer_rank == "3" %}selected{% endif %}>プラチナ</option>
+                    <option value="4" {% if q_introducer_rank == "4" %}selected{% endif %}>ダイヤ</option>
+                    <option value="9" {% if q_introducer_rank == "9" %}selected{% endif %}>一般会員</option>
                   </select>
                 </div>
 
@@ -185,7 +185,7 @@
             </form>
 
             <div class="bonus-calc-selection-status">
-              {% if q_jwoa_code or q_name or q_placement_code or q_placement_rank or q_rank %}
+              {% if q_jwoa_code or q_name or q_introducer_code or q_introducer_rank or q_rank %}
                 <span class="text-muted small">絞り込み中：</span>
                 {% if q_jwoa_code %}
                   <span class="badge badge-info">会員コード={{ q_jwoa_code }}</span>
@@ -193,11 +193,11 @@
                 {% if q_name %}
                   <span class="badge badge-secondary">会員名={{ q_name }}</span>
                 {% endif %}
-                {% if q_placement_code %}
-                  <span class="badge badge-dark">上位者コード={{ q_placement_code }}</span>
+                {% if q_introducer_code %}
+                  <span class="badge badge-dark">紹介者コード={{ q_introducer_code }}</span>
                 {% endif %}
-                {% if q_placement_rank %}
-                  <span class="badge badge-primary">上位者ランク={{ q_placement_rank|rank_label }}</span>
+                {% if q_introducer_rank %}
+                  <span class="badge badge-primary">紹介者ランク={{ q_introducer_rank|rank_label }}</span>
                 {% endif %}
                 {% if q_rank %}
                   <span class="badge badge-primary">ランク={{ q_rank|rank_label }}</span>
@@ -208,8 +208,8 @@
             </div>
 
             <div class="bonus-calc-action-row">
-              <button type="submit" form="placementTreeSearchForm" class="btn btn-primary">検索</button>
-              <a class="btn btn-outline-secondary" href="{% url 'connect:placement_tree' %}">
+              <button type="submit" form="introducerTreeSearchForm" class="btn btn-primary">検索</button>
+              <a class="btn btn-outline-secondary" href="{% url 'connect:introducer_tree' %}">
                 リセット
               </a>
 
@@ -217,13 +217,13 @@
                 <form method="post"
                       class="mb-0"
                       data-loading-message="登録中..."
-                      data-loading-target="#placementTreeRebuildOverlay">
+                      data-loading-target="#introducerTreeRebuildOverlay">
                   {% csrf_token %}
                   <input type="hidden" name="action" value="copy">
                   <button type="submit"
                           class="btn btn-primary"
                           data-loading-button
-                          data-confirm-submit="既存データを全削除して、上位者Treeテーブルを再作成します。よろしいですか？">
+                          data-confirm-submit="既存データを全削除して、紹介者Treeテーブルを再作成します。よろしいですか？">
                     再作成
                   </button>
                 </form>
@@ -239,11 +239,11 @@
           <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
             <div class="btn-group placement-tree-tabs" role="group" aria-label="表示切替">
               <a class="btn btn-sm {% if view_mode == 'list' %}btn-primary{% else %}btn-outline-primary{% endif %}"
-                 href="{% url 'connect:placement_tree' %}{% if list_tab_query %}?{{ list_tab_query }}{% endif %}">
+                 href="{% url 'connect:introducer_tree' %}{% if list_tab_query %}?{{ list_tab_query }}{% endif %}">
                 一覧
               </a>
               <a class="btn btn-sm {% if view_mode == 'tree' %}btn-primary{% else %}btn-outline-primary{% endif %}"
-                 href="{% url 'connect:placement_tree' %}?{{ tree_tab_query }}">
+                 href="{% url 'connect:introducer_tree' %}?{{ tree_tab_query }}">
                 Tree
               </a>
             </div>
@@ -260,9 +260,9 @@
           </div>
 
           {% if view_mode == "tree" %}
-            <div class="placement-tree-panel" id="placementTreePanel">
+            <div class="placement-tree-panel" id="introducerTreePanel">
               <div class="placement-tree-fullscreen-header">
-                <div class="font-weight-bold">上位者 Tree</div>
+                <div class="font-weight-bold">紹介者 Tree</div>
                 <button type="button" class="btn btn-sm btn-outline-secondary js-tree-exit-fullscreen">全画面を閉じる</button>
               </div>
               {% if tree_unavailable_reason %}
@@ -279,9 +279,9 @@
                     <div class="placement-tree-node__row">
                       <span class="placement-tree-toggle-spacer mr-1"></span>
                       <span class="font-weight-bold">{{ node.jwoa_code }}</span>
-                      <span class="text-muted mx-1">{{ node.send_bv_name|default:"-" }}</span>
+                      <span class="text-muted mx-1">{{ node.jwoa_name|default:"-" }}</span>
                       <span class="badge {{ node.rank|rank_badge_class }}">{{ node.rank|rank_label }}</span>
-                      <span class="badge badge-secondary ml-1">上位</span>
+                      <span class="badge badge-secondary ml-1">紹介上位</span>
                     </div>
                   </div>
                 {% endfor %}
@@ -300,20 +300,20 @@
                         <span class="placement-tree-toggle-spacer mr-1"></span>
                       {% endif %}
                       <span class="font-weight-bold">{{ tree_focus.jwoa_code }}</span>
-                      <span class="text-muted mx-1">{{ tree_focus.send_bv_name|default:"-" }}</span>
+                      <span class="text-muted mx-1">{{ tree_focus.jwoa_name|default:"-" }}</span>
                       <span class="badge {{ tree_focus.rank|rank_badge_class }}">{{ tree_focus.rank|rank_label }}</span>
                       <span class="badge badge-primary ml-1">起点</span>
                     </div>
                     {% if tree_children %}
                       <div class="placement-tree-children is-collapsed">
-                        {% include "com/_placement_tree_nodes.html" with nodes=tree_children indent=1 %}
+                        {% include "com/_introducer_tree_nodes.html" with nodes=tree_children indent=1 %}
                       </div>
                     {% endif %}
                   </div>
                 {% endif %}
 
                 {% if not tree_focus and not tree_ancestors %}
-                  <p class="mb-0 text-muted">No tree data to display.</p>
+                  <p class="mb-0 text-muted">表示するTreeデータがありません。</p>
                 {% endif %}
               {% endif %}
             </div>
@@ -326,9 +326,9 @@
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                   <tr>
                     <th class="text-end">ID</th>
-                    <th>上位者コード</th>
-                    <th>上位者名</th>
-                    <th class="text-end">上位者ランク</th>
+                    <th>紹介者コード</th>
+                    <th>紹介者名</th>
+                    <th class="text-end">紹介者ランク</th>
                     <th>会員コード</th>
                     <th>会員名</th>
                     <th class="text-end">ランク</th>
@@ -340,11 +340,11 @@
                   {% for r in rows %}
                     <tr>
                       <td class="text-end">{{ r.id }}</td>
-                      <td class="font-weight-bold">{{ r.placement_code }}</td>
-                      <td>{{ r.placement_name|default:"-" }}</td>
-                      <td class="text-end">{{ r.placement_rank|rank_label }}</td>
+                      <td class="font-weight-bold">{{ r.introducer_code }}</td>
+                      <td>{{ r.introducer_name|default:"-" }}</td>
+                      <td class="text-end">{{ r.introducer_rank|rank_label }}</td>
                       <td class="font-weight-bold">{{ r.jwoa_code }}</td>
-                      <td>{{ r.send_bv_name|default:"-" }}</td>
+                      <td>{{ r.jwoa_name|default:"-" }}</td>
                       <td class="text-end">{{ r.rank|rank_label }}</td>
                       <td class="text-end">{{ r.tree_level }}</td>
                       <td>{{ r.created_at }}</td>
@@ -367,7 +367,7 @@
   </div>
 </div>
 
-<div class="bonus-calculating-overlay" id="placementTreeRebuildOverlay" aria-live="polite" aria-hidden="true">
+<div class="bonus-calculating-overlay" id="introducerTreeRebuildOverlay" aria-live="polite" aria-hidden="true">
   <div class="bonus-calculating-box">
     <div class="bonus-calculating-spinner" aria-hidden="true"></div>
     <div class="fw-bold mb-1" data-loading-message>登録中...</div>
@@ -426,7 +426,7 @@
 
   document.querySelectorAll(".js-tree-fullscreen").forEach(function (button) {
     button.addEventListener("click", function () {
-      var panel = document.getElementById("placementTreePanel");
+      var panel = document.getElementById("introducerTreePanel");
       if (panel && panel.requestFullscreen) {
         panel.requestFullscreen();
       }

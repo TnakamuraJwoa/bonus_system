@@ -35,7 +35,18 @@ MENU_FEATURES = (
         "users",
         ("active_user_search", "active_user_search_export"),
     ),
-    MenuFeature("placement_tree", "上位者 Tree", "users", ("placement_tree",)),
+    MenuFeature(
+        "placement_tree",
+        "上位者 Tree",
+        "users",
+        ("placement_tree", "placement_tree_export"),
+    ),
+    MenuFeature(
+        "introducer_tree",
+        "紹介者 Tree",
+        "users",
+        ("introducer_tree", "introducer_tree_export"),
+    ),
     # --- 注文 ---
     MenuFeature("orders", "注文一覧", "orders", ("orders", "order_detail")),
     MenuFeature(

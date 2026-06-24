@@ -54,62 +54,62 @@
             {% endif %}
           </div>
 
-          <form method="get" class="d-flex align-items-end mb-0 flex-wrap">
+          <div class="bonus-calc-form">
+            <form method="get" id="titleUserSearchForm" class="mb-0">
+              <div class="d-flex align-items-end flex-wrap">
+                <div class="mr-2 mb-2">
+                  <label class="form-label mb-0 small text-muted">title（選択）</label>
+                  <select name="title_id" class="form-control">
+                    <option value="">（全件）</option>
+                    {% for t in title_choices %}
+                      <option value="{{ t.title_id }}"
+                              {% if t.title_id|stringformat:"s" == selected_title_id %}selected{% endif %}>
+                        {{ t.title_id }} : {{ t.title_name }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </div>
 
-            <div class="mr-2 mb-2">
-              <label class="form-label mb-0 small text-muted">title（選択）</label>
-              <select name="title_id" class="form-control">
-                <option value="">（全件）</option>
-                {% for t in title_choices %}
-                  <option value="{{ t.title_id }}"
-                          {% if t.title_id|stringformat:"s" == selected_title_id %}selected{% endif %}>
-                    {{ t.title_id }} : {{ t.title_name }}
-                  </option>
-                {% endfor %}
-              </select>
+                <div class="mr-2 mb-2">
+                  <label class="form-label mb-0 small text-muted">会員ID（検索）</label>
+                  <input type="text"
+                         name="q_jpid"
+                         class="form-control"
+                         value="{{ q_jpid|default:'' }}"
+                         placeholder="例: JP05198407">
+                </div>
+
+                <div class="mr-2 mb-2" style="width: 110px;">
+                  <label class="form-label mb-0 small text-muted">表示件数</label>
+                  <select name="per_page" class="form-control">
+                    <option value="50"  {% if per_page == 50 %}selected{% endif %}>50</option>
+                    <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                    <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                    <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+                  </select>
+                </div>
+              </div>
+            </form>
+
+            <div class="bonus-calc-selection-status">
+              {% if selected_title_id or q_jpid %}
+                <span class="text-muted small">絞り込み中：</span>
+                {% if selected_title_id %}
+                  <span class="badge badge-info">title_id={{ selected_title_id }}</span>
+                {% endif %}
+                {% if q_jpid %}
+                  <span class="badge badge-secondary">会員ID={{ q_jpid }}</span>
+                {% endif %}
+              {% else %}
+                <span class="text-muted small">全件表示中</span>
+              {% endif %}
             </div>
 
-            <div class="mr-2 mb-2">
-              <label class="form-label mb-0 small text-muted">会員ID（検索）</label>
-              <input type="text"
-                     name="q_jpid"
-                     class="form-control"
-                     value="{{ q_jpid|default:'' }}"
-                     placeholder="例: JP05198407">
-            </div>
-
-            <div class="mr-2 mb-2">
-              <label class="form-label mb-0 small text-muted">表示件数</label>
-              <select name="per_page" class="form-control">
-                <option value="50"  {% if per_page == 50 %}selected{% endif %}>50</option>
-                <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
-                <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
-                <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
-              </select>
-            </div>
-
-            <div class="mb-2 mr-2">
-              <button type="submit" class="btn btn-primary">絞り込み</button>
-            </div>
-
-            <div class="mb-2">
+            <div class="bonus-calc-action-row">
+              <button type="submit" form="titleUserSearchForm" class="btn btn-primary">絞り込み</button>
               <a class="btn btn-outline-secondary" href="{% url 'connect:title_user' %}">リセット</a>
             </div>
-          </form>
-
-          {% if selected_title_id or q_jpid %}
-            <div class="text-muted small mt-3">
-              絞り込み中：
-              {% if selected_title_id %}
-                <span class="badge badge-info">title_id={{ selected_title_id }}</span>
-              {% endif %}
-              {% if q_jpid %}
-                <span class="badge badge-secondary">会員ID={{ q_jpid }}</span>
-              {% endif %}
-            </div>
-          {% else %}
-            <div class="text-muted small mt-3">全件表示中</div>
-          {% endif %}
+          </div>
 
         </div>
       </div>

@@ -24,6 +24,11 @@
         <a class="list-group-item list-group-item-action {% if active_menu == 'placement_tree' %}active{% endif %}"
            href="{% url 'connect:placement_tree' %}">上位者 Tree</a>
         {% endif %}
+
+        {% if user_access|can_menu:"introducer_tree" %}
+        <a class="list-group-item list-group-item-action {% if active_menu == 'introducer_tree' %}active{% endif %}"
+           href="{% url 'connect:introducer_tree' %}">紹介者 Tree</a>
+        {% endif %}
       </div>
     </div>
 
