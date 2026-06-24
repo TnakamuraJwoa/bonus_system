@@ -1023,6 +1023,197 @@ SEARCH_EXPORT_COLUMNS = {
 }
 
 
+BONUS_RESULT_DELETE_CONFIG = {
+    "drive_bonus": {
+        "label": "ドライブボーナス",
+        "result_tables": ["bonus_db.B_drive_bonus_result"],
+        "history_names": ["drive_bonus"],
+        "period_model": PeriodMaster,
+        "redirect_name": "connect:drive_bonus",
+    },
+    "basic_bonus": {
+        "label": "ベーシックボーナス",
+        "result_tables": ["bonus_db.B_basic_bonus_result", "bonus_db.basic_bv_line"],
+        "history_names": ["basic_bonus"],
+        "period_model": PeriodMaster,
+        "redirect_name": "connect:basic_bonus",
+    },
+    "matching_bonus": {
+        "label": "マッチングボーナス",
+        "result_tables": ["bonus_db.B_matching_bonus_result"],
+        "history_names": ["matching_bonus"],
+        "period_model": PeriodMaster,
+        "redirect_name": "connect:matching_bonus",
+    },
+    "title_bonus": {
+        "label": "タイトルボーナス",
+        "result_tables": ["bonus_db.B_title_bonus_result"],
+        "history_names": ["title_bonus"],
+        "period_model": MonthlyPeriod,
+        "redirect_name": "connect:title_bonus",
+    },
+    "title_diff_bonus": {
+        "label": "タイトル差額ボーナス",
+        "result_tables": ["bonus_db.B_title_diff_bonus_result"],
+        "history_names": ["title_diff_bonus"],
+        "period_model": MonthlyPeriod,
+        "redirect_name": "connect:title_diff_bonus",
+    },
+    "repurchase_over_bonus": {
+        "label": "再購入オーバーボーナス",
+        "result_tables": ["bonus_db.B_repurchase_over_bonus_result"],
+        "history_names": ["repurchase_over_bonus"],
+        "period_model": MonthlyPeriod,
+        "redirect_name": "connect:repurchase_over_bonus",
+    },
+    "three_star_global_bonus": {
+        "label": "3スターダイヤグローバル配当",
+        "result_tables": ["bonus_db.B_three_star_global_bonus_result"],
+        "history_names": ["three_star_global_bonus"],
+        "period_model": MonthlyPeriod,
+        "redirect_name": "connect:three_star_global_bonus",
+    },
+    "week_bonus": {
+        "label": "週間ボーナス",
+        "result_tables": ["bonus_db.B_week_bonus_result"],
+        "history_names": ["week_bonus"],
+        "period_model": PeriodMaster,
+        "redirect_name": "connect:week_bonus",
+    },
+    "month_title": {
+        "label": "月タイトル",
+        "result_tables": ["bonus_db.month_title"],
+        "history_names": ["month_title", "title_registration"],
+        "period_model": MonthlyPeriod,
+        "redirect_name": "connect:month_title",
+    },
+    "month_bonus": {
+        "label": "月間ボーナス",
+        "result_tables": ["bonus_db.B_month_bonus_result"],
+        "history_names": ["month_bonus"],
+        "period_model": MonthlyPeriod,
+        "redirect_name": "connect:month_bonus",
+    },
+}
+
+
+def _bonus_redirect_url(config, kibetu=None):
+    base_url = redirect(config["redirect_name"]).url
+    if kibetu:
+        return f"{base_url}?kibetu={kibetu}"
+    return base_url
+
+
+def delete_bonus_result_for_kibetu(request, bonus_key):
+    config = BONUS_RESULT_DELETE_CONFIG[bonus_key]
+    selected_kibetu = (request.POST.get("kibetu") or "").strip()
+
+    if not get_user_access(request.user).can_delete:
+        messages.error(request, "削除権限がありません。")
+        return redirect(config["redirect_name"])
+
+    if not selected_kibetu:
+        messages.error(request, "期別を選択してください。")
+        return redirect(config["redirect_name"])
+
+    period = (
+        config["period_model"]
+        .objects.using("rds")
+        .filter(kibetu=selected_kibetu)
+        .first()
+    )
+    if not period:
+        messages.error(request, "選択された期別が存在しません。")
+        return redirect(config["redirect_name"])
+
+    redirect_url = _bonus_redirect_url(config, selected_kibetu)
+    reset_redirect_url = _bonus_redirect_url(config)
+    result_counts = {}
+    deleted_counts = {}
+    history_counts = {}
+    history_deleted = 0
+
+    try:
+        with transaction.atomic(using="rds"):
+            with connections["rds"].cursor() as cursor:
+                for table_name in config["result_tables"]:
+                    cursor.execute(
+                        f"SELECT COUNT(*) FROM {table_name} WHERE kibetu = %s",
+                        [selected_kibetu],
+                    )
+                    row = cursor.fetchone()
+                    result_counts[table_name] = int(row[0]) if row else 0
+
+                placeholders = ", ".join(["%s"] * len(config["history_names"]))
+                cursor.execute(
+                    f"""
+                        SELECT bonus_name, COUNT(*)
+                        FROM bonus_db.bonus_register_history
+                        WHERE kibetu = %s
+                          AND bonus_name IN ({placeholders})
+                        GROUP BY bonus_name
+                    """,
+                    [selected_kibetu, *config["history_names"]],
+                )
+                history_counts = {row[0]: int(row[1]) for row in cursor.fetchall()}
+
+                for table_name in config["result_tables"]:
+                    logger.info(
+                        "ボーナス計算結果削除SQLを実行します。table=%s kibetu=%s",
+                        table_name,
+                        selected_kibetu,
+                    )
+                    cursor.execute(
+                        f"DELETE FROM {table_name} WHERE kibetu = %s",
+                        [selected_kibetu],
+                    )
+                    deleted_counts[table_name] = cursor.rowcount
+
+                cursor.execute(
+                    f"""
+                        DELETE FROM bonus_db.bonus_register_history
+                        WHERE kibetu = %s
+                          AND bonus_name IN ({placeholders})
+                    """,
+                    [selected_kibetu, *config["history_names"]],
+                )
+                history_deleted = cursor.rowcount
+
+            record_change_audit(
+                request,
+                screen_name=config["label"],
+                action_type="delete",
+                target_table=", ".join(config["result_tables"]),
+                target_pk=f"{bonus_key}:{selected_kibetu}",
+                summary=(
+                    f"{selected_kibetu} の{config['label']}登録済みデータを削除: "
+                    f"結果{sum(deleted_counts.values())}件、履歴{history_deleted}件"
+                ),
+                before_values={
+                    "bonus_key": bonus_key,
+                    "kibetu": selected_kibetu,
+                    "result_counts": result_counts,
+                    "history_counts": history_counts,
+                },
+                after_values=None,
+            )
+    except Exception as e:
+        logger.exception("ボーナス計算結果削除エラー。bonus_key=%s kibetu=%s", bonus_key, selected_kibetu)
+        messages.error(request, f"削除中にエラーが発生しました: {e}")
+        return redirect(redirect_url)
+
+    total_deleted = sum(deleted_counts.values())
+    if total_deleted or history_deleted:
+        messages.success(
+            request,
+            f"{selected_kibetu} の{config['label']}登録済みデータを削除しました。"
+            f"（結果{total_deleted}件、履歴{history_deleted}件）",
+        )
+    else:
+        messages.warning(request, f"{selected_kibetu} の削除対象データはありませんでした。")
+    return redirect(reset_redirect_url)
+
+
 class IndexView(LoginView):
     template_name = "account/login.html"
     form_class = LoginForm
@@ -1064,6 +1255,9 @@ class DriveBonusView(generic.ListView):
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
+
+        if action == "delete":
+            return delete_bonus_result_for_kibetu(request, "drive_bonus")
 
         if action != "register_drive_bonus":
             messages.error(request, "不正な操作です。")
@@ -2693,6 +2887,9 @@ class BasicBonusView(generic.ListView):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
 
+        if action == "delete":
+            return delete_bonus_result_for_kibetu(request, "basic_bonus")
+
         if action != "register_basic_bonus":
             messages.error(request, "不正な操作です。")
             return redirect("connect:basic_bonus")
@@ -2721,26 +2918,34 @@ class BasicBonusView(generic.ListView):
                 messages.warning(request, "登録対象データはありませんが、登録履歴を残しました。")
                 return redirect(f"/basic_bonus/?kibetu={selected_kibetu}")
 
-            #B_basic_bonus_result
-            insert_sql, insert_params = (
-                register_sql.get_basic_bonus_insert_data(
-                    selected_kibetu,
-                    basic_bonus_rows
-                )
-            )
-
-            # 繰り越しBV
-            basic_bv_line_insert_sql, basic_bv_line_insert_params = (
-                register_sql.get_basic_bv_line_insert_data(
-                    selected_kibetu,
-                    basic_bv_line_rows
-                )
+            (
+                delete_bonus_result_sql,
+                delete_bv_line_sql,
+                delete_params,
+                insert_sql,
+                insert_params,
+                basic_bv_line_insert_sql,
+                basic_bv_line_insert_params,
+            ) = register_sql.get_basic_bonus_delete_insert_data(
+                selected_kibetu,
+                basic_bonus_rows,
+                basic_bv_line_rows,
             )
 
             #登録
             with transaction.atomic(using="rds"):
                 with connections["rds"].cursor() as cursor:
-                    # ベーシックボーナス登録
+                    logger.info(
+                        "ベーシックボーナス登録前削除SQLを実行します。kibetu=%s",
+                        selected_kibetu,
+                    )
+                    cursor.execute(delete_bonus_result_sql, delete_params)
+                    cursor.execute(delete_bv_line_sql, delete_params)
+
+                    logger.info(
+                        "ベーシックボーナス登録INSERT SQLを実行します。kibetu=%s",
+                        selected_kibetu,
+                    )
                     cursor.executemany(insert_sql, insert_params)
 
                     if basic_bv_line_insert_params:
@@ -5403,6 +5608,9 @@ class MatchingBonusView(generic.ListView):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
 
+        if action == "delete":
+            return delete_bonus_result_for_kibetu(request, "matching_bonus")
+
         if action != "register_matching_bonus":
             messages.error(request, "不正な操作です。")
             return redirect("connect:matching_bonus")
@@ -5980,6 +6188,9 @@ class TitleBonusView(generic.ListView):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
 
+        if action == "delete":
+            return delete_bonus_result_for_kibetu(request, "title_bonus")
+
         if action != "register_title_bonus":
             messages.error(request, "不正な操作です。")
             return redirect("connect:title_bonus")
@@ -6324,6 +6535,9 @@ class TitleDiffBonusView(generic.ListView):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
 
+        if action == "delete":
+            return delete_bonus_result_for_kibetu(request, "title_diff_bonus")
+
         if action != "register_title_diff_bonus":
             messages.error(request, "不正な操作です。")
             return redirect("connect:title_diff_bonus")
@@ -6644,6 +6858,9 @@ class RepurchaseOverBonusView(generic.ListView):
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
+
+        if action == "delete":
+            return delete_bonus_result_for_kibetu(request, "repurchase_over_bonus")
 
         if action != "repurchase_over_bonus":
             messages.error(request, "不正な操作です。")
@@ -7635,6 +7852,9 @@ class ThreeStarGlobalBonusView(generic.ListView):
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
+
+        if action == "delete":
+            return delete_bonus_result_for_kibetu(request, "three_star_global_bonus")
 
         if action != "three_star_global_bonus":
             messages.error(request, "不正な操作です。")
@@ -8649,6 +8869,9 @@ class WeekBonusView(generic.ListView):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
 
+        if action == "delete":
+            return delete_bonus_result_for_kibetu(request, "week_bonus")
+
         if action != "register_week_bonus":
             messages.error(request, "不正な操作です。")
             return redirect("connect:week_bonus")
@@ -9018,19 +9241,33 @@ class WeekBonusView(generic.ListView):
                     )
             return 0
 
-        insert_sql, insert_params = register_sql.get_basic_bonus_insert_data(
+        (
+            delete_bonus_result_sql,
+            delete_bv_line_sql,
+            delete_params,
+            insert_sql,
+            insert_params,
+            basic_bv_line_insert_sql,
+            basic_bv_line_insert_params,
+        ) = register_sql.get_basic_bonus_delete_insert_data(
             selected_kibetu,
             basic_bonus_rows,
-        )
-        basic_bv_line_insert_sql, basic_bv_line_insert_params = (
-            register_sql.get_basic_bv_line_insert_data(
-                selected_kibetu,
-                basic_bv_line_rows,
-            )
+            basic_bv_line_rows,
         )
 
         with transaction.atomic(using="rds"):
             with connections["rds"].cursor() as cursor:
+                logger.info(
+                    "ベーシックボーナス登録前削除SQLを実行します。kibetu=%s",
+                    selected_kibetu,
+                )
+                cursor.execute(delete_bonus_result_sql, delete_params)
+                cursor.execute(delete_bv_line_sql, delete_params)
+
+                logger.info(
+                    "ベーシックボーナス登録INSERT SQLを実行します。kibetu=%s",
+                    selected_kibetu,
+                )
                 cursor.executemany(insert_sql, insert_params)
                 if basic_bv_line_insert_params:
                     cursor.executemany(
@@ -9399,6 +9636,9 @@ class MonthTitleView(generic.ListView):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
 
+        if action == "delete":
+            return delete_bonus_result_for_kibetu(request, "month_title")
+
         if action != "register_month_title":
             messages.error(request, "不正な操作です。")
             return redirect("connect:month_title")
@@ -9596,6 +9836,9 @@ class MonthBonusView(generic.ListView):
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
+
+        if action == "delete":
+            return delete_bonus_result_for_kibetu(request, "month_bonus")
 
         if action != "register_month_bonus":
             messages.error(request, "不正な操作です。")

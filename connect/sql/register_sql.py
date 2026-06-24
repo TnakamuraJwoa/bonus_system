@@ -246,6 +246,34 @@ def get_basic_bv_line_insert_data(selected_kibetu, rows):
     return insert_sql, insert_params
 
 
+def get_basic_bonus_delete_insert_data(selected_kibetu, bonus_rows, bv_line_rows):
+    delete_bonus_result_sql = """
+        DELETE FROM bonus_db.B_basic_bonus_result
+        WHERE kibetu = %s
+    """
+    delete_bv_line_sql = """
+        DELETE FROM bonus_db.basic_bv_line
+        WHERE kibetu = %s
+    """
+    bonus_insert_sql, bonus_insert_params = get_basic_bonus_insert_data(
+        selected_kibetu,
+        bonus_rows,
+    )
+    bv_line_insert_sql, bv_line_insert_params = get_basic_bv_line_insert_data(
+        selected_kibetu,
+        bv_line_rows,
+    )
+    return (
+        delete_bonus_result_sql,
+        delete_bv_line_sql,
+        [selected_kibetu],
+        bonus_insert_sql,
+        bonus_insert_params,
+        bv_line_insert_sql,
+        bv_line_insert_params,
+    )
+
+
 ## タイトル差額ボーナス
 def get_title_diff_bonus_insert_data(selected_kibetu, rows):
 

@@ -1,6 +1,9 @@
 from django.urls import path
 from . import views
-from .business_carry_over_performance import CarryOverPerformanceView
+from .business_carry_over_performance import (
+    CarryOverPerformanceTemplateView,
+    CarryOverPerformanceView,
+)
 from .business_team_performance import (
     BusinessTeamMonthPerformanceView,
     BusinessTeamWeekPerformanceView,
@@ -63,6 +66,11 @@ urlpatterns = [
         "business_carry_over_performance/",
         CarryOverPerformanceView.as_view(),
         name="business_carry_over_performance",
+    ),
+    path(
+        "business_carry_over_performance/template/",
+        CarryOverPerformanceTemplateView.as_view(),
+        name="business_carry_over_performance_template",
     ),
 
     path('orders/', views.OrdersView.as_view(), name = "orders"),

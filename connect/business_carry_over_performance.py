@@ -6,6 +6,7 @@ import math
 import openpyxl
 from django.contrib import messages
 from django.db import ProgrammingError, connections, transaction
+from django.http import HttpResponse
 from django.shortcuts import redirect
 from django.views import generic
 
@@ -179,6 +180,24 @@ def fetch_carry_over_history_rows():
                 logger.info("繰り越し業績テーブルが未作成です。table=%s", BASIC_BV_LINE_TABLE)
                 return []
             raise
+
+
+class CarryOverPerformanceTemplateView(generic.View):
+    def get(self, request, *args, **kwargs):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "繰り越しBV"
+        ws.append(["期別", "上位者コード", "会員コード", "BV", "繰り越しBV"])
+        ws.append(["2025C03", "JP00000001", "JP05215357", 100, 50])
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = (
+            'attachment; filename="carry_over_performance_template.xlsx"'
+        )
+        wb.save(response)
+        return response
 
 
 class CarryOverPerformanceView(KeysetPaginationMixin, generic.TemplateView):

@@ -41,7 +41,7 @@
                       type="button"
                       data-toggle="collapse"
                       data-target="#helpTextCollapse_{{ r.help_key }}"
-                      aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}"
+                      aria-expanded="false"
                       aria-controls="helpTextCollapse_{{ r.help_key }}"
                     >
                       <strong>{{ r.title }}</strong>
@@ -56,7 +56,7 @@
 
                   <div
                     id="helpTextCollapse_{{ r.help_key }}"
-                    class="collapse {% if forloop.first %}show{% endif %}"
+                    class="collapse"
                     aria-labelledby="helpTextHeading_{{ r.help_key }}"
                     data-parent="#helpTextAccordion"
                   >

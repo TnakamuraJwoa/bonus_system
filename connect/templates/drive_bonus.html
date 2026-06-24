@@ -47,6 +47,20 @@
                 </button>
               </form>
               {% endif %}
+
+              {% if user_access.can_delete %}
+              <form method="post"
+                    class="mb-0"
+                    data-confirm="選択中の期別のドライブボーナス登録済み結果データと登録履歴を削除します。よろしいですか？">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="delete">
+                <input type="hidden" name="kibetu" value="{{ selected_kibetu }}">
+
+                <button type="submit" class="btn btn-outline-danger" {% if not selected_kibetu %}disabled{% endif %}>
+                  この期別の登録データを削除
+                </button>
+              </form>
+              {% endif %}
             </div>
 
           </div>

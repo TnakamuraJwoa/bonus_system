@@ -339,6 +339,56 @@ $(function () {
     $('.filter-dropdown__toggle').attr('aria-expanded', 'false');
   }
 
+  function updateKibetuSelectionIndicator($form) {
+    var $dropdown = $form.find('.filter-dropdown--kibetu').first();
+    if (!$dropdown.length) {
+      return;
+    }
+
+    var $group = $form.closest('.card-body').find('.selection-indicator-group').first();
+    var $toggle = $dropdown.find('.filter-dropdown__toggle').first();
+    var $checked = $dropdown.find('input[name="kibetu"]:checked');
+
+    if ($toggle.length) {
+      if ($checked.length) {
+        $toggle.text('期別（' + $checked.length + '件）');
+      } else {
+        $toggle.text('期別を選択');
+      }
+    }
+
+    if (!$group.length) {
+      return;
+    }
+
+    $group.find('.selection-indicator__badge--kibetu, .selection-indicator__badge--kibetu-none').remove();
+
+    var $label = $group.find('.selection-indicator__label').first();
+    var $insertAfter = $label;
+
+    if ($checked.length) {
+      $checked.each(function () {
+        var $badge = $('<span>', {
+          'class': 'selection-indicator__badge selection-indicator__badge--kibetu badge badge-pill',
+          'text': $(this).val()
+        });
+        $insertAfter.after($badge);
+        $insertAfter = $badge;
+      });
+    } else {
+      $insertAfter.after(
+        $('<span>', {
+          'class': 'selection-indicator__badge selection-indicator__badge--kibetu-none badge badge-pill',
+          'text': '期別：指定なし'
+        })
+      );
+    }
+  }
+
+  $('.bonus-search-form').each(function () {
+    updateKibetuSelectionIndicator($(this));
+  });
+
   $(document).on('click', '.filter-dropdown__toggle', function (e) {
     e.preventDefault();
     e.stopPropagation();
@@ -357,6 +407,10 @@ $(function () {
 
   $(document).on('change', '.filter-dropdown__menu input, .filter-dropdown__menu select', function () {
     closeAllFilterDropdowns();
+    var $form = $(this).closest('.bonus-search-form');
+    if ($form.length) {
+      updateKibetuSelectionIndicator($form);
+    }
   });
 
   $(document).on('click', function () {
@@ -386,15 +440,49 @@ $(function () {
 <script>
 (function () {
     var pendingConfirmAction = null;
+    var pendingParentModal = null;
     var modal = $("#appConfirmModal");
     var message = document.getElementById("appConfirmModalMessage");
     var yesButton = document.getElementById("appConfirmModalYes");
 
-    function openConfirm(confirmMessage, onConfirm) {
+    function findOpenParentModal(explicitParentModal) {
+        if (explicitParentModal && explicitParentModal.classList.contains("modal")) {
+            return explicitParentModal;
+        }
+
+        var openModals = document.querySelectorAll(".modal.show");
+        for (var i = 0; i < openModals.length; i++) {
+            if (openModals[i].id !== "appConfirmModal") {
+                return openModals[i];
+            }
+        }
+        return null;
+    }
+
+    function openConfirm(confirmMessage, onConfirm, parentModalEl) {
         pendingConfirmAction = onConfirm;
         message.textContent = confirmMessage || "実行しますか？";
+
+        var parentModal = findOpenParentModal(parentModalEl);
+        if (parentModal) {
+            pendingParentModal = parentModal;
+            $(parentModal).one("hidden.bs.modal", function () {
+                modal.modal("show");
+            });
+            $(parentModal).modal("hide");
+            return;
+        }
+
         modal.modal("show");
     }
+
+    modal.on("hidden.bs.modal", function () {
+        if (pendingParentModal && pendingConfirmAction) {
+            $(pendingParentModal).modal("show");
+            pendingConfirmAction = null;
+        }
+        pendingParentModal = null;
+    });
 
     function showFormLoading(form) {
         var loadingMessage = form.getAttribute("data-loading-message");
@@ -433,7 +521,7 @@ $(function () {
         openConfirm(form.getAttribute("data-confirm"), function () {
             showFormLoading(form);
             form.submit();
-        });
+        }, form.closest(".modal"));
     });
 
     document.addEventListener("click", function (event) {
@@ -459,7 +547,7 @@ $(function () {
 
             showFormLoading(form);
             form.submit();
-        });
+        }, trigger.closest(".modal"));
     });
 
     yesButton.addEventListener("click", function () {

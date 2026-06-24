@@ -137,7 +137,7 @@ MENU_FEATURES = (
         "business_carry_over_performance",
         "繰り越し業績照会",
         "business_search",
-        ("business_carry_over_performance",),
+        ("business_carry_over_performance", "business_carry_over_performance_template"),
     ),
     # --- 設定・マスタ ---
     MenuFeature("kibetu", "期別（週）", "settings", ("kibetu",)),
