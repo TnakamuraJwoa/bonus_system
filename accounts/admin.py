@@ -5,7 +5,7 @@ from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.hashers import make_password
 
 from .forms import CustomLoginForm, UserAccessProfileAdminForm, UserAccessProfileInlineForm
-from .models import CustomUser, UserAccessProfile
+from .models import CustomUser, LoginHistory, UserAccessProfile
 
 
 class CustomUserResource(resources.ModelResource):
@@ -112,6 +112,36 @@ class UserAccessProfileAdmin(admin.ModelAdmin):
             return "全画面"
         count = len(obj.menu_permissions)
         return f"{count} 画面"
+
+
+@admin.register(LoginHistory)
+class LoginHistoryAdmin(admin.ModelAdmin):
+    list_display = (
+        "occurred_at",
+        "username",
+        "event_type",
+        "ip_address",
+        "request_path",
+    )
+    list_filter = ("event_type", "occurred_at")
+    search_fields = ("username", "ip_address", "request_path", "user_agent")
+    date_hierarchy = "occurred_at"
+    readonly_fields = (
+        "user",
+        "username",
+        "event_type",
+        "occurred_at",
+        "ip_address",
+        "user_agent",
+        "session_key",
+        "request_path",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 class CustomUserAdmin(ImportExportModelAdmin, UserAdmin):

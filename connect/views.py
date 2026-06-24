@@ -2191,6 +2191,27 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
         ctx["q_order_types"] = q_order_types
         ctx["per_page"] = per_page
 
+        history_select_base_params = {}
+        if selected_month:
+            history_select_base_params["target_month"] = selected_month
+        if q_code:
+            history_select_base_params["q_code"] = q_code
+        if q_name:
+            history_select_base_params["q_name"] = q_name
+        if q_order_code:
+            history_select_base_params["q_order_code"] = q_order_code
+        if q_bonus_date_from:
+            history_select_base_params["q_bonus_date_from"] = q_bonus_date_from
+        if q_bonus_date_to:
+            history_select_base_params["q_bonus_date_to"] = q_bonus_date_to
+        if per_page != self.DEFAULT_PER_PAGE:
+            history_select_base_params["per_page"] = per_page
+        ctx["history_select_base_qs"] = urlencode(history_select_base_params)
+        for order_type in q_order_types:
+            if ctx["history_select_base_qs"]:
+                ctx["history_select_base_qs"] += "&"
+            ctx["history_select_base_qs"] += urlencode({"q_order_type": order_type})
+
         year = None
         month = None
         ctx["selected_period"] = None

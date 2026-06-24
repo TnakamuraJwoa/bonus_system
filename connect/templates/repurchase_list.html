@@ -492,6 +492,38 @@
 })();
 
 (function () {
+  var filterForm = document.querySelector(".repurchase-list-filter");
+  if (!filterForm) {
+    return;
+  }
+
+  document.querySelectorAll("#repurchaseHistoryModal [data-history-select-link]").forEach(function (link) {
+    link.addEventListener("click", function (event) {
+      var kibetu = link.getAttribute("data-history-kibetu");
+      var paramName = link.getAttribute("data-history-param-name") || "q_kibetu";
+      if (!kibetu) {
+        return;
+      }
+
+      event.preventDefault();
+
+      var targetUrl = new URL(link.href, window.location.href);
+      var params = new URLSearchParams(new FormData(filterForm));
+      params.set(paramName, kibetu);
+
+      Array.from(params.keys()).forEach(function (key) {
+        if (params.getAll(key).every(function (value) { return value === ""; })) {
+          params.delete(key);
+        }
+      });
+
+      targetUrl.search = params.toString();
+      window.location.href = targetUrl.toString();
+    });
+  });
+})();
+
+(function () {
   function normalizeDateText(value) {
     var text = (value || "").trim();
     var match;
