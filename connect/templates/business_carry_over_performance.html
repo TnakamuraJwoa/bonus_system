@@ -16,6 +16,22 @@
       align-items: flex-end;
       gap: 0.5rem;
     }
+
+    .business-performance-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 0.5rem;
+    }
+
+    .business-performance-delete-form {
+      display: flex;
+      align-items: flex-end;
+    }
+
+    .business-performance-delete-button {
+      min-width: 8.5rem;
+    }
   </style>
 {% endblock %}
 
@@ -29,42 +45,61 @@
         <div class="card-body">
           {% include "com/_bonus_calc_help.html" with title="【繰り越し照会 - 繰り越し業績照会】" help_title="繰り越し業績照会" help_key="business_carry_over_performance" history_modal_id=registration_history_modal_id history_title="登録履歴を表示" import_modal_id="carryOverImportModal" import_title="CSV/Excel取込" %}
 
-          <form method="get" class="business-performance-filter mb-0" autocomplete="off">
-            {% business_search_kibetu_input q_kibetu period_type="weekly" %}
+          <div class="business-performance-toolbar">
+            <form method="get" class="business-performance-filter mb-0" autocomplete="off">
+              {% business_search_kibetu_input q_kibetu period_type="weekly" %}
 
-            <div style="width: 180px;">
-              <label class="form-label mb-0 small text-muted">上位者コード</label>
-              <input type="text"
-                     name="q_placement_code"
-                     class="form-control"
-                     value="{{ q_placement_code|default:'' }}"
-                     placeholder="例: JP00000000"
-                     autocomplete="off">
-            </div>
+              <div style="width: 180px;">
+                <label class="form-label mb-0 small text-muted">上位者コード</label>
+                <input type="text"
+                       name="q_placement_code"
+                       class="form-control"
+                       value="{{ q_placement_code|default:'' }}"
+                       placeholder="例: JP00000000"
+                       autocomplete="off">
+              </div>
 
-            <div style="width: 180px;">
-              <label class="form-label mb-0 small text-muted">会員コード</label>
-              <input type="text"
-                     name="q_jmoa_code"
-                     class="form-control"
-                     value="{{ q_jmoa_code|default:'' }}"
-                     placeholder="例: JP00000000"
-                     autocomplete="off">
-            </div>
+              <div style="width: 180px;">
+                <label class="form-label mb-0 small text-muted">会員コード</label>
+                <input type="text"
+                       name="q_jmoa_code"
+                       class="form-control"
+                       value="{{ q_jmoa_code|default:'' }}"
+                       placeholder="例: JP00000000"
+                       autocomplete="off">
+              </div>
 
-            <div style="width: 110px;">
-              <label class="form-label mb-0 small text-muted">表示件数</label>
-              <select name="per_page" class="form-select">
-                <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
-                <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
-                <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
-                <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
-              </select>
-            </div>
+              <div style="width: 110px;">
+                <label class="form-label mb-0 small text-muted">表示件数</label>
+                <select name="per_page" class="form-select">
+                  <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                  <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                  <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                  <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+                </select>
+              </div>
 
-            <button type="submit" class="btn btn-primary">検索</button>
-            <a href="{% url 'connect:business_carry_over_performance' %}" class="btn btn-outline-secondary">リセット</a>
-          </form>
+              <button type="submit" class="btn btn-primary">検索</button>
+              <a href="{% url 'connect:business_carry_over_performance' %}" class="btn btn-outline-secondary">リセット</a>
+            </form>
+
+            {% if user_access.can_delete %}
+              <form method="post"
+                    class="business-performance-delete-form mb-0"
+                    data-carry-over-delete-form
+                    data-confirm="入力中または選択中の期別の繰り越しBVを削除します。よろしいですか？">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="delete">
+                <input type="hidden" name="q_kibetu" value="{{ q_kibetu|default:'' }}">
+                <button type="submit"
+                        class="btn btn-outline-danger business-performance-delete-button"
+                        data-carry-over-delete-button
+                        {% if not q_kibetu %}disabled{% endif %}>
+                  選択期別を削除
+                </button>
+              </form>
+            {% endif %}
+          </div>
 
         </div>
       </div>
@@ -117,7 +152,9 @@
     <div class="modal-content">
       <form method="post"
             enctype="multipart/form-data"
-            data-confirm="選択したファイルで繰り越しBVを一括登録します。同じ期別・上位者コード・会員コードは更新されます。よろしいですか？">
+            data-confirm="選択したファイルで繰り越しBVを一括登録します。同じ期別・上位者コード・会員コードは更新されます。よろしいですか？"
+            data-loading-message="登録中..."
+            data-loading-target="#carryOverRegisterOverlay">
         {% csrf_token %}
         <div class="modal-header">
           <div>
@@ -143,6 +180,12 @@
           <div class="small text-muted mt-1">
             同じ期別・上位者コード・会員コードが既にある場合は更新されます。
           </div>
+          <div class="mt-3">
+            <a class="btn btn-sm btn-outline-primary"
+               href="{% url 'connect:business_carry_over_performance_template' %}">
+              ひな形ファイルをダウンロード
+            </a>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
@@ -155,4 +198,43 @@
 {% endif %}
 
 {% include "com/_business_search_registration_modal.html" with modal_id=registration_history_modal_id modal_title=registration_modal_title selected_q_kibetu=q_kibetu registration_target_url_name=registration_target_url_name %}
+
+<div class="bonus-calculating-overlay" id="carryOverRegisterOverlay" aria-live="polite" aria-hidden="true">
+  <div class="bonus-calculating-box">
+    <div class="bonus-calculating-spinner" aria-hidden="true"></div>
+    <div class="fw-bold mb-1" data-loading-message>登録中...</div>
+    <div class="small text-muted">完了するまでこのままお待ちください。</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+(function () {
+  var kibetuInput = document.querySelector('input[name="q_kibetu"]');
+  var deleteForm = document.querySelector("[data-carry-over-delete-form]");
+  if (!kibetuInput || !deleteForm) {
+    return;
+  }
+
+  var deleteKibetuInput = deleteForm.querySelector('input[name="q_kibetu"]');
+  var deleteButton = deleteForm.querySelector("[data-carry-over-delete-button]");
+
+  function syncDeleteButton() {
+    var value = (kibetuInput.value || "").trim();
+    deleteKibetuInput.value = value;
+    deleteButton.disabled = !value;
+  }
+
+  kibetuInput.addEventListener("input", syncDeleteButton);
+  kibetuInput.addEventListener("change", syncDeleteButton);
+  document.addEventListener("click", function (event) {
+    if (event.target.closest(".business-search-kibetu-option")) {
+      window.setTimeout(syncDeleteButton, 0);
+    }
+  });
+  deleteForm.addEventListener("submit", syncDeleteButton);
+  syncDeleteButton();
+})();
+</script>
 {% endblock %}

@@ -4,7 +4,7 @@
 
 {% block head %}
     {% load static %}
-    <link href="{% static 'css/login.css' %}?v=7" rel="stylesheet">
+    <link href="{% static 'css/login.css' %}?v=8" rel="stylesheet">
 {% endblock %}
 
 {% block contents %}
@@ -60,9 +60,32 @@
             {% if redirect_field_value|slice:":6" == "/admin" or request.GET.next|slice:":6" == "/admin" %}
                 <a class="login-card__sub-link" href="{% url 'account_login' %}">通常ログインへ戻る</a>
             {% else %}
-                <a class="login-card__sub-link" href="{% url 'account_login' %}?next=/admin">管理画面ログインへ</a>
+                <a class="login-card__sub-link login-card__sub-link--hidden js-admin-login-link"
+                   href="{% url 'account_login' %}?next=/admin">管理画面ログインへ</a>
             {% endif %}
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block script %}
+<script>
+(function () {
+  var link = document.querySelector(".js-admin-login-link");
+  if (!link) {
+    return;
+  }
+
+  document.addEventListener("keydown", function (event) {
+    if (!event.ctrlKey || !event.shiftKey) {
+      return;
+    }
+    if (event.key !== "A" && event.key !== "a") {
+      return;
+    }
+    event.preventDefault();
+    link.classList.toggle("login-card__sub-link--hidden");
+  });
+})();
+</script>
 {% endblock %}

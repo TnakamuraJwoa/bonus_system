@@ -1,11 +1,15 @@
 from django.urls import path
 from . import views
-from .business_carry_over_performance import CarryOverPerformanceView
+from .business_carry_over_performance import (
+    CarryOverPerformanceTemplateView,
+    CarryOverPerformanceView,
+)
 from .business_team_performance import (
     BusinessTeamMonthPerformanceView,
     BusinessTeamWeekPerformanceView,
 )
 from .active_user_search import ActiveUserSearchExportView, ActiveUserSearchView
+from .introducer_tree import IntroducerTreeExportView, IntroducerTreeView
 
 
 
@@ -17,13 +21,19 @@ urlpatterns = [
     path('kibetu_month/', views.KibetuMonthView.as_view(), name = "kibetu_month"),
     path('title_list/', views.TitleListView.as_view(), name = "title_list"),
     path('placement_tree/', views.PlacementTreeView.as_view(), name = "placement_tree"),
+    path(
+        "placement_tree/export/",
+        views.PlacementTreeExportView.as_view(),
+        name="placement_tree_export",
+    ),
+    path('introducer_tree/', IntroducerTreeView.as_view(), name="introducer_tree"),
+    path(
+        "introducer_tree/export/",
+        IntroducerTreeExportView.as_view(),
+        name="introducer_tree_export",
+    ),
     path('settings/', views.SettingsView.as_view(), name = "settings"),
     path('repurchase_last_month/', views.RepurchaseLastMonthView.as_view(), name = "repurchase_last_month"),
-    path(
-        "repurchase_last_month/export/",
-        views.RepurchaseLastMonthExportView.as_view(),
-        name="repurchase_last_month_export",
-    ),
     path('repurchase_list/', views.RepurchaseListView.as_view(), name = "repurchase_list"),
     path('inquiry/', views.InquiryView.as_view(), name = "inquiry"),
     path('user_target_rank/', views.UserTargetRankView.as_view(), name = "user_target_rank"),
@@ -69,10 +79,20 @@ urlpatterns = [
         CarryOverPerformanceView.as_view(),
         name="business_carry_over_performance",
     ),
+    path(
+        "business_carry_over_performance/template/",
+        CarryOverPerformanceTemplateView.as_view(),
+        name="business_carry_over_performance_template",
+    ),
 
     path('orders/', views.OrdersView.as_view(), name = "orders"),
     path("orders/<int:pk>/", views.OrderDetailView.as_view(), name="order_detail"),
     path('orders_distribution_bv/', views.OrdersDistributionBvView.as_view(), name = "orders_distribution_bv"),
+    path(
+        "orders_distribution_bv/update/",
+        views.OrdersDistributionBvUpdateView.as_view(),
+        name="orders_distribution_bv_update",
+    ),
     path("api_users_bv/", views.ApiUsersBvView.as_view(), name="api_users_bv"),
 
     path('drive_bonus/', views.DriveBonusView.as_view(), name = "drive_bonus"),

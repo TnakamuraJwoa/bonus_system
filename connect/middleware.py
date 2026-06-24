@@ -1,4 +1,5 @@
 import time
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib import messages
@@ -16,6 +17,9 @@ from accounts.access import (
 )
 
 
+LAST_VISITED_PATH_SESSION_KEY = "last_visited_path"
+
+
 class SessionIdleTimeoutMiddleware:
     """1時間操作がなければ自動ログアウトする。"""
 
@@ -29,18 +33,27 @@ class SessionIdleTimeoutMiddleware:
             last_activity = request.session.get("_last_activity")
 
             if last_activity is not None and (now - last_activity) > self.timeout:
+                redirect_path = self._get_redirect_path(request)
                 logout(request)
                 request.session.flush()
                 login_url = reverse("account_login")
+                if redirect_path:
+                    query = urlencode({"timeout": "1", "next": redirect_path})
+                    return redirect(f"{login_url}?{query}")
                 return redirect(f"{login_url}?timeout=1")
 
             request.session["_last_activity"] = now
 
         return self.get_response(request)
 
+    def _get_redirect_path(self, request):
+        if request.method == "GET" and not self._is_exempt(request.path):
+            return request.get_full_path()
+        return request.session.get(LAST_VISITED_PATH_SESSION_KEY)
+
     @staticmethod
     def _is_exempt(path):
-        return path.startswith("/static/") or path.startswith("/media/")
+        return path.startswith(("/accounts/", "/static/", "/media/", "/admin/"))
 
 
 class LoginRequiredMiddleware:
@@ -84,3 +97,38 @@ class UserPermissionMiddleware:
                         return redirect(referer)
                     return redirect(settings.LOGIN_REDIRECT_URL)
         return self.get_response(request)
+
+
+class LastVisitedPageMiddleware:
+    """ログイン後に戻るため、最後に表示した画面をセッションへ保存する。"""
+
+    EXEMPT_PREFIXES = ("/accounts/", "/static/", "/media/", "/admin/")
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+
+        if self._should_store(request, response):
+            request.session[LAST_VISITED_PATH_SESSION_KEY] = request.get_full_path()
+
+        return response
+
+    def _should_store(self, request, response):
+        if not request.user.is_authenticated:
+            return False
+        if request.method != "GET":
+            return False
+        if response.status_code >= 400:
+            return False
+
+        path = request.path
+        if path == "/" or path.startswith(self.EXEMPT_PREFIXES):
+            return False
+        if "/export/" in path or path.rstrip("/").endswith("/export"):
+            return False
+        if path.rstrip("/").endswith("/template"):
+            return False
+
+        return True

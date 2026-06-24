@@ -170,7 +170,7 @@ def required_permission_for_request(request):
         return PERM_EXPORT
 
     action = (request.POST.get("action") or "").strip()
-    if action == "create":
+    if action in ("create", "manual_create"):
         return PERM_CREATE
     if action == "update":
         return PERM_UPDATE

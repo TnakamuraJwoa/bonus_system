@@ -4,6 +4,40 @@
 
 {% block head %}
   <link href="{% static 'css/common.css' %}" rel="stylesheet">
+  <style>
+    .orders-distribution-cell {
+      min-width: 90px;
+    }
+
+    .orders-table th,
+    .orders-table td {
+      padding-top: 0.3rem;
+      padding-bottom: 0.3rem;
+      line-height: 1.2;
+    }
+
+    .orders-table .btn-sm {
+      padding-top: 0.12rem;
+      padding-bottom: 0.12rem;
+      line-height: 1.2;
+    }
+
+    .orders-member-match {
+      background: #fff7d6;
+    }
+
+    .orders-member-match-badge {
+      display: inline-block;
+      margin-left: 0.25rem;
+      padding: 0.1rem 0.35rem;
+      border-radius: 999px;
+      background: #f59e0b;
+      color: #111827;
+      font-size: 0.72rem;
+      font-weight: 700;
+      vertical-align: middle;
+    }
+  </style>
 {% endblock %}
 
 {% block contents %}
@@ -29,7 +63,7 @@
             </div>
 
             <div style="width: 169px;">
-              <label class="form-label mb-0 small text-muted">会員ID</label>
+              <label class="form-label mb-0 small text-muted">会員ID（注文者/振分先）</label>
               <input type="text" name="q_jwoa_code" class="form-control"
                      value="{{ q_jwoa_code|default:'' }}">
             </div>
@@ -233,7 +267,7 @@
             {% include "com/_list_summary.html" %}
 
             <div class="table-responsive">
-              <table class="table table-bordered table-sm align-middle mb-0"
+              <table class="table table-bordered table-sm align-middle mb-0 orders-table"
                      style="white-space: nowrap;">
 
                 <thead class="table-light">
@@ -248,6 +282,7 @@
                     <th>注文者_氏名</th>
                     <th>購入合計金額</th>
                     <th>合計BV</th>
+                    <th>BV振分先</th>
                     <th>入金日</th>
                     <th>作成日時</th>
                     <th>詳細</th>
@@ -324,12 +359,27 @@
 
                     <td>{{ r.order_year }}</td>
                     <td>{{ r.order_month }}</td>
-                    <td>{{ r.jwoa_code }}</td>
+                    <td class="{% if r.order_member_matched %}orders-member-match{% endif %}">
+                      {% if r.order_member_matched %}
+                        <span class="orders-member-match-badge">一致</span>
+                      {% endif %}
+                      {{ r.jwoa_code }}
+                    </td>
                     <td>{{ r.order_name }}</td>
                     <td class="text-end">
                       {{ r.total_price|intcomma }}
                     </td>
                     <td class="text-end">{{ r.total_bv }}</td>
+                    <td class="orders-distribution-cell">
+                      {% if r.distribution_count %}
+                        <a href="{% url 'connect:orders_distribution_bv' %}?q_order_code={{ r.order_code|urlencode }}&return_to={{ request.get_full_path|urlencode }}"
+                           class="btn btn-sm btn-outline-primary">
+                          振分 {{ r.distribution_count }}件
+                        </a>
+                      {% else %}
+                        <span class="text-muted">なし</span>
+                      {% endif %}
+                    </td>
                     <td>{{ r.deposit_at|default:"" }}</td>
                     <td>{{ r.created_at }}</td>
                     <td class="text-center">

@@ -1,0 +1,166 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block head %}
+<link href="{% static 'css/common.css' %}" rel="stylesheet">
+<style>
+  .bv-update-form {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  .bv-update-form .form-control {
+    width: 90px;
+    min-height: 30px;
+    padding: 0.25rem 0.4rem;
+    font-size: 0.875rem;
+  }
+</style>
+{% endblock %}
+
+{% block contents %}
+<div class="container-fluid mt-3 list-page-viewport">
+  <div class="row g-1 h-100">
+
+    {% include "com/_sidebar.html" with active_menu="orders_distribution_bv_update" %}
+
+    <main class="col-12 col-md-9 col-lg-10 list-page-main">
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <h5 class="page-title mb-3">【設定 - BV振分変更】</h5>
+
+          <form method="get" class="d-flex gap-2 align-items-end mb-0 flex-wrap">
+            <div>
+              <label class="form-label mb-0 small text-muted">注文番号</label>
+              <input type="text"
+                     name="q_order_code"
+                     class="form-control"
+                     value="{{ q_order_code|default:'' }}">
+            </div>
+
+            <div style="width: 120px;">
+              <label class="form-label mb-0 small text-muted">会員ID</label>
+              <input type="text"
+                     name="q_user_id"
+                     class="form-control"
+                     value="{{ q_user_id|default:'' }}">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">JWOA会員ID</label>
+              <input type="text"
+                     name="q_jwoa_code"
+                     class="form-control"
+                     value="{{ q_jwoa_code|default:'' }}">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">作成日(FROM)</label>
+              <input type="date"
+                     name="q_created_from"
+                     class="form-control"
+                     value="{{ q_created_from|default:'' }}">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">作成日(TO)</label>
+              <input type="date"
+                     name="q_created_to"
+                     class="form-control"
+                     value="{{ q_created_to|default:'' }}">
+            </div>
+
+            <div style="width: 110px;">
+              <label class="form-label mb-0 small text-muted">表示件数</label>
+              <select name="per_page" class="form-select">
+                <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+              </select>
+            </div>
+
+            <div class="w-100 d-flex justify-content-end gap-2">
+              <button type="submit" class="btn btn-primary">検索</button>
+              <a class="btn btn-outline-secondary"
+                 href="{% url 'connect:orders_distribution_bv_update' %}">
+                リセット
+              </a>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="card shadow-sm">
+        <div class="card-body">
+          {% if rows %}
+            {% include "com/_list_summary.html" %}
+
+            <div class="table-responsive" style="overflow-x: auto;">
+              <table class="table table-bordered table-sm align-middle mb-0"
+                     style="white-space: nowrap;">
+                <thead class="table-light">
+                  <tr>
+                    <th>ID</th>
+                    <th>注文番号</th>
+                    <th>会員ID</th>
+                    <th>JWOA会員ID</th>
+                    <th>振分BV</th>
+                    <th>システム使用料</th>
+                    <th>作成日時</th>
+                    <th>更新日時</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {% for r in rows %}
+                    <tr>
+                      <td class="text-end">{{ r.id }}</td>
+                      <td>{{ r.order_code }}</td>
+                      <td class="text-end">{{ r.user_id }}</td>
+                      <td>{{ r.jwoa_code }}</td>
+                      <td class="text-end">
+                        {% if user_access.can_update %}
+                          <form method="post"
+                                class="bv-update-form"
+                                data-confirm="ID {{ r.id }} の振分BVを更新します。よろしいですか？">
+                            {% csrf_token %}
+                            <input type="hidden" name="id" value="{{ r.id }}">
+                            <input type="hidden" name="next_query" value="{{ request.GET.urlencode }}">
+                            <input type="number"
+                                   name="distribution_bv"
+                                   class="form-control form-control-sm text-end"
+                                   value="{{ r.distribution_bv }}"
+                                   min="0"
+                                   step="1"
+                                   required>
+                            <button type="submit" class="btn btn-warning btn-sm">更新</button>
+                          </form>
+                        {% else %}
+                          {{ r.distribution_bv|intcomma }}
+                        {% endif %}
+                      </td>
+                      <td class="text-end">{{ r.usage_fee|intcomma }}</td>
+                      <td>{{ r.created_at }}</td>
+                      <td>{{ r.updated_at }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            {% include "com/_pagination.html" %}
+          {% else %}
+            <p class="mb-0 text-muted">該当データがありません。</p>
+          {% endif %}
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+{% endblock %}

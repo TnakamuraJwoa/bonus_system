@@ -18,6 +18,7 @@ from dateutil.relativedelta import relativedelta
 from django.db import connections, transaction
 from django.shortcuts import redirect
 import math
+import unicodedata
 from urllib.parse import urlencode
 from django.db import connections, transaction, IntegrityError, OperationalError
 import traceback
@@ -56,7 +57,9 @@ from connect.sql.basic_bv_line_sql import BASIC_BV_LINE_SQL
 from connect.sql import register_sql
 
 from accounts.access import get_user_access
+from connect.audit import fetch_one_dict, record_change_audit
 from connect.bonus_help import list_bonus_help, save_bonus_help
+from connect.sql.placement_tree_sql import PLACEMENT_TREE_REBUILD_CACHE_SQL
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +97,22 @@ def insert_bonus_register_history(bonus_name, kibetu, username, comment_text):
                 comment_text,
             ],
         )
+    record_change_audit(
+        None,
+        screen_name="ボーナス登録",
+        action_type="execute",
+        target_table="bonus_register_history",
+        target_pk=f"{bonus_name}:{kibetu}",
+        summary=comment_text,
+        before_values=None,
+        after_values={
+            "bonus_name": bonus_name,
+            "kibetu": kibetu,
+            "registered_by": username,
+            "comment_text": comment_text,
+        },
+        changed_by=username,
+    )
 
 
 def get_rds_jst_now():
@@ -389,7 +408,23 @@ class BonusHelpTextView(generic.TemplateView):
         content = request.POST.get("content") or ""
 
         try:
+            before_rows = list_bonus_help()
+            before_row = next((row for row in before_rows if row.get("help_key") == help_key), None)
             save_bonus_help(help_key, title, content)
+            record_change_audit(
+                request,
+                screen_name="ヘルプテキスト",
+                action_type="update",
+                target_table="bonus_help_text",
+                target_pk=help_key,
+                summary=f"{help_key} のヘルプテキストを保存",
+                before_values=before_row,
+                after_values={
+                    "help_key": help_key,
+                    "title": title,
+                    "content": content,
+                },
+            )
             messages.success(request, "ヘルプテキストを保存しました。")
         except ValueError as exc:
             messages.error(request, str(exc))
@@ -990,6 +1025,197 @@ SEARCH_EXPORT_COLUMNS = {
 }
 
 
+BONUS_RESULT_DELETE_CONFIG = {
+    "drive_bonus": {
+        "label": "ドライブボーナス",
+        "result_tables": ["bonus_db.B_drive_bonus_result"],
+        "history_names": ["drive_bonus"],
+        "period_model": PeriodMaster,
+        "redirect_name": "connect:drive_bonus",
+    },
+    "basic_bonus": {
+        "label": "ベーシックボーナス",
+        "result_tables": ["bonus_db.B_basic_bonus_result", "bonus_db.basic_bv_line"],
+        "history_names": ["basic_bonus"],
+        "period_model": PeriodMaster,
+        "redirect_name": "connect:basic_bonus",
+    },
+    "matching_bonus": {
+        "label": "マッチングボーナス",
+        "result_tables": ["bonus_db.B_matching_bonus_result"],
+        "history_names": ["matching_bonus"],
+        "period_model": PeriodMaster,
+        "redirect_name": "connect:matching_bonus",
+    },
+    "title_bonus": {
+        "label": "タイトルボーナス",
+        "result_tables": ["bonus_db.B_title_bonus_result"],
+        "history_names": ["title_bonus"],
+        "period_model": MonthlyPeriod,
+        "redirect_name": "connect:title_bonus",
+    },
+    "title_diff_bonus": {
+        "label": "タイトル差額ボーナス",
+        "result_tables": ["bonus_db.B_title_diff_bonus_result"],
+        "history_names": ["title_diff_bonus"],
+        "period_model": MonthlyPeriod,
+        "redirect_name": "connect:title_diff_bonus",
+    },
+    "repurchase_over_bonus": {
+        "label": "再購入オーバーボーナス",
+        "result_tables": ["bonus_db.B_repurchase_over_bonus_result"],
+        "history_names": ["repurchase_over_bonus"],
+        "period_model": MonthlyPeriod,
+        "redirect_name": "connect:repurchase_over_bonus",
+    },
+    "three_star_global_bonus": {
+        "label": "3スターダイヤグローバル配当",
+        "result_tables": ["bonus_db.B_three_star_global_bonus_result"],
+        "history_names": ["three_star_global_bonus"],
+        "period_model": MonthlyPeriod,
+        "redirect_name": "connect:three_star_global_bonus",
+    },
+    "week_bonus": {
+        "label": "週間ボーナス",
+        "result_tables": ["bonus_db.B_week_bonus_result"],
+        "history_names": ["week_bonus"],
+        "period_model": PeriodMaster,
+        "redirect_name": "connect:week_bonus",
+    },
+    "month_title": {
+        "label": "月タイトル",
+        "result_tables": ["bonus_db.month_title"],
+        "history_names": ["month_title", "title_registration"],
+        "period_model": MonthlyPeriod,
+        "redirect_name": "connect:month_title",
+    },
+    "month_bonus": {
+        "label": "月間ボーナス",
+        "result_tables": ["bonus_db.B_month_bonus_result"],
+        "history_names": ["month_bonus"],
+        "period_model": MonthlyPeriod,
+        "redirect_name": "connect:month_bonus",
+    },
+}
+
+
+def _bonus_redirect_url(config, kibetu=None):
+    base_url = redirect(config["redirect_name"]).url
+    if kibetu:
+        return f"{base_url}?kibetu={kibetu}"
+    return base_url
+
+
+def delete_bonus_result_for_kibetu(request, bonus_key):
+    config = BONUS_RESULT_DELETE_CONFIG[bonus_key]
+    selected_kibetu = (request.POST.get("kibetu") or "").strip()
+
+    if not get_user_access(request.user).can_delete:
+        messages.error(request, "削除権限がありません。")
+        return redirect(config["redirect_name"])
+
+    if not selected_kibetu:
+        messages.error(request, "期別を選択してください。")
+        return redirect(config["redirect_name"])
+
+    period = (
+        config["period_model"]
+        .objects.using("rds")
+        .filter(kibetu=selected_kibetu)
+        .first()
+    )
+    if not period:
+        messages.error(request, "選択された期別が存在しません。")
+        return redirect(config["redirect_name"])
+
+    redirect_url = _bonus_redirect_url(config, selected_kibetu)
+    reset_redirect_url = _bonus_redirect_url(config)
+    result_counts = {}
+    deleted_counts = {}
+    history_counts = {}
+    history_deleted = 0
+
+    try:
+        with transaction.atomic(using="rds"):
+            with connections["rds"].cursor() as cursor:
+                for table_name in config["result_tables"]:
+                    cursor.execute(
+                        f"SELECT COUNT(*) FROM {table_name} WHERE kibetu = %s",
+                        [selected_kibetu],
+                    )
+                    row = cursor.fetchone()
+                    result_counts[table_name] = int(row[0]) if row else 0
+
+                placeholders = ", ".join(["%s"] * len(config["history_names"]))
+                cursor.execute(
+                    f"""
+                        SELECT bonus_name, COUNT(*)
+                        FROM bonus_db.bonus_register_history
+                        WHERE kibetu = %s
+                          AND bonus_name IN ({placeholders})
+                        GROUP BY bonus_name
+                    """,
+                    [selected_kibetu, *config["history_names"]],
+                )
+                history_counts = {row[0]: int(row[1]) for row in cursor.fetchall()}
+
+                for table_name in config["result_tables"]:
+                    logger.info(
+                        "ボーナス計算結果削除SQLを実行します。table=%s kibetu=%s",
+                        table_name,
+                        selected_kibetu,
+                    )
+                    cursor.execute(
+                        f"DELETE FROM {table_name} WHERE kibetu = %s",
+                        [selected_kibetu],
+                    )
+                    deleted_counts[table_name] = cursor.rowcount
+
+                cursor.execute(
+                    f"""
+                        DELETE FROM bonus_db.bonus_register_history
+                        WHERE kibetu = %s
+                          AND bonus_name IN ({placeholders})
+                    """,
+                    [selected_kibetu, *config["history_names"]],
+                )
+                history_deleted = cursor.rowcount
+
+            record_change_audit(
+                request,
+                screen_name=config["label"],
+                action_type="delete",
+                target_table=", ".join(config["result_tables"]),
+                target_pk=f"{bonus_key}:{selected_kibetu}",
+                summary=(
+                    f"{selected_kibetu} の{config['label']}登録済みデータを削除: "
+                    f"結果{sum(deleted_counts.values())}件、履歴{history_deleted}件"
+                ),
+                before_values={
+                    "bonus_key": bonus_key,
+                    "kibetu": selected_kibetu,
+                    "result_counts": result_counts,
+                    "history_counts": history_counts,
+                },
+                after_values=None,
+            )
+    except Exception as e:
+        logger.exception("ボーナス計算結果削除エラー。bonus_key=%s kibetu=%s", bonus_key, selected_kibetu)
+        messages.error(request, f"削除中にエラーが発生しました: {e}")
+        return redirect(redirect_url)
+
+    total_deleted = sum(deleted_counts.values())
+    if total_deleted or history_deleted:
+        messages.success(
+            request,
+            f"{selected_kibetu} の{config['label']}登録済みデータを削除しました。"
+            f"（結果{total_deleted}件、履歴{history_deleted}件）",
+        )
+    else:
+        messages.warning(request, f"{selected_kibetu} の削除対象データはありませんでした。")
+    return redirect(reset_redirect_url)
+
+
 class IndexView(LoginView):
     template_name = "account/login.html"
     form_class = LoginForm
@@ -1031,6 +1257,10 @@ class DriveBonusView(generic.ListView):
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
+        save_basic_bv_line = request.POST.get("save_basic_bv_line", "1") == "1"
+
+        if action == "delete":
+            return delete_bonus_result_for_kibetu(request, "drive_bonus")
 
         if action != "register_drive_bonus":
             messages.error(request, "不正な操作です。")
@@ -1296,19 +1526,79 @@ class KibetuView(generic.ListView):
                         payment_date=payment_date,
                         completion_date=completion_date,
                     )
+                    record_change_audit(
+                        request,
+                        screen_name="期別(週)",
+                        action_type="create",
+                        target_table="period_master",
+                        target_pk=kibetu,
+                        summary=f"{kibetu} を追加",
+                        before_values=None,
+                        after_values={
+                            "kibetu": kibetu,
+                            "st_date": st_date,
+                            "end_date": end_date,
+                            "payment_date": payment_date,
+                            "completion_date": completion_date,
+                        },
+                    )
                     messages.success(request, f"{kibetu} を追加しました。")
 
                 elif action == "update":
                     obj = PeriodMaster.objects.using("rds").get(kibetu=kibetu)
+                    before_values = {
+                        "kibetu": obj.kibetu,
+                        "st_date": obj.st_date,
+                        "end_date": obj.end_date,
+                        "payment_date": obj.payment_date,
+                        "completion_date": obj.completion_date,
+                    }
                     obj.st_date = st_date
                     obj.end_date = end_date
                     obj.payment_date = payment_date
                     obj.completion_date = completion_date
                     obj.save(using="rds")
+                    record_change_audit(
+                        request,
+                        screen_name="期別(週)",
+                        action_type="update",
+                        target_table="period_master",
+                        target_pk=kibetu,
+                        summary=f"{kibetu} を変更",
+                        before_values=before_values,
+                        after_values={
+                            "kibetu": kibetu,
+                            "st_date": st_date,
+                            "end_date": end_date,
+                            "payment_date": payment_date,
+                            "completion_date": completion_date,
+                        },
+                    )
                     messages.success(request, f"{kibetu} を変更しました。")
 
                 elif action == "delete":
-                    PeriodMaster.objects.using("rds").filter(kibetu=kibetu).delete()
+                    before_obj = PeriodMaster.objects.using("rds").filter(kibetu=kibetu).first()
+                    before_values = None
+                    if before_obj:
+                        before_values = {
+                            "kibetu": before_obj.kibetu,
+                            "st_date": before_obj.st_date,
+                            "end_date": before_obj.end_date,
+                            "payment_date": before_obj.payment_date,
+                            "completion_date": before_obj.completion_date,
+                        }
+                    deleted_count, _ = PeriodMaster.objects.using("rds").filter(kibetu=kibetu).delete()
+                    if deleted_count:
+                        record_change_audit(
+                            request,
+                            screen_name="期別(週)",
+                            action_type="delete",
+                            target_table="period_master",
+                            target_pk=kibetu,
+                            summary=f"{kibetu} を削除",
+                            before_values=before_values,
+                            after_values=None,
+                        )
                     messages.success(request, f"{kibetu} を削除しました。")
 
                 else:
@@ -1379,6 +1669,16 @@ class KibetuView(generic.ListView):
         if errors:
             messages.error(request, " / ".join(errors))
         if updated_count:
+            record_change_audit(
+                request,
+                screen_name="期別(週)",
+                action_type="bulk_update",
+                target_table="period_master",
+                target_pk=None,
+                summary=f"期別(週)を {updated_count}件 一括変更",
+                before_values=None,
+                after_values={"count": updated_count},
+            )
             messages.success(request, f"{updated_count} 件を変更しました。")
         elif not errors:
             messages.info(request, "変更対象がありませんでした。")
@@ -1485,18 +1785,74 @@ class KibetuMonthView(generic.ListView):
                         month=month or None,
                         payment_date=parsed_payment_date,
                     )
+                    record_change_audit(
+                        request,
+                        screen_name="期別(月)",
+                        action_type="create",
+                        target_table="monthly_period",
+                        target_pk=kibetu,
+                        summary=f"{kibetu} を追加",
+                        before_values=None,
+                        after_values={
+                            "kibetu": kibetu,
+                            "year": year or None,
+                            "month": month or None,
+                            "payment_date": parsed_payment_date,
+                        },
+                    )
                     messages.success(request, f"{kibetu} を追加しました。")
 
                 elif action == "update":
                     obj = MonthlyPeriod.objects.using("rds").get(kibetu=kibetu)
+                    before_values = {
+                        "kibetu": obj.kibetu,
+                        "year": obj.year,
+                        "month": obj.month,
+                        "payment_date": obj.payment_date,
+                    }
                     obj.year = year or None
                     obj.month = month or None
                     obj.payment_date = parsed_payment_date
                     obj.save(using="rds")
+                    record_change_audit(
+                        request,
+                        screen_name="期別(月)",
+                        action_type="update",
+                        target_table="monthly_period",
+                        target_pk=kibetu,
+                        summary=f"{kibetu} を変更",
+                        before_values=before_values,
+                        after_values={
+                            "kibetu": kibetu,
+                            "year": year or None,
+                            "month": month or None,
+                            "payment_date": parsed_payment_date,
+                        },
+                    )
                     messages.success(request, f"{kibetu} を変更しました。")
 
                 elif action == "delete":
-                    MonthlyPeriod.objects.using("rds").filter(kibetu=kibetu).delete()
+                    before_obj = MonthlyPeriod.objects.using("rds").filter(kibetu=kibetu).first()
+                    before_values = None
+                    if before_obj:
+                        before_values = {
+                            "kibetu": before_obj.kibetu,
+                            "year": before_obj.year,
+                            "month": before_obj.month,
+                            "payment_date": before_obj.payment_date,
+                        }
+                    deleted_count, _ = MonthlyPeriod.objects.using("rds").filter(kibetu=kibetu).delete()
+                    if deleted_count:
+                        record_change_audit(
+                            request,
+                            screen_name="期別(月)",
+                            action_type="delete",
+                            target_table="monthly_period",
+                            target_pk=kibetu,
+                            summary=f"{kibetu} を削除",
+                            before_values=before_values,
+                            after_values=None,
+                        )
                     messages.success(request, f"{kibetu} を削除しました。")
 
                 else:
@@ -1567,6 +1923,16 @@ class KibetuMonthView(generic.ListView):
         if errors:
             messages.error(request, " / ".join(errors))
         if updated_count:
+            record_change_audit(
+                request,
+                screen_name="期別(月)",
+                action_type="bulk_update",
+                target_table="monthly_period",
+                target_pk=None,
+                summary=f"期別(月)を {updated_count}件 一括変更",
+                before_values=None,
+                after_values={"count": updated_count},
+            )
             messages.success(request, f"{updated_count} 件を変更しました。")
         elif not errors:
             messages.info(request, "変更対象がありませんでした。")
@@ -1760,88 +2126,6 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
                 }
                 for row in cursor.fetchall()
             ]
-
-    def _update_bv(self, row_id, bv):
-        select_sql = """
-            SELECT order_code
-            FROM bonus_db.purchase_info_list
-            WHERE id = %s
-            FOR UPDATE
-        """
-        update_bv_sql = """
-            UPDATE bonus_db.purchase_info_list
-            SET
-                bv = %s,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = %s
-        """
-        update_total_bv_sql = """
-            UPDATE bonus_db.purchase_info_list p
-            JOIN (
-                SELECT
-                    order_code,
-                    SUM(bv) AS total_bv
-                FROM bonus_db.purchase_info_list
-                WHERE order_code = %s
-                GROUP BY order_code
-            ) total
-              ON p.order_code = total.order_code
-            SET
-                p.total_bv = total.total_bv,
-                p.updated_at = CURRENT_TIMESTAMP
-            WHERE p.order_code = %s
-        """
-
-        with transaction.atomic(using="rds"):
-            with connections["rds"].cursor() as cursor:
-                cursor.execute(select_sql, [row_id])
-                row = cursor.fetchone()
-                if not row:
-                    return 0
-
-                order_code = row[0]
-                cursor.execute(update_bv_sql, [bv, row_id])
-                updated_count = cursor.rowcount
-                cursor.execute(update_total_bv_sql, [order_code, order_code])
-                return updated_count
-
-    def post(self, request, *args, **kwargs):
-        action = request.POST.get("action", "")
-        next_query = (request.POST.get("next_query") or "").strip()
-        list_url = redirect("connect:repurchase_list").url
-        next_url = f"{list_url}?{next_query}" if next_query else list_url
-
-        if action == "update_bv":
-            row_id = (request.POST.get("row_id") or "").strip()
-            bv_value = (request.POST.get("bv") or "").strip()
-
-            if not row_id:
-                messages.error(request, "更新対象が不正です。")
-                return redirect(next_url)
-
-            try:
-                row_id = int(row_id)
-                bv = Decimal(bv_value)
-            except (ValueError, InvalidOperation):
-                messages.error(request, "BVは数値で入力してください。")
-                return redirect(next_url)
-
-            try:
-                updated_count = self._update_bv(row_id, bv)
-            except Exception as e:
-                logger.exception("購入情報登録一覧のBV更新エラー")
-                messages.error(request, f"BV更新中にエラーが発生しました: {e}")
-                return redirect(next_url)
-
-            if updated_count:
-                messages.success(request, "BVを更新しました。")
-            else:
-                messages.warning(request, "更新対象データがありません。")
-
-            return redirect(next_url)
-
-        messages.error(request, "不正な操作です。")
-        return redirect(next_url)
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -2451,6 +2735,16 @@ WHERE jmoa_code = %s
             messages.error(request, "存在しないタイトルIDです。")
             return redirect(next_url)
 
+        before_row = fetch_one_dict(
+            "rds",
+            """
+SELECT jmoa_code, title_id, update_date
+FROM bonus_db.user_titles
+WHERE jmoa_code = %s
+            """,
+            [jmoa_code],
+        )
+
         try:
             with transaction.atomic(using="rds"):
                 updated_count = self._update_user_title(jmoa_code, title_id)
@@ -2460,6 +2754,25 @@ WHERE jmoa_code = %s
             return redirect(next_url)
 
         if updated_count:
+            after_row = fetch_one_dict(
+                "rds",
+                """
+SELECT jmoa_code, title_id, update_date
+FROM bonus_db.user_titles
+WHERE jmoa_code = %s
+                """,
+                [jmoa_code],
+            )
+            record_change_audit(
+                request,
+                screen_name="ピンタイトル一覧",
+                action_type="update",
+                target_table="user_titles",
+                target_pk=jmoa_code,
+                summary=f"{jmoa_code} のタイトルIDを {title_id} に変更",
+                before_values=before_row,
+                after_values=after_row,
+            )
             messages.success(request, f"{jmoa_code} のタイトルIDを {title_id} に変更しました。")
         else:
             messages.warning(request, "更新対象データがありません。")
@@ -2576,6 +2889,10 @@ class BasicBonusView(generic.ListView):
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
+        save_basic_bv_line = request.POST.get("save_basic_bv_line", "1") == "1"
+
+        if action == "delete":
+            return delete_bonus_result_for_kibetu(request, "basic_bonus")
 
         if action != "register_basic_bonus":
             messages.error(request, "不正な操作です。")
@@ -2592,7 +2909,14 @@ class BasicBonusView(generic.ListView):
 
         try:
             basic_bonus_rows = self._get_basic_bonus_rows(selected_kibetu, period)
-            basic_bv_line_rows = self._get_basic_bv_line_rows(selected_kibetu, period)
+            basic_bv_line_rows = (
+                self._get_basic_bv_line_rows(selected_kibetu, period)
+                if save_basic_bv_line
+                else []
+            )
+            bv_line_comment = (
+                "繰り越しBV保存あり" if save_basic_bv_line else "繰り越しBV保存なし"
+            )
 
             if not basic_bonus_rows:
                 with transaction.atomic(using="rds"):
@@ -2600,34 +2924,43 @@ class BasicBonusView(generic.ListView):
                         "basic_bonus",
                         selected_kibetu,
                         request.user.username,
-                        "0件登録（対象データなし）",
+                        f"0件登録（対象データなし、{bv_line_comment}）",
                     )
                 messages.warning(request, "登録対象データはありませんが、登録履歴を残しました。")
                 return redirect(f"/basic_bonus/?kibetu={selected_kibetu}")
 
-            #B_basic_bonus_result
-            insert_sql, insert_params = (
-                register_sql.get_basic_bonus_insert_data(
-                    selected_kibetu,
-                    basic_bonus_rows
-                )
-            )
-
-            # 繰り越しBV
-            basic_bv_line_insert_sql, basic_bv_line_insert_params = (
-                register_sql.get_basic_bv_line_insert_data(
-                    selected_kibetu,
-                    basic_bv_line_rows
-                )
+            (
+                delete_bonus_result_sql,
+                delete_bv_line_sql,
+                delete_params,
+                insert_sql,
+                insert_params,
+                basic_bv_line_insert_sql,
+                basic_bv_line_insert_params,
+            ) = register_sql.get_basic_bonus_delete_insert_data(
+                selected_kibetu,
+                basic_bonus_rows,
+                basic_bv_line_rows,
             )
 
             #登録
             with transaction.atomic(using="rds"):
                 with connections["rds"].cursor() as cursor:
-                    # ベーシックボーナス登録
+                    logger.info(
+                        "ベーシックボーナス登録前削除SQLを実行します。kibetu=%s",
+                        selected_kibetu,
+                    )
+                    cursor.execute(delete_bonus_result_sql, delete_params)
+                    if save_basic_bv_line:
+                        cursor.execute(delete_bv_line_sql, delete_params)
+
+                    logger.info(
+                        "ベーシックボーナス登録INSERT SQLを実行します。kibetu=%s",
+                        selected_kibetu,
+                    )
                     cursor.executemany(insert_sql, insert_params)
 
-                    if basic_bv_line_insert_params:
+                    if save_basic_bv_line and basic_bv_line_insert_params:
                         cursor.executemany(
                             basic_bv_line_insert_sql, basic_bv_line_insert_params
                         )
@@ -2656,11 +2989,15 @@ class BasicBonusView(generic.ListView):
                             "basic_bonus",
                             selected_kibetu,
                             request.user.username,
-                            f"{len(basic_bonus_rows)}件登録"
+                            f"{len(basic_bonus_rows)}件登録（{bv_line_comment}）"
                         ]
                     )
 
-            messages.success(request, f"{len(basic_bonus_rows)}件をベーシックボーナス結果に登録しました。")
+            messages.success(
+                request,
+                f"{len(basic_bonus_rows)}件をベーシックボーナス結果に登録しました。"
+                f"（{bv_line_comment}）"
+            )
 
         except Exception as e:
             logger.exception("ベーシックボーナス結果登録エラー")
@@ -3050,7 +3387,6 @@ class RepurchaseLastMonthView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "repurchase_last_month.html"
     DEFAULT_PER_PAGE = 1000
     MAX_PER_PAGE = 2000
-    EXPORT_FETCH_SIZE = 5000
 
     def _get_month_choices(self):
         today = date.today().replace(day=1)
@@ -3230,6 +3566,262 @@ VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         with connections["rds"].cursor() as cursor:
             cursor.executemany(insert_sql, data)
 
+    def _parse_manual_int(self, request, field_name, label, min_value=None, max_value=None):
+        raw_value = (request.POST.get(field_name) or "").strip()
+        if raw_value == "":
+            raise ValueError(f"{label}を入力してください。")
+
+        try:
+            value = int(raw_value)
+        except ValueError as exc:
+            raise ValueError(f"{label}は数値で入力してください。") from exc
+
+        if min_value is not None and value < min_value:
+            raise ValueError(f"{label}は{min_value}以上で入力してください。")
+        if max_value is not None and value > max_value:
+            raise ValueError(f"{label}は{max_value}以下で入力してください。")
+        return value
+
+    def _parse_manual_datetime(self, request, field_name, label):
+        raw_value = (request.POST.get(field_name) or "").strip()
+        if not raw_value:
+            return None
+
+        normalized = raw_value.replace("/", "-")
+        if "T" in normalized:
+            normalized = normalized.replace("T", " ")
+        if len(normalized) == 16:
+            normalized = f"{normalized}:00"
+
+        try:
+            return datetime.fromisoformat(normalized)
+        except ValueError as exc:
+            raise ValueError(
+                f"{label}は YYYY-MM-DD HH:MM または YYYY/MM/DD HH:MM 形式で入力してください。"
+            ) from exc
+
+    def _build_manual_purchase_row(self, request):
+        row = {
+            "register_year": self._parse_manual_int(request, "manual_register_year", "登録年", 1900, 2100),
+            "register_month": self._parse_manual_int(request, "manual_register_month", "登録月", 1, 12),
+            "order_year": self._parse_manual_int(request, "manual_order_year", "注文年", 1900, 2100),
+            "order_month": self._parse_manual_int(request, "manual_order_month", "注文月", 1, 12),
+            "order_code": (request.POST.get("manual_order_code") or "").strip(),
+            "order_type": self._parse_manual_int(request, "manual_order_type", "注文区分", 1),
+            "jwoa_code": (request.POST.get("manual_jwoa_code") or "").strip(),
+            "send_bv_name": (request.POST.get("manual_send_bv_name") or "").strip(),
+            "total_bv": self._parse_manual_int(request, "manual_total_bv", "total_bv", 0),
+            "bv": self._parse_manual_int(request, "manual_bv", "bv", 0),
+            "deposit_at": self._parse_manual_datetime(request, "manual_deposit_at", "BV反映日時"),
+            "order_at": self._parse_manual_datetime(request, "manual_order_at", "注文日時"),
+            "payment_date": parse_input_date(request.POST.get("manual_bonus_payment_date")),
+        }
+
+        if not row["order_code"]:
+            raise ValueError("注文番号を入力してください。")
+        if not row["jwoa_code"]:
+            raise ValueError("会員番号を入力してください。")
+        if not row["send_bv_name"]:
+            raise ValueError("会員名を入力してください。")
+        if row["payment_date"] is None:
+            raise ValueError("ボーナス支払日を入力してください。")
+
+        return row
+
+    def _insert_manual_purchase_row(self, row):
+        insert_sql = """
+INSERT INTO bonus_db.purchase_info_list
+(
+    register_year,
+    register_month,
+    order_year,
+    order_month,
+    jwoa_code,
+    send_bv_name,
+    order_code,
+    total_bv,
+    bv,
+    order_type,
+    deposit_at,
+    order_at,
+    bonus_payment_date
+)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+"""
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(
+                insert_sql,
+                [
+                    row["register_year"],
+                    row["register_month"],
+                    row["order_year"],
+                    row["order_month"],
+                    row["jwoa_code"],
+                    row["send_bv_name"],
+                    row["order_code"],
+                    row["total_bv"],
+                    row["bv"],
+                    row["order_type"],
+                    row["deposit_at"],
+                    row["order_at"],
+                    row["payment_date"],
+                ],
+            )
+            return cursor.lastrowid
+
+    def _build_registered_search_context(self, ctx):
+        selected_year = str(ctx.get("target_year") or "")
+        selected_month = str(ctx.get("target_month") or "")
+        filters = {
+            "edit_register_year": (self.request.GET.get("edit_register_year") or selected_year or "").strip(),
+            "edit_register_month": (self.request.GET.get("edit_register_month") or selected_month or "").strip(),
+            "edit_order_code": (self.request.GET.get("edit_order_code") or "").strip(),
+            "edit_jwoa_code": (self.request.GET.get("edit_jwoa_code") or "").strip(),
+            "edit_name": (self.request.GET.get("edit_name") or "").strip(),
+        }
+        panel_opened = self.request.GET.get("edit_panel") == "1"
+        submitted = any(key in self.request.GET for key in filters)
+
+        ctx.update(filters)
+        ctx["registered_edit_panel_open"] = panel_opened or submitted
+        ctx["registered_edit_searched"] = submitted
+        ctx["registered_edit_rows"] = self._fetch_registered_edit_rows(filters) if submitted else []
+        keep_params = {}
+        for key in ("target_year", "target_month", "per_page"):
+            value = ctx.get(key)
+            if value not in ("", None):
+                keep_params[key] = value
+        if ctx["registered_edit_panel_open"]:
+            keep_params["edit_panel"] = "1"
+        for key, value in filters.items():
+            if value:
+                keep_params[key] = value
+        ctx["registered_edit_query"] = urlencode(keep_params)
+        return ctx
+
+    def _fetch_registered_edit_rows(self, filters):
+        where = []
+        params = []
+
+        if filters["edit_register_year"]:
+            where.append("register_year = %s")
+            params.append(filters["edit_register_year"])
+        if filters["edit_register_month"]:
+            where.append("register_month = %s")
+            params.append(filters["edit_register_month"])
+        if filters["edit_order_code"]:
+            where.append("order_code LIKE %s")
+            params.append(f"%{filters['edit_order_code']}%")
+        if filters["edit_jwoa_code"]:
+            where.append("jwoa_code LIKE %s")
+            params.append(f"%{filters['edit_jwoa_code']}%")
+        if filters["edit_name"]:
+            where.append("send_bv_name LIKE %s")
+            params.append(f"%{filters['edit_name']}%")
+
+        if not where:
+            return []
+
+        sql = f"""
+            SELECT
+                id,
+                register_year,
+                register_month,
+                order_year,
+                order_month,
+                order_code,
+                order_type,
+                jwoa_code,
+                send_bv_name,
+                total_bv,
+                bv,
+                deposit_at,
+                order_at,
+                bonus_payment_date,
+                created_at,
+                updated_at
+            FROM bonus_db.purchase_info_list
+            WHERE {" AND ".join(where)}
+            ORDER BY register_year DESC, register_month DESC, id DESC
+            LIMIT 100
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            cols = [c[0] for c in cursor.description]
+            return [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+    def _fetch_manual_purchase_row_for_update(self, cursor, row_id):
+        sql = """
+            SELECT
+                id,
+                register_year,
+                register_month,
+                order_year,
+                order_month,
+                order_code,
+                order_type,
+                jwoa_code,
+                send_bv_name,
+                total_bv,
+                bv,
+                deposit_at,
+                order_at,
+                bonus_payment_date,
+                created_at,
+                updated_at
+            FROM bonus_db.purchase_info_list
+            WHERE id = %s
+            FOR UPDATE
+        """
+        cursor.execute(sql, [row_id])
+        row = cursor.fetchone()
+        if not row:
+            return None
+        columns = [col[0] for col in cursor.description]
+        return dict(zip(columns, row))
+
+    def _update_manual_purchase_row(self, cursor, row_id, row):
+        update_sql = """
+            UPDATE bonus_db.purchase_info_list
+            SET
+                register_year = %s,
+                register_month = %s,
+                order_year = %s,
+                order_month = %s,
+                jwoa_code = %s,
+                send_bv_name = %s,
+                order_code = %s,
+                total_bv = %s,
+                bv = %s,
+                order_type = %s,
+                deposit_at = %s,
+                order_at = %s,
+                bonus_payment_date = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+        """
+        cursor.execute(
+            update_sql,
+            [
+                row["register_year"],
+                row["register_month"],
+                row["order_year"],
+                row["order_month"],
+                row["jwoa_code"],
+                row["send_bv_name"],
+                row["order_code"],
+                row["total_bv"],
+                row["bv"],
+                row["order_type"],
+                row["deposit_at"],
+                row["order_at"],
+                row["payment_date"],
+                row_id,
+            ],
+        )
+        return cursor.rowcount
+
     def _update_setting(self, year, month):
         value = f"{year}{month:02d}"
 
@@ -3259,7 +3851,6 @@ WHERE name = 'set_title'
         ctx["registered_count"] = 0
         ctx["total_registered_count"] = self._count_all_registered()
         ctx["is_registered_month"] = False
-        ctx["delete_target_month"] = ""
 
         if selected_choice or target_year or target_month:
             try:
@@ -3269,10 +3860,6 @@ WHERE name = 'set_title'
                 ctx["target_year"] = y
                 ctx["target_month"] = m
                 self._enrich_month_context(ctx, y, m)
-                if ctx["is_registered_month"]:
-                    ctx["delete_target_month"] = ctx["selected_month"]
-                elif ctx["registered_month_options"]:
-                    ctx["delete_target_month"] = ctx["registered_month_options"][0]["value"]
                 per_page = self.get_per_page()
                 total_count = self._count_rows(y, m)
                 total_pages = max(1, math.ceil(total_count / per_page))
@@ -3284,7 +3871,7 @@ WHERE name = 'set_title'
                     "target_month": m,
                     "per_page": per_page,
                 }
-                return self.set_page_context(
+                ctx = self.set_page_context(
                     ctx=ctx,
                     rows=rows,
                     per_page=per_page,
@@ -3293,18 +3880,171 @@ WHERE name = 'set_title'
                     page=page,
                     base_params=base_params,
                 )
+                return self._build_registered_search_context(ctx)
             except (ValueError, TypeError):
                 messages.error(self.request, "年月の形式が不正です。年と月を正しく指定してください。")
                 ctx["rows"] = []
 
-        if not ctx["delete_target_month"] and ctx["registered_month_options"]:
-            ctx["delete_target_month"] = ctx["registered_month_options"][0]["value"]
-
-        return ctx
+        return self._build_registered_search_context(ctx)
 
     def post(self, request, *args, **kwargs):
         action = (request.POST.get("action") or "register").strip()
         user_access = get_user_access(request.user)
+
+        if action == "manual_create":
+            if not user_access.can_create:
+                messages.error(request, "登録権限がありません。")
+                return redirect(self._redirect_url())
+
+            try:
+                row = self._build_manual_purchase_row(request)
+            except ValueError as e:
+                messages.error(request, str(e))
+                return redirect(self._redirect_url())
+
+            redirect_url = self._redirect_url(row["register_year"], row["register_month"])
+
+            try:
+                with transaction.atomic(using="rds"):
+                    created_id = self._insert_manual_purchase_row(row)
+                    after_values = dict(row)
+                    after_values["id"] = created_id
+                    record_change_audit(
+                        request,
+                        screen_name="ボーナス購入情報(登録/削除)",
+                        action_type="create",
+                        target_table="purchase_info_list",
+                        target_pk=created_id,
+                        summary=(
+                            f"注文番号 {row['order_code']} / "
+                            f"会員番号 {row['jwoa_code']} の購入情報を手入力登録"
+                        ),
+                        before_values=None,
+                        after_values=after_values,
+                    )
+            except IntegrityError:
+                logger.exception("ボーナス購入情報の手入力登録重複エラー")
+                messages.error(request, "同じ登録年月・会員番号・注文番号のデータは既に登録されています。")
+                return redirect(redirect_url)
+            except Exception as e:
+                logger.exception("ボーナス購入情報の手入力登録エラー")
+                messages.error(request, f"登録中にエラーが発生しました: {e}")
+                return redirect(redirect_url)
+
+            messages.success(request, "購入情報を1件登録しました。")
+            return redirect(redirect_url)
+
+        if action == "manual_update":
+            if not user_access.can_update:
+                messages.error(request, "更新権限がありません。")
+                return redirect(self._redirect_url())
+
+            next_query = (request.POST.get("next_query") or "").strip()
+            row_id_text = (request.POST.get("manual_row_id") or "").strip()
+            try:
+                row_id = int(row_id_text)
+            except ValueError:
+                messages.error(request, "更新対象IDが不正です。")
+                return redirect(self._redirect_url())
+
+            try:
+                row = self._build_manual_purchase_row(request)
+            except ValueError as e:
+                messages.error(request, str(e))
+                return redirect(self._redirect_url())
+
+            if next_query:
+                redirect_url = f"{self._redirect_url()}?{next_query}"
+            else:
+                redirect_url = self._redirect_url(row["register_year"], row["register_month"])
+
+            try:
+                with transaction.atomic(using="rds"):
+                    with connections["rds"].cursor() as cursor:
+                        before_row = self._fetch_manual_purchase_row_for_update(cursor, row_id)
+                        if not before_row:
+                            messages.error(request, "更新対象データが見つかりませんでした。")
+                            return redirect(redirect_url)
+
+                        updated_count = self._update_manual_purchase_row(cursor, row_id, row)
+                        if updated_count:
+                            after_values = dict(row)
+                            after_values["id"] = row_id
+                            record_change_audit(
+                                request,
+                                screen_name="ボーナス購入情報(登録/削除)",
+                                action_type="update",
+                                target_table="purchase_info_list",
+                                target_pk=row_id,
+                                summary=(
+                                    f"注文番号 {row['order_code']} / "
+                                    f"会員番号 {row['jwoa_code']} の購入情報を編集"
+                                ),
+                                before_values=before_row,
+                                after_values=after_values,
+                            )
+            except IntegrityError:
+                logger.exception("ボーナス購入情報の手入力編集重複エラー")
+                messages.error(request, "同じ登録年月・会員番号・注文番号のデータは既に登録されています。")
+                return redirect(redirect_url)
+            except Exception as e:
+                logger.exception("ボーナス購入情報の手入力編集エラー")
+                messages.error(request, f"更新中にエラーが発生しました: {e}")
+                return redirect(redirect_url)
+
+            messages.success(request, "購入情報を更新しました。")
+            return redirect(redirect_url)
+
+        if action == "manual_delete":
+            if not user_access.can_delete:
+                messages.error(request, "削除権限がありません。")
+                return redirect(self._redirect_url())
+
+            next_query = (request.POST.get("next_query") or "").strip()
+            row_id_text = (request.POST.get("manual_row_id") or "").strip()
+            try:
+                row_id = int(row_id_text)
+            except ValueError:
+                messages.error(request, "削除対象IDが不正です。")
+                return redirect(self._redirect_url())
+
+            redirect_url = f"{self._redirect_url()}?{next_query}" if next_query else self._redirect_url()
+
+            try:
+                with transaction.atomic(using="rds"):
+                    with connections["rds"].cursor() as cursor:
+                        before_row = self._fetch_manual_purchase_row_for_update(cursor, row_id)
+                        if not before_row:
+                            messages.error(request, "削除対象データが見つかりませんでした。")
+                            return redirect(redirect_url)
+
+                        cursor.execute(
+                            "DELETE FROM bonus_db.purchase_info_list WHERE id = %s",
+                            [row_id],
+                        )
+                        deleted_count = cursor.rowcount
+
+                    if deleted_count:
+                        record_change_audit(
+                            request,
+                            screen_name="ボーナス購入情報(登録/削除)",
+                            action_type="delete",
+                            target_table="purchase_info_list",
+                            target_pk=row_id,
+                            summary=(
+                                f"注文番号 {before_row.get('order_code')} / "
+                                f"会員番号 {before_row.get('jwoa_code')} の購入情報を削除"
+                            ),
+                            before_values=before_row,
+                            after_values=None,
+                        )
+            except Exception as e:
+                logger.exception("ボーナス購入情報の手入力削除エラー")
+                messages.error(request, f"削除中にエラーが発生しました: {e}")
+                return redirect(redirect_url)
+
+            messages.success(request, "購入情報を1件削除しました。")
+            return redirect(redirect_url)
 
         if action == "delete_all":
             if not user_access.can_delete:
@@ -3314,6 +4054,17 @@ WHERE name = 'set_title'
             try:
                 with transaction.atomic(using="rds"):
                     deleted_count = self._delete_all_registered()
+                    if deleted_count:
+                        record_change_audit(
+                            request,
+                            screen_name="ボーナス購入情報(登録/削除)",
+                            action_type="bulk_delete",
+                            target_table="purchase_info_list",
+                            target_pk=None,
+                            summary=f"購入情報を全件削除: {deleted_count}件",
+                            before_values={"count": deleted_count},
+                            after_values=None,
+                        )
             except Exception as e:
                 logger.exception("ボーナス購入情報登録の全件削除エラー")
                 messages.error(request, f"削除中にエラーが発生しました: {e}")
@@ -3333,33 +4084,37 @@ WHERE name = 'set_title'
                 messages.error(request, "削除権限がありません。")
                 return redirect(self._redirect_url())
 
-            delete_target = (request.POST.get("delete_target_month") or "").strip()
-            if delete_target:
-                try:
-                    y, m = parse_target_month(delete_target)
-                except (ValueError, TypeError):
-                    messages.error(request, "削除年月の形式が不正です。")
-                    return redirect(self._redirect_url())
-            else:
-                if not (
-                    request.POST.get("target_month_choice")
-                    or request.POST.get("target_year")
-                    or request.POST.get("target_month")
-                ):
-                    messages.error(request, "削除する年月を選択してください。")
-                    return redirect(self._redirect_url())
+            if not (
+                request.POST.get("target_month_choice")
+                or request.POST.get("target_year")
+                or request.POST.get("target_month")
+            ):
+                messages.error(request, "削除する年月を指定してください。")
+                return redirect(self._redirect_url())
 
-                try:
-                    y, m = get_target_year_month_from_params(request.POST)
-                except (ValueError, TypeError):
-                    messages.error(request, "年月の形式が不正です。年と月を正しく指定してください。")
-                    return redirect(self._redirect_url())
+            try:
+                y, m = get_target_year_month_from_params(request.POST)
+            except (ValueError, TypeError):
+                messages.error(request, "年月の形式が不正です。年と月を正しく指定してください。")
+                return redirect(self._redirect_url())
 
             redirect_url = self._redirect_url(y, m)
 
             try:
                 with transaction.atomic(using="rds"):
+                    before_count = self._count_registered_rows(y, m)
                     deleted_count = self._delete_rows(y, m)
+                    if deleted_count:
+                        record_change_audit(
+                            request,
+                            screen_name="ボーナス購入情報(登録/削除)",
+                            action_type="bulk_delete",
+                            target_table="purchase_info_list",
+                            target_pk=f"{y}-{m:02d}",
+                            summary=f"{y}年{m}月 の購入情報を削除: {deleted_count}件",
+                            before_values={"year": y, "month": m, "count": before_count},
+                            after_values=None,
+                        )
             except Exception as e:
                 logger.exception("ボーナス購入情報登録の年月削除エラー")
                 messages.error(request, f"削除中にエラーが発生しました: {e}")
@@ -3409,6 +4164,16 @@ WHERE name = 'set_title'
                 self._delete_rows(y, m)
                 self._insert_rows(rows)
                 self._update_setting(y, m)
+                record_change_audit(
+                    request,
+                    screen_name="ボーナス購入情報(登録/削除)",
+                    action_type="bulk_create",
+                    target_table="purchase_info_list",
+                    target_pk=f"{y}-{m:02d}",
+                    summary=f"{y}年{m}月 の購入情報を登録: {len(rows)}件",
+                    before_values={"year": y, "month": m},
+                    after_values={"year": y, "month": m, "count": len(rows)},
+                )
 
         except Exception as e:
             logger.exception("ボーナス購入情報登録エラー")
@@ -3417,89 +4182,6 @@ WHERE name = 'set_title'
 
         messages.success(request, f"{len(rows)}件登録完了")
         return redirect(redirect_url)
-
-
-class RepurchaseLastMonthExportView(RepurchaseLastMonthView):
-    def _order_type_label(self, order_type):
-        if order_type == 101:
-            return "再購入品"
-        if order_type == 102:
-            return "初回購入品"
-        if order_type == 103:
-            return "ランクアップ購入品"
-        if order_type == 105:
-            return "特別対応購入品"
-        if order_type == 200:
-            return "クーリングオフ"
-        return order_type
-
-    def get(self, request, *args, **kwargs):
-        try:
-            year, month = get_target_year_month_from_params(request.GET)
-        except (ValueError, TypeError):
-            messages.error(request, "年月の形式が不正です。年と月を正しく指定してください。")
-            return redirect("connect:repurchase_last_month")
-
-        params = self._build_query_params(year, month)
-        sql = f"""
-{REPURCHASE_LAST_MONTH}
-ORDER BY payment_date ASC, order_code ASC, jwoa_code ASC
-"""
-
-        wb = openpyxl.Workbook(write_only=True)
-        ws = wb.create_sheet("購入情報一覧")
-        ws.append([
-            "登録年",
-            "登録月",
-            "注文年",
-            "注文月",
-            "注文番号",
-            "注文区分",
-            "会員番号",
-            "会員名",
-            "total_bv",
-            "bv",
-            "BV反映日時",
-            "注文日時",
-            "ボーナス支払日",
-        ])
-
-        with connections["rds"].cursor() as cursor:
-            logger.info(
-                "ボーナス購入情報プレビューのExcel出力SQLを実行します。year=%s month=%s",
-                year,
-                month,
-            )
-            cursor.execute(sql, params)
-            columns = [col[0] for col in cursor.description]
-            while True:
-                rows = cursor.fetchmany(self.EXPORT_FETCH_SIZE)
-                if not rows:
-                    break
-                for row in rows:
-                    r = dict(zip(columns, row))
-                    ws.append([
-                        r.get("register_year"),
-                        r.get("register_month"),
-                        r.get("order_year"),
-                        r.get("order_month"),
-                        r.get("order_code"),
-                        self._order_type_label(r.get("order_type")),
-                        r.get("jwoa_code"),
-                        r.get("send_bv_name"),
-                        r.get("total_bv"),
-                        r.get("bv"),
-                        r.get("deposit_at"),
-                        r.get("order_at"),
-                        r.get("payment_date"),
-                    ])
-
-        response = HttpResponse(
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-        response["Content-Disposition"] = 'attachment; filename="repurchase.xlsx"'
-        wb.save(response)
-        return response
 
 
 class RepurchaseExportView(RepurchaseListView):
@@ -3841,6 +4523,19 @@ LIMIT %s OFFSET %s
                                 order_code,
                             ],
                         )
+                    record_change_audit(
+                        request,
+                        screen_name="注文別ボーナス支払日",
+                        action_type="create",
+                        target_table="bonus_payment_date",
+                        target_pk=order_code,
+                        summary=f"注文番号 {order_code} のボーナス支払日を登録",
+                        before_values=None,
+                        after_values={
+                            "order_code": order_code,
+                            "bonus_payment_date": parsed_bonus_payment_date,
+                        },
+                    )
 
                 messages.success(request, "登録しました。")
             except Exception as e:
@@ -3872,6 +4567,16 @@ LIMIT %s OFFSET %s
 
             try:
                 self._bulk_upsert_rows(rows)
+                record_change_audit(
+                    request,
+                    screen_name="注文別ボーナス支払日",
+                    action_type="bulk_create",
+                    target_table="bonus_payment_date",
+                    target_pk=None,
+                    summary=f"ボーナス支払日を {len(rows)}件 一括登録/更新",
+                    before_values=None,
+                    after_values={"count": len(rows), "sample": rows[:5]},
+                )
                 messages.success(request, f"{len(rows)}件を一括登録しました。")
             except Exception as e:
                 messages.error(request, f"一括登録に失敗しました: {e}")
@@ -3900,9 +4605,19 @@ LIMIT %s OFFSET %s
             """
 
             try:
+                before_row = fetch_one_dict(
+                    "rds",
+                    """
+                        SELECT order_code, bonus_payment_date
+                        FROM bonus_db.bonus_payment_date
+                        WHERE order_code = %s
+                    """,
+                    [order_code],
+                )
                 with transaction.atomic(using="rds"):
                     with connections["rds"].cursor() as cursor:
                         cursor.execute(sql1, [parsed_bonus_payment_date, order_code])
+                        updated_count = cursor.rowcount
                         cursor.execute(
                             sql2,
                             [
@@ -3911,6 +4626,20 @@ LIMIT %s OFFSET %s
                                 payment_month,
                                 order_code,
                             ],
+                        )
+                    if updated_count:
+                        record_change_audit(
+                            request,
+                            screen_name="注文別ボーナス支払日",
+                            action_type="update",
+                            target_table="bonus_payment_date",
+                            target_pk=order_code,
+                            summary=f"注文番号 {order_code} のボーナス支払日を更新",
+                            before_values=before_row,
+                            after_values={
+                                "order_code": order_code,
+                                "bonus_payment_date": parsed_bonus_payment_date,
+                            },
                         )
 
                 messages.success(request, "更新しました。")
@@ -3930,8 +4659,29 @@ LIMIT %s OFFSET %s
             """
 
             try:
+                before_row = fetch_one_dict(
+                    "rds",
+                    """
+                        SELECT order_code, bonus_payment_date
+                        FROM bonus_db.bonus_payment_date
+                        WHERE order_code = %s
+                    """,
+                    [order_code],
+                )
                 with connections["rds"].cursor() as cursor:
                     cursor.execute(sql, [order_code])
+                    deleted_count = cursor.rowcount
+                if deleted_count:
+                    record_change_audit(
+                        request,
+                        screen_name="注文別ボーナス支払日",
+                        action_type="delete",
+                        target_table="bonus_payment_date",
+                        target_pk=order_code,
+                        summary=f"注文番号 {order_code} のボーナス支払日を削除",
+                        before_values=before_row,
+                        after_values=None,
+                    )
                 messages.success(request, "削除しました。")
             except Exception as e:
                 messages.error(request, f"削除に失敗しました: {e}")
@@ -4191,6 +4941,24 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
                         sql,
                         [jwoa_code, int(year), int(month), int(active_status)],
                     )
+                    created_id = cursor.lastrowid
+
+                record_change_audit(
+                    request,
+                    screen_name="アクティブ会員管理",
+                    action_type="create",
+                    target_table="active_users",
+                    target_pk=created_id,
+                    summary=f"{jwoa_code} {year}年{month}月 を登録",
+                    before_values=None,
+                    after_values={
+                        "id": created_id,
+                        "jwoa_code": jwoa_code,
+                        "year": int(year),
+                        "month": int(month),
+                        "active_status": int(active_status),
+                    },
+                )
 
             messages.success(request, "登録しました。")
 
@@ -4231,6 +4999,16 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
 
         try:
             self._bulk_upsert_rows(rows)
+            record_change_audit(
+                request,
+                screen_name="アクティブ会員管理",
+                action_type="bulk_create",
+                target_table="active_users",
+                target_pk=None,
+                summary=f"アクティブ会員を {len(rows)}件 一括登録/更新",
+                before_values=None,
+                after_values={"count": len(rows), "sample": rows[:5]},
+            )
             messages.success(request, f"{len(rows)}件を一括登録しました。")
         except IntegrityError:
             messages.error(request, "一括登録に失敗しました。会員コードが存在しない可能性があります。")
@@ -4379,6 +5157,16 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
             messages.error(request, error_message)
             return redirect(self._get_redirect_url(q_jwoa_code, q_year, q_month, q_active_status))
 
+        before_row = fetch_one_dict(
+            "rds",
+            """
+                SELECT id, jwoa_code, year, month, active_status, created_at
+                FROM active_users
+                WHERE id = %s
+            """,
+            [row_id_int],
+        )
+
         sql = """
             UPDATE active_users
             SET
@@ -4395,6 +5183,26 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
                     cursor.execute(
                         sql,
                         [jwoa_code, int(year), int(month), int(active_status), row_id_int],
+                    )
+                    updated_count = cursor.rowcount
+
+                if updated_count:
+                    after_row = {
+                        "id": row_id_int,
+                        "jwoa_code": jwoa_code,
+                        "year": int(year),
+                        "month": int(month),
+                        "active_status": int(active_status),
+                    }
+                    record_change_audit(
+                        request,
+                        screen_name="アクティブ会員管理",
+                        action_type="update",
+                        target_table="active_users",
+                        target_pk=row_id_int,
+                        summary=f"アクティブ会員 {row_id_int} を更新",
+                        before_values=before_row,
+                        after_values=after_row,
                     )
 
             messages.success(request, "更新しました。")
@@ -4432,8 +5240,30 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
 
         try:
             with transaction.atomic(using="rds"):
+                before_row = fetch_one_dict(
+                    "rds",
+                    """
+                        SELECT id, jwoa_code, year, month, active_status, created_at
+                        FROM active_users
+                        WHERE id = %s
+                    """,
+                    [row_id_int],
+                )
                 with connections["rds"].cursor() as cursor:
                     cursor.execute(sql, [row_id_int])
+                    deleted_count = cursor.rowcount
+
+                if deleted_count:
+                    record_change_audit(
+                        request,
+                        screen_name="アクティブ会員管理",
+                        action_type="delete",
+                        target_table="active_users",
+                        target_pk=row_id_int,
+                        summary=f"アクティブ会員 {row_id_int} を削除",
+                        before_values=before_row,
+                        after_values=None,
+                    )
 
             messages.success(request, "削除しました。")
 
@@ -4608,34 +5438,15 @@ LIMIT %s OFFSET %s
             cols = [col[0] for col in cursor.description]
             return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
-    def _copy_from_view(self) -> int:
+    def _rebuild_cache(self) -> int:
         delete_sql = "DELETE FROM bonus_db.C_users_placement_tree_cache"
-
-        insert_sql = """
-INSERT INTO bonus_db.C_users_placement_tree_cache (
-    placement_code,
-    placement_name,
-    placement_rank,
-    jwoa_code,
-    send_bv_name,
-    `rank`,
-    tree_level
-)
-SELECT
-    placement_code,
-    placement_name,
-    placement_rank,
-    jmoa_code,
-    send_bv_name,
-    `rank`,
-    tree_level
-FROM bonus_db.v_user_placement_tree
-        """
 
         with transaction.atomic(using="rds"):
             with connections["rds"].cursor() as cursor:
+                logger.info("上位者Treeキャッシュ再作成前削除SQLを実行します。")
                 cursor.execute(delete_sql)
-                cursor.execute(insert_sql)
+                logger.info("上位者Treeキャッシュ再作成INSERT SQLを実行します。")
+                cursor.execute(PLACEMENT_TREE_REBUILD_CACHE_SQL)
                 inserted_count = cursor.rowcount
 
         return inserted_count
@@ -4655,13 +5466,33 @@ FROM bonus_db.v_user_placement_tree
 
         try:
             if action == "copy":
-                inserted_count = self._copy_from_view()
+                inserted_count = self._rebuild_cache()
+                record_change_audit(
+                    request,
+                    screen_name="上位者 Tree",
+                    action_type="bulk_create",
+                    target_table="C_users_placement_tree_cache",
+                    target_pk=None,
+                    summary=f"上位者 Treeテーブルを再作成: {inserted_count}件",
+                    before_values=None,
+                    after_values={"count": inserted_count},
+                )
                 messages.success(
                     request,
-                    f"上位者 Treeテーブルへ {inserted_count} 件コピー登録しました。"
+                    f"上位者 Treeテーブルを {inserted_count} 件で再作成しました。"
                 )
             elif action == "delete":
                 deleted_count = self._delete_all_cache()
+                record_change_audit(
+                    request,
+                    screen_name="上位者 Tree",
+                    action_type="bulk_delete",
+                    target_table="C_users_placement_tree_cache",
+                    target_pk=None,
+                    summary=f"上位者 Treeテーブルを全件削除: {deleted_count}件",
+                    before_values={"count": deleted_count},
+                    after_values=None,
+                )
                 messages.success(
                     request,
                     "上位者 Treeテーブルを全件削除しました。"
@@ -4754,6 +5585,93 @@ FROM bonus_db.v_user_placement_tree
         )
 
 
+class PlacementTreeExportView(PlacementTreeView):
+    EXPORT_FETCH_SIZE = 5000
+    RANK_LABELS = {
+        1: "シルバー",
+        2: "ゴールド",
+        3: "プラチナ",
+        4: "ダイヤ",
+        9: "一般会員",
+    }
+
+    def _rank_label(self, value):
+        return self.RANK_LABELS.get(value, "-")
+
+    def get(self, request, *args, **kwargs):
+        q_jwoa_code = (request.GET.get("q_jwoa_code") or "").strip()
+        q_name = (request.GET.get("q_name") or "").strip()
+        q_placement_code = (request.GET.get("q_placement_code") or "").strip()
+        q_placement_rank = (request.GET.get("q_placement_rank") or "").strip()
+        q_rank = (request.GET.get("q_rank") or "").strip()
+
+        where_sql, params = self._build_where(
+            q_jwoa_code=q_jwoa_code,
+            q_name=q_name,
+            q_placement_code=q_placement_code,
+            q_placement_rank=q_placement_rank,
+            q_rank=q_rank,
+        )
+
+        sql = f"""
+SELECT
+    c.id,
+    c.placement_code,
+    c.placement_name,
+    c.placement_rank,
+    c.jwoa_code,
+    c.send_bv_name,
+    c.`rank`,
+    c.tree_level,
+    c.created_at
+FROM bonus_db.C_users_placement_tree_cache c
+{where_sql}
+ORDER BY c.id
+        """
+
+        wb = openpyxl.Workbook(write_only=True)
+        ws = wb.create_sheet("上位者Tree")
+        ws.append([
+            "ID",
+            "上位者コード",
+            "上位者名",
+            "上位者ランク",
+            "会員コード",
+            "会員名",
+            "ランク",
+            "階層",
+            "作成日時",
+        ])
+
+        with connections["rds"].cursor() as cursor:
+            logger.info("上位者Tree Excel出力SQLを実行します。")
+            cursor.execute(sql, params)
+            while True:
+                rows = cursor.fetchmany(self.EXPORT_FETCH_SIZE)
+                if not rows:
+                    break
+                for row in rows:
+                    ws.append([
+                        row[0],
+                        row[1],
+                        row[2],
+                        self._rank_label(row[3]),
+                        row[4],
+                        row[5],
+                        self._rank_label(row[6]),
+                        row[7],
+                        row[8],
+                    ])
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = (
+            'attachment; filename="placement_tree.xlsx"'
+        )
+        wb.save(response)
+        return response
+
 
 class MatchingBonusView(generic.ListView):
     template_name = "matching_bonus.html"
@@ -4773,6 +5691,9 @@ class MatchingBonusView(generic.ListView):
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
+
+        if action == "delete":
+            return delete_bonus_result_for_kibetu(request, "matching_bonus")
 
         if action != "register_matching_bonus":
             messages.error(request, "不正な操作です。")
@@ -5351,6 +6272,9 @@ class TitleBonusView(generic.ListView):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
 
+        if action == "delete":
+            return delete_bonus_result_for_kibetu(request, "title_bonus")
+
         if action != "register_title_bonus":
             messages.error(request, "不正な操作です。")
             return redirect("connect:title_bonus")
@@ -5695,6 +6619,9 @@ class TitleDiffBonusView(generic.ListView):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
 
+        if action == "delete":
+            return delete_bonus_result_for_kibetu(request, "title_diff_bonus")
+
         if action != "register_title_diff_bonus":
             messages.error(request, "不正な操作です。")
             return redirect("connect:title_diff_bonus")
@@ -6015,6 +6942,9 @@ class RepurchaseOverBonusView(generic.ListView):
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
+
+        if action == "delete":
+            return delete_bonus_result_for_kibetu(request, "repurchase_over_bonus")
 
         if action != "repurchase_over_bonus":
             messages.error(request, "不正な操作です。")
@@ -6661,6 +7591,66 @@ class BusinessPersonalWeekPerformanceView(KeysetPaginationMixin, generic.Templat
         )
 
 
+_FULLWIDTH_KANA_TO_HALFWIDTH = {
+    "ア": "ｱ", "イ": "ｲ", "ウ": "ｳ", "エ": "ｴ", "オ": "ｵ",
+    "カ": "ｶ", "キ": "ｷ", "ク": "ｸ", "ケ": "ｹ", "コ": "ｺ",
+    "サ": "ｻ", "シ": "ｼ", "ス": "ｽ", "セ": "ｾ", "ソ": "ｿ",
+    "タ": "ﾀ", "チ": "ﾁ", "ツ": "ﾂ", "テ": "ﾃ", "ト": "ﾄ",
+    "ナ": "ﾅ", "ニ": "ﾆ", "ヌ": "ﾇ", "ネ": "ﾈ", "ノ": "ﾉ",
+    "ハ": "ﾊ", "ヒ": "ﾋ", "フ": "ﾌ", "ヘ": "ﾍ", "ホ": "ﾎ",
+    "マ": "ﾏ", "ミ": "ﾐ", "ム": "ﾑ", "メ": "ﾒ", "モ": "ﾓ",
+    "ヤ": "ﾔ", "ユ": "ﾕ", "ヨ": "ﾖ",
+    "ラ": "ﾗ", "リ": "ﾘ", "ル": "ﾙ", "レ": "ﾚ", "ロ": "ﾛ",
+    "ワ": "ﾜ", "ヲ": "ｦ", "ン": "ﾝ",
+    "ァ": "ｧ", "ィ": "ｨ", "ゥ": "ｩ", "ェ": "ｪ", "ォ": "ｫ",
+    "ャ": "ｬ", "ュ": "ｭ", "ョ": "ｮ", "ッ": "ｯ",
+    "ー": "ｰ", "・": "･",
+}
+
+_FULLWIDTH_VOICED_KANA_TO_HALFWIDTH = {
+    "ガ": "ｶﾞ", "ギ": "ｷﾞ", "グ": "ｸﾞ", "ゲ": "ｹﾞ", "ゴ": "ｺﾞ",
+    "ザ": "ｻﾞ", "ジ": "ｼﾞ", "ズ": "ｽﾞ", "ゼ": "ｾﾞ", "ゾ": "ｿﾞ",
+    "ダ": "ﾀﾞ", "ヂ": "ﾁﾞ", "ヅ": "ﾂﾞ", "デ": "ﾃﾞ", "ド": "ﾄﾞ",
+    "バ": "ﾊﾞ", "ビ": "ﾋﾞ", "ブ": "ﾌﾞ", "ベ": "ﾍﾞ", "ボ": "ﾎﾞ",
+    "ヴ": "ｳﾞ",
+}
+
+_FULLWIDTH_SEMIVOICED_KANA_TO_HALFWIDTH = {
+    "パ": "ﾊﾟ", "ピ": "ﾋﾟ", "プ": "ﾌﾟ", "ペ": "ﾍﾟ", "ポ": "ﾎﾟ",
+}
+
+
+def _fullwidth_kana_to_halfwidth(value):
+    converted = []
+    for char in value:
+        if char in _FULLWIDTH_VOICED_KANA_TO_HALFWIDTH:
+            converted.append(_FULLWIDTH_VOICED_KANA_TO_HALFWIDTH[char])
+        elif char in _FULLWIDTH_SEMIVOICED_KANA_TO_HALFWIDTH:
+            converted.append(_FULLWIDTH_SEMIVOICED_KANA_TO_HALFWIDTH[char])
+        else:
+            converted.append(_FULLWIDTH_KANA_TO_HALFWIDTH.get(char, char))
+    return "".join(converted)
+
+
+def _kana_search_variants(value):
+    raw = (value or "").strip()
+    if not raw:
+        return []
+
+    fullwidth = unicodedata.normalize("NFKC", raw)
+    candidates = [
+        raw,
+        fullwidth,
+        _fullwidth_kana_to_halfwidth(raw),
+        _fullwidth_kana_to_halfwidth(fullwidth),
+    ]
+    variants = []
+    for candidate in candidates:
+        if candidate and candidate not in variants:
+            variants.append(candidate)
+    return variants
+
+
 class UsersView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "users.html"
     EXPORT_FETCH_SIZE = 5000
@@ -6669,6 +7659,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         self,
         q_jpid: str = "",
         q_name: str = "",
+        q_name_kana: str = "",
         q_introducer: str = "",
         q_placement: str = "",
         q_status: str = "",
@@ -6685,6 +7676,16 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             where.append("(u.send_bv_name LIKE %s OR u.name LIKE %s)")
             params.append(f"%{q_name}%")
             params.append(f"%{q_name}%")
+
+        if q_name_kana:
+            kana_variants = _kana_search_variants(q_name_kana)
+            if kana_variants:
+                where.append(
+                    "("
+                    + " OR ".join(["u.name_kana LIKE %s"] * len(kana_variants))
+                    + ")"
+                )
+                params.extend([f"%{variant}%" for variant in kana_variants])
 
         if q_introducer:
             where.append("u.introducer_code LIKE %s")
@@ -6710,6 +7711,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         self,
         q_jpid: str = "",
         q_name: str = "",
+        q_name_kana: str = "",
         q_introducer: str = "",
         q_placement: str = "",
         q_status: str = "",
@@ -6719,6 +7721,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         where_sql, params = self._build_where(
             q_jpid=q_jpid,
             q_name=q_name,
+            q_name_kana=q_name_kana,
             q_introducer=q_introducer,
             q_placement=q_placement,
             q_status=q_status,
@@ -6741,6 +7744,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         self,
         q_jpid: str = "",
         q_name: str = "",
+        q_name_kana: str = "",
         q_introducer: str = "",
         q_placement: str = "",
         q_status: str = "",
@@ -6752,6 +7756,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         where_sql, params = self._build_where(
             q_jpid=q_jpid,
             q_name=q_name,
+            q_name_kana=q_name_kana,
             q_introducer=q_introducer,
             q_placement=q_placement,
             q_status=q_status,
@@ -6764,6 +7769,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
                 u.group_code,
                 u.jmoa_code,
                 u.send_bv_name,
+                u.name_kana,
                 u.introducer_code,
                 u.placement_code,
                 u.rank,
@@ -6793,6 +7799,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
 
         q_jpid = (self.request.GET.get("q_jpid") or "").strip()
         q_name = (self.request.GET.get("q_name") or "").strip()
+        q_name_kana = (self.request.GET.get("q_name_kana") or "").strip()
         q_introducer = (self.request.GET.get("q_introducer") or "").strip()
         q_placement = (self.request.GET.get("q_placement") or "").strip()
         q_status = (self.request.GET.get("q_status") or "").strip()
@@ -6803,6 +7810,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         total_count = self._fetch_total_count(
             q_jpid=q_jpid,
             q_name=q_name,
+            q_name_kana=q_name_kana,
             q_introducer=q_introducer,
             q_placement=q_placement,
             q_status=q_status,
@@ -6816,6 +7824,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         rows = self._fetch_rows(
             q_jpid=q_jpid,
             q_name=q_name,
+            q_name_kana=q_name_kana,
             q_introducer=q_introducer,
             q_placement=q_placement,
             q_status=q_status,
@@ -6826,6 +7835,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
 
         ctx["q_jpid"] = q_jpid
         ctx["q_name"] = q_name
+        ctx["q_name_kana"] = q_name_kana
         ctx["q_introducer"] = q_introducer
         ctx["q_placement"] = q_placement
         ctx["q_status"] = q_status
@@ -6838,6 +7848,9 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
 
         if q_name:
             base_params["q_name"] = q_name
+
+        if q_name_kana:
+            base_params["q_name_kana"] = q_name_kana
 
         if q_introducer:
             base_params["q_introducer"] = q_introducer
@@ -6896,6 +7909,7 @@ class UsersExportView(UsersView):
     def get(self, request, *args, **kwargs):
         q_jpid = (request.GET.get("q_jpid") or "").strip()
         q_name = (request.GET.get("q_name") or "").strip()
+        q_name_kana = (request.GET.get("q_name_kana") or "").strip()
         q_introducer = (request.GET.get("q_introducer") or "").strip()
         q_placement = (request.GET.get("q_placement") or "").strip()
         q_status = (request.GET.get("q_status") or "").strip()
@@ -6904,6 +7918,7 @@ class UsersExportView(UsersView):
         where_sql, params = self._build_where(
             q_jpid=q_jpid,
             q_name=q_name,
+            q_name_kana=q_name_kana,
             q_introducer=q_introducer,
             q_placement=q_placement,
             q_status=q_status,
@@ -7006,6 +8021,9 @@ class ThreeStarGlobalBonusView(generic.ListView):
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
+
+        if action == "delete":
+            return delete_bonus_result_for_kibetu(request, "three_star_global_bonus")
 
         if action != "three_star_global_bonus":
             messages.error(request, "不正な操作です。")
@@ -7367,7 +8385,20 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
             params.append(f"%{q_order_code}%")
 
         if q_jwoa_code:
-            where.append("o.jwoa_code LIKE %s")
+            where.append(
+                """
+                (
+                    o.jwoa_code LIKE %s
+                    OR EXISTS (
+                        SELECT 1
+                        FROM bonus_db.orders_distribution_bv d
+                        WHERE d.order_code = o.order_code
+                          AND d.jwoa_code LIKE %s
+                    )
+                )
+                """
+            )
+            params.append(f"%{q_jwoa_code}%")
             params.append(f"%{q_jwoa_code}%")
 
         if q_name:
@@ -7420,6 +8451,18 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
 
     def _fetch_rows(self, limit=200, offset=0, **filters):
         where_sql, params = self._build_where(**filters)
+        q_jwoa_code = (filters.get("q_jwoa_code") or "").strip()
+        match_select_params = []
+
+        if q_jwoa_code:
+            member_match_select = """
+                CASE WHEN o.jwoa_code LIKE %s THEN 1 ELSE 0 END AS order_member_matched,
+            """
+            match_select_params.append(f"%{q_jwoa_code}%")
+        else:
+            member_match_select = """
+                0 AS order_member_matched,
+            """
 
         sql = f"""
             SELECT
@@ -7440,7 +8483,13 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
                 o.deposit_at,
                 o.delivery_date_at,
                 o.created_at,
-                o.updated_at
+                o.updated_at,
+                {member_match_select}
+                (
+                    SELECT COUNT(*)
+                    FROM bonus_db.orders_distribution_bv d_count
+                    WHERE d_count.order_code = o.order_code
+                ) AS distribution_count
             FROM nexus_production.orders o
             {where_sql}
             ORDER BY o.id
@@ -7448,7 +8497,7 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
         """
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, params + [limit, offset])
+            cursor.execute(sql, match_select_params + params + [limit, offset])
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
 
@@ -7683,6 +8732,9 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
             "q_created_from": (self.request.GET.get("q_created_from") or "").strip(),
             "q_created_to": (self.request.GET.get("q_created_to") or "").strip(),
         }
+        return_to = (self.request.GET.get("return_to") or "").strip()
+        if not return_to.startswith("/") or return_to.startswith("//"):
+            return_to = ""
 
         per_page = self.get_per_page()
 
@@ -7698,11 +8750,14 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
         )
 
         ctx.update(filters)
+        ctx["return_to"] = return_to
 
         base_params = {
             k: v for k, v in filters.items()
             if v
         }
+        if return_to:
+            base_params["return_to"] = return_to
 
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
@@ -7716,6 +8771,99 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
             page=page,
             base_params=base_params,
         )
+
+
+class OrdersDistributionBvUpdateView(OrdersDistributionBvView):
+    template_name = "orders_distribution_bv_update.html"
+
+    def post(self, request, *args, **kwargs):
+        user_access = get_user_access(request.user)
+        if not user_access.can_menu("orders_distribution_bv_update") or not user_access.can_update:
+            return HttpResponse("権限がありません。", status=403)
+
+        row_id = (request.POST.get("id") or "").strip()
+        distribution_bv = (request.POST.get("distribution_bv") or "").strip()
+        next_query = (request.POST.get("next_query") or "").strip()
+        redirect_url = reverse("connect:orders_distribution_bv_update")
+        if next_query:
+            redirect_url = f"{redirect_url}?{next_query}"
+
+        try:
+            row_id_int = int(row_id)
+        except ValueError:
+            messages.error(request, "更新対象IDが不正です。")
+            return redirect(redirect_url)
+
+        try:
+            distribution_bv_int = int(distribution_bv)
+        except ValueError:
+            messages.error(request, "振分BVは整数で入力してください。")
+            return redirect(redirect_url)
+
+        if distribution_bv_int < 0:
+            messages.error(request, "振分BVは0以上で入力してください。")
+            return redirect(redirect_url)
+
+        before_row = fetch_one_dict(
+            "rds",
+            """
+                SELECT
+                    id,
+                    order_code,
+                    user_id,
+                    jwoa_code,
+                    distribution_bv,
+                    usage_fee
+                FROM bonus_db.orders_distribution_bv
+                WHERE id = %s
+            """,
+            [row_id_int],
+        )
+        if not before_row:
+            messages.error(request, "更新対象データが見つかりませんでした。")
+            return redirect(redirect_url)
+
+        sql = """
+            UPDATE bonus_db.orders_distribution_bv
+            SET distribution_bv = %s
+            WHERE id = %s
+        """
+
+        try:
+            with connections["rds"].cursor() as cursor:
+                logger.info(
+                    "BV振分変更画面から振分BV更新SQLを実行します。id=%s distribution_bv=%s",
+                    row_id_int,
+                    distribution_bv_int,
+                )
+                cursor.execute(sql, [distribution_bv_int, row_id_int])
+                updated_count = cursor.rowcount
+
+            if updated_count:
+                after_row = dict(before_row)
+                after_row["distribution_bv"] = distribution_bv_int
+                record_change_audit(
+                    request,
+                    screen_name="BV振分変更",
+                    action_type="update",
+                    target_table="orders_distribution_bv",
+                    target_pk=row_id_int,
+                    summary=(
+                        f"注文番号 {before_row.get('order_code')} / "
+                        f"JWOA会員ID {before_row.get('jwoa_code')} の振分BVを更新"
+                    ),
+                    before_values=before_row,
+                    after_values=after_row,
+                )
+                messages.success(request, "振分BVを更新しました。")
+            else:
+                messages.info(request, "振分BVは変更されていません。")
+        except Exception as e:
+            logger.exception("BV振分変更画面の振分BV更新エラー")
+            messages.error(request, f"振分BVの更新中にエラーが発生しました: {e}")
+
+        return redirect(redirect_url)
+
 
 class ApiUsersBvView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "api_users_bv.html"
@@ -7889,6 +9037,9 @@ class WeekBonusView(generic.ListView):
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
+
+        if action == "delete":
+            return delete_bonus_result_for_kibetu(request, "week_bonus")
 
         if action != "register_week_bonus":
             messages.error(request, "不正な操作です。")
@@ -8259,19 +9410,33 @@ class WeekBonusView(generic.ListView):
                     )
             return 0
 
-        insert_sql, insert_params = register_sql.get_basic_bonus_insert_data(
+        (
+            delete_bonus_result_sql,
+            delete_bv_line_sql,
+            delete_params,
+            insert_sql,
+            insert_params,
+            basic_bv_line_insert_sql,
+            basic_bv_line_insert_params,
+        ) = register_sql.get_basic_bonus_delete_insert_data(
             selected_kibetu,
             basic_bonus_rows,
-        )
-        basic_bv_line_insert_sql, basic_bv_line_insert_params = (
-            register_sql.get_basic_bv_line_insert_data(
-                selected_kibetu,
-                basic_bv_line_rows,
-            )
+            basic_bv_line_rows,
         )
 
         with transaction.atomic(using="rds"):
             with connections["rds"].cursor() as cursor:
+                logger.info(
+                    "ベーシックボーナス登録前削除SQLを実行します。kibetu=%s",
+                    selected_kibetu,
+                )
+                cursor.execute(delete_bonus_result_sql, delete_params)
+                cursor.execute(delete_bv_line_sql, delete_params)
+
+                logger.info(
+                    "ベーシックボーナス登録INSERT SQLを実行します。kibetu=%s",
+                    selected_kibetu,
+                )
                 cursor.executemany(insert_sql, insert_params)
                 if basic_bv_line_insert_params:
                     cursor.executemany(
@@ -8640,6 +9805,9 @@ class MonthTitleView(generic.ListView):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
 
+        if action == "delete":
+            return delete_bonus_result_for_kibetu(request, "month_title")
+
         if action != "register_month_title":
             messages.error(request, "不正な操作です。")
             return redirect("connect:month_title")
@@ -8837,6 +10005,9 @@ class MonthBonusView(generic.ListView):
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
+
+        if action == "delete":
+            return delete_bonus_result_for_kibetu(request, "month_bonus")
 
         if action != "register_month_bonus":
             messages.error(request, "不正な操作です。")

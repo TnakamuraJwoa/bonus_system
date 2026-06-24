@@ -35,7 +35,18 @@ MENU_FEATURES = (
         "users",
         ("active_user_search", "active_user_search_export"),
     ),
-    MenuFeature("placement_tree", "上位者 Tree", "users", ("placement_tree",)),
+    MenuFeature(
+        "placement_tree",
+        "上位者 Tree",
+        "users",
+        ("placement_tree", "placement_tree_export"),
+    ),
+    MenuFeature(
+        "introducer_tree",
+        "紹介者 Tree",
+        "users",
+        ("introducer_tree", "introducer_tree_export"),
+    ),
     # --- 注文 ---
     MenuFeature("orders", "注文一覧", "orders", ("orders", "order_detail")),
     MenuFeature(
@@ -137,7 +148,7 @@ MENU_FEATURES = (
         "business_carry_over_performance",
         "繰り越し業績照会",
         "business_search",
-        ("business_carry_over_performance",),
+        ("business_carry_over_performance", "business_carry_over_performance_template"),
     ),
     # --- 設定・マスタ ---
     MenuFeature("kibetu", "期別（週）", "settings", ("kibetu",)),
@@ -148,7 +159,13 @@ MENU_FEATURES = (
         "repurchase_last_month",
         "ボーナス購入情報(登録/削除)",
         "settings",
-        ("repurchase_last_month", "repurchase_last_month_export"),
+        ("repurchase_last_month",),
+    ),
+    MenuFeature(
+        "orders_distribution_bv_update",
+        "BV振分変更",
+        "settings",
+        ("orders_distribution_bv_update",),
     ),
     MenuFeature("user_target_rank", "ユーザーランク（指定月）", "settings", ("user_target_rank",)),
     MenuFeature("title_list", "タイトル表", "settings", ("title_list",)),
