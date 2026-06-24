@@ -10,6 +10,8 @@ from django.http import HttpResponse
 from django.shortcuts import redirect
 from django.views import generic
 
+from connect.audit import record_change_audit
+
 from .views import KeysetPaginationMixin
 
 
@@ -203,7 +205,57 @@ class CarryOverPerformanceTemplateView(generic.View):
 class CarryOverPerformanceView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "business_carry_over_performance.html"
 
+    def _delete_by_kibetu(self, request):
+        q_kibetu = (request.POST.get("q_kibetu") or "").strip()
+        if not q_kibetu:
+            messages.error(request, "期別を選択してください。")
+            return redirect("connect:business_carry_over_performance")
+
+        delete_sql = f"DELETE FROM {BASIC_BV_LINE_TABLE} WHERE kibetu = %s"
+
+        try:
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    logger.info(
+                        "繰り越しBV期別削除SQLを実行します。kibetu=%s table=%s",
+                        q_kibetu,
+                        BASIC_BV_LINE_TABLE,
+                    )
+                    cursor.execute(delete_sql, [q_kibetu])
+                    deleted_count = cursor.rowcount
+
+            record_change_audit(
+                request,
+                screen_name="繰り越し業績照会",
+                action_type="bulk_delete",
+                target_table="basic_bv_line",
+                target_pk=q_kibetu,
+                summary=f"期別 {q_kibetu} の繰り越しBVを削除: {deleted_count}件",
+                before_values={"kibetu": q_kibetu, "count": deleted_count},
+                after_values=None,
+            )
+
+            if deleted_count:
+                messages.success(
+                    request,
+                    f"期別 {q_kibetu} の繰り越しBVを {deleted_count} 件削除しました。",
+                )
+            else:
+                messages.warning(
+                    request,
+                    f"期別 {q_kibetu} に削除対象データはありません。",
+                )
+        except Exception as exc:
+            logger.exception("繰り越しBV期別削除エラー")
+            messages.error(request, f"削除中にエラーが発生しました: {exc}")
+
+        return redirect("connect:business_carry_over_performance")
+
     def post(self, request, *args, **kwargs):
+        action = (request.POST.get("action") or "").strip()
+        if action == "delete":
+            return self._delete_by_kibetu(request)
+
         uploaded_file = request.FILES.get("carry_over_file")
         if not uploaded_file:
             messages.error(request, "取込ファイルを選択してください。")

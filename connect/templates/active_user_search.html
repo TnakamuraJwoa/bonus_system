@@ -34,100 +34,100 @@
             {% endif %}
           </div>
 
-          <form method="get" class="d-flex align-items-end mb-0 flex-wrap">
+          <div class="bonus-calc-form">
+            <form method="get" id="activeUserSearchForm" class="mb-0">
+              <div class="d-flex align-items-end flex-wrap">
+                <div class="mr-2 mb-2">
+                  <label class="form-label mb-0 small text-muted">会員コード</label>
+                  <input type="text"
+                         name="q_jwoa_code"
+                         class="form-control"
+                         value="{{ q_jwoa_code|default:'' }}"
+                         placeholder="例: JP05198407">
+                </div>
 
-            <div class="mr-2 mb-2">
-              <label class="form-label mb-0 small text-muted">会員コード</label>
-              <input type="text"
-                     name="q_jwoa_code"
-                     class="form-control"
-                     value="{{ q_jwoa_code|default:'' }}"
-                     placeholder="例: JP05198407">
+                <div class="mr-2 mb-2">
+                  <label class="form-label mb-0 small text-muted">会員名</label>
+                  <input type="text"
+                         name="q_name"
+                         class="form-control"
+                         value="{{ q_name|default:'' }}"
+                         placeholder="例: 山田">
+                </div>
+
+                <div class="mr-2 mb-2" style="width: 120px;">
+                  <label class="form-label mb-0 small text-muted">年</label>
+                  <input type="number"
+                         name="q_year"
+                         class="form-control"
+                         value="{{ q_year|default:'' }}"
+                         placeholder="例: 2026"
+                         min="1900"
+                         max="2100">
+                </div>
+
+                <div class="mr-2 mb-2" style="width: 100px;">
+                  <label class="form-label mb-0 small text-muted">月</label>
+                  <input type="number"
+                         name="q_month"
+                         class="form-control"
+                         value="{{ q_month|default:'' }}"
+                         placeholder="1〜12"
+                         min="1"
+                         max="12">
+                </div>
+
+                <div class="mr-2 mb-2" style="width: 150px;">
+                  <label class="form-label mb-0 small text-muted">ステータス</label>
+                  <select name="q_active_status" class="form-control">
+                    <option value="">全て</option>
+                    <option value="1" {% if q_active_status == "1" %}selected{% endif %}>アクティブ</option>
+                    <option value="0" {% if q_active_status == "0" %}selected{% endif %}>非アクティブ</option>
+                  </select>
+                </div>
+
+                <div class="mr-2 mb-2" style="width: 110px;">
+                  <label class="form-label mb-0 small text-muted">表示件数</label>
+                  <select name="per_page" class="form-control">
+                    <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                    <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                    <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                    <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+                  </select>
+                </div>
+              </div>
+            </form>
+
+            <div class="bonus-calc-selection-status">
+              {% if q_jwoa_code or q_name or q_year or q_month or q_active_status %}
+                <span class="text-muted small">絞り込み中：</span>
+                {% if q_jwoa_code %}
+                  <span class="badge badge-info">会員コード={{ q_jwoa_code }}</span>
+                {% endif %}
+                {% if q_name %}
+                  <span class="badge badge-secondary">会員名={{ q_name }}</span>
+                {% endif %}
+                {% if q_year %}
+                  <span class="badge badge-primary">年={{ q_year }}</span>
+                {% endif %}
+                {% if q_month %}
+                  <span class="badge badge-primary">月={{ q_month }}</span>
+                {% endif %}
+                {% if q_active_status == "1" %}
+                  <span class="badge badge-success">ステータス=アクティブ</span>
+                {% elif q_active_status == "0" %}
+                  <span class="badge badge-secondary">ステータス=非アクティブ</span>
+                {% endif %}
+              {% else %}
+                <span class="text-muted small">全件表示中</span>
+              {% endif %}
             </div>
 
-            <div class="mr-2 mb-2">
-              <label class="form-label mb-0 small text-muted">会員名</label>
-              <input type="text"
-                     name="q_name"
-                     class="form-control"
-                     value="{{ q_name|default:'' }}"
-                     placeholder="例: 山田">
-            </div>
-
-            <div class="mr-2 mb-2" style="width: 120px;">
-              <label class="form-label mb-0 small text-muted">年</label>
-              <input type="number"
-                     name="q_year"
-                     class="form-control"
-                     value="{{ q_year|default:'' }}"
-                     placeholder="例: 2026"
-                     min="1900"
-                     max="2100">
-            </div>
-
-            <div class="mr-2 mb-2" style="width: 100px;">
-              <label class="form-label mb-0 small text-muted">月</label>
-              <input type="number"
-                     name="q_month"
-                     class="form-control"
-                     value="{{ q_month|default:'' }}"
-                     placeholder="1〜12"
-                     min="1"
-                     max="12">
-            </div>
-
-            <div class="mr-2 mb-2" style="width: 150px;">
-              <label class="form-label mb-0 small text-muted">ステータス</label>
-              <select name="q_active_status" class="form-control">
-                <option value="">全て</option>
-                <option value="1" {% if q_active_status == "1" %}selected{% endif %}>アクティブ</option>
-                <option value="0" {% if q_active_status == "0" %}selected{% endif %}>非アクティブ</option>
-              </select>
-            </div>
-
-            <div class="mr-2 mb-2" style="width: 110px;">
-              <label class="form-label mb-0 small text-muted">表示件数</label>
-              <select name="per_page" class="form-control">
-                <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
-                <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
-                <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
-                <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
-              </select>
-            </div>
-
-            <div class="mb-2 mr-2">
-              <button type="submit" class="btn btn-primary">検索</button>
-            </div>
-
-            <div class="mb-2">
+            <div class="bonus-calc-action-row">
+              <button type="submit" form="activeUserSearchForm" class="btn btn-primary">検索</button>
               <a class="btn btn-outline-secondary" href="{% url 'connect:active_user_search' %}">リセット</a>
             </div>
-          </form>
-
-          {% if q_jwoa_code or q_name or q_year or q_month or q_active_status %}
-            <div class="text-muted small mt-3">
-              絞り込み中：
-              {% if q_jwoa_code %}
-                <span class="badge badge-info">会員コード={{ q_jwoa_code }}</span>
-              {% endif %}
-              {% if q_name %}
-                <span class="badge badge-secondary">会員名={{ q_name }}</span>
-              {% endif %}
-              {% if q_year %}
-                <span class="badge badge-primary">年={{ q_year }}</span>
-              {% endif %}
-              {% if q_month %}
-                <span class="badge badge-primary">月={{ q_month }}</span>
-              {% endif %}
-              {% if q_active_status == "1" %}
-                <span class="badge badge-success">ステータス=アクティブ</span>
-              {% elif q_active_status == "0" %}
-                <span class="badge badge-secondary">ステータス=非アクティブ</span>
-              {% endif %}
-            </div>
-          {% else %}
-            <div class="text-muted small mt-3">全件表示中</div>
-          {% endif %}
+          </div>
 
         </div>
       </div>

@@ -18,6 +18,7 @@ from dateutil.relativedelta import relativedelta
 from django.db import connections, transaction
 from django.shortcuts import redirect
 import math
+import unicodedata
 from urllib.parse import urlencode
 from django.db import connections, transaction, IntegrityError, OperationalError
 import traceback
@@ -58,6 +59,7 @@ from connect.sql import register_sql
 from accounts.access import get_user_access
 from connect.audit import fetch_one_dict, record_change_audit
 from connect.bonus_help import list_bonus_help, save_bonus_help
+from connect.sql.placement_tree_sql import PLACEMENT_TREE_REBUILD_CACHE_SQL
 
 logger = logging.getLogger(__name__)
 
@@ -1255,6 +1257,7 @@ class DriveBonusView(generic.ListView):
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
+        save_basic_bv_line = request.POST.get("save_basic_bv_line", "1") == "1"
 
         if action == "delete":
             return delete_bonus_result_for_kibetu(request, "drive_bonus")
@@ -2124,10 +2127,31 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
                 for row in cursor.fetchall()
             ]
 
+    def _get_period_choices(self):
+        return list(
+            PeriodMaster.objects.using("rds")
+            .exclude(st_date__isnull=True)
+            .exclude(end_date__isnull=True)
+            .order_by("-st_date", "-kibetu")
+        )
+
+    def _resolve_kibetu_period(self, q_kibetu):
+        if not q_kibetu:
+            return None
+
+        return (
+            PeriodMaster.objects.using("rds")
+            .filter(kibetu=q_kibetu)
+            .exclude(st_date__isnull=True)
+            .exclude(end_date__isnull=True)
+            .first()
+        )
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
         selected_month = (self.request.GET.get("target_month") or "").strip()
+        q_kibetu = (self.request.GET.get("q_kibetu") or "").strip()
 
         q_code = (self.request.GET.get("q_code") or "").strip()
         q_name = (self.request.GET.get("q_name") or "").strip()
@@ -2154,14 +2178,17 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
         page = max(1, page)
 
         ctx["month_choices"] = self._get_month_choices()
+        ctx["period_choices"] = self._get_period_choices()
 
         ctx["selected_month"] = selected_month
+        ctx["q_kibetu"] = q_kibetu
+        ctx["selected_kibetu"] = q_kibetu
+        ctx["history_rows"] = get_week_bonus_history_rows()
+        ctx["history_target_url_name"] = "connect:repurchase_list"
         ctx["q_code"] = q_code
         ctx["q_name"] = q_name
         ctx["q_order_code"] = q_order_code
         ctx["q_order_types"] = q_order_types
-        ctx["q_bonus_date_from"] = q_bonus_date_from
-        ctx["q_bonus_date_to"] = q_bonus_date_to
         ctx["per_page"] = per_page
 
         year = None
@@ -2179,6 +2206,21 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
                 year = None
                 month = None
 
+        selected_kibetu_period = self._resolve_kibetu_period(q_kibetu)
+        ctx["selected_kibetu_period"] = selected_kibetu_period
+        if q_kibetu and not selected_kibetu_period:
+            ctx["kibetu_period_error"] = "選択された期別の期間が見つかりません。"
+
+        if selected_kibetu_period:
+            effective_bonus_date_from = selected_kibetu_period.st_date.strftime("%Y-%m-%d")
+            effective_bonus_date_to = selected_kibetu_period.end_date.strftime("%Y-%m-%d")
+        else:
+            effective_bonus_date_from = q_bonus_date_from
+            effective_bonus_date_to = q_bonus_date_to
+
+        ctx["q_bonus_date_from"] = effective_bonus_date_from
+        ctx["q_bonus_date_to"] = effective_bonus_date_to
+
         total_count = self._count_rows(
             year=year,
             month=month,
@@ -2186,8 +2228,8 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
             q_name=q_name,
             q_order_code=q_order_code,
             q_order_types=q_order_types,
-            q_bonus_date_from=q_bonus_date_from,
-            q_bonus_date_to=q_bonus_date_to,
+            q_bonus_date_from=effective_bonus_date_from,
+            q_bonus_date_to=effective_bonus_date_to,
         )
 
         total_pages = max(1, math.ceil(total_count / per_page))
@@ -2204,8 +2246,8 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
             q_name=q_name,
             q_order_code=q_order_code,
             q_order_types=q_order_types,
-            q_bonus_date_from=q_bonus_date_from,
-            q_bonus_date_to=q_bonus_date_to,
+            q_bonus_date_from=effective_bonus_date_from,
+            q_bonus_date_to=effective_bonus_date_to,
             limit=per_page,
             offset=offset,
         )
@@ -2214,15 +2256,17 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
 
         if selected_month:
             base_params["target_month"] = selected_month
+        if q_kibetu:
+            base_params["q_kibetu"] = q_kibetu
         if q_code:
             base_params["q_code"] = q_code
         if q_name:
             base_params["q_name"] = q_name
         if q_order_code:
             base_params["q_order_code"] = q_order_code
-        if q_bonus_date_from:
+        if q_bonus_date_from and not selected_kibetu_period:
             base_params["q_bonus_date_from"] = q_bonus_date_from
-        if q_bonus_date_to:
+        if q_bonus_date_to and not selected_kibetu_period:
             base_params["q_bonus_date_to"] = q_bonus_date_to
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
@@ -2886,6 +2930,7 @@ class BasicBonusView(generic.ListView):
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "")
         selected_kibetu = request.POST.get("kibetu", "").strip()
+        save_basic_bv_line = request.POST.get("save_basic_bv_line", "1") == "1"
 
         if action == "delete":
             return delete_bonus_result_for_kibetu(request, "basic_bonus")
@@ -2905,7 +2950,14 @@ class BasicBonusView(generic.ListView):
 
         try:
             basic_bonus_rows = self._get_basic_bonus_rows(selected_kibetu, period)
-            basic_bv_line_rows = self._get_basic_bv_line_rows(selected_kibetu, period)
+            basic_bv_line_rows = (
+                self._get_basic_bv_line_rows(selected_kibetu, period)
+                if save_basic_bv_line
+                else []
+            )
+            bv_line_comment = (
+                "繰り越しBV保存あり" if save_basic_bv_line else "繰り越しBV保存なし"
+            )
 
             if not basic_bonus_rows:
                 with transaction.atomic(using="rds"):
@@ -2913,7 +2965,7 @@ class BasicBonusView(generic.ListView):
                         "basic_bonus",
                         selected_kibetu,
                         request.user.username,
-                        "0件登録（対象データなし）",
+                        f"0件登録（対象データなし、{bv_line_comment}）",
                     )
                 messages.warning(request, "登録対象データはありませんが、登録履歴を残しました。")
                 return redirect(f"/basic_bonus/?kibetu={selected_kibetu}")
@@ -2940,7 +2992,8 @@ class BasicBonusView(generic.ListView):
                         selected_kibetu,
                     )
                     cursor.execute(delete_bonus_result_sql, delete_params)
-                    cursor.execute(delete_bv_line_sql, delete_params)
+                    if save_basic_bv_line:
+                        cursor.execute(delete_bv_line_sql, delete_params)
 
                     logger.info(
                         "ベーシックボーナス登録INSERT SQLを実行します。kibetu=%s",
@@ -2948,7 +3001,7 @@ class BasicBonusView(generic.ListView):
                     )
                     cursor.executemany(insert_sql, insert_params)
 
-                    if basic_bv_line_insert_params:
+                    if save_basic_bv_line and basic_bv_line_insert_params:
                         cursor.executemany(
                             basic_bv_line_insert_sql, basic_bv_line_insert_params
                         )
@@ -2977,11 +3030,15 @@ class BasicBonusView(generic.ListView):
                             "basic_bonus",
                             selected_kibetu,
                             request.user.username,
-                            f"{len(basic_bonus_rows)}件登録"
+                            f"{len(basic_bonus_rows)}件登録（{bv_line_comment}）"
                         ]
                     )
 
-            messages.success(request, f"{len(basic_bonus_rows)}件をベーシックボーナス結果に登録しました。")
+            messages.success(
+                request,
+                f"{len(basic_bonus_rows)}件をベーシックボーナス結果に登録しました。"
+                f"（{bv_line_comment}）"
+            )
 
         except Exception as e:
             logger.exception("ベーシックボーナス結果登録エラー")
@@ -4172,6 +4229,7 @@ class RepurchaseExportView(RepurchaseListView):
 
     def get(self, request):
         selected_month = (request.GET.get("target_month") or "").strip()
+        q_kibetu = (request.GET.get("q_kibetu") or "").strip()
 
         q_code = (request.GET.get("q_code") or "").strip()
         q_name = (request.GET.get("q_name") or "").strip()
@@ -4183,6 +4241,10 @@ class RepurchaseExportView(RepurchaseListView):
 
         q_bonus_date_from = (request.GET.get("q_bonus_date_from") or "").strip()
         q_bonus_date_to = (request.GET.get("q_bonus_date_to") or "").strip()
+        selected_kibetu_period = self._resolve_kibetu_period(q_kibetu)
+        if selected_kibetu_period:
+            q_bonus_date_from = selected_kibetu_period.st_date.strftime("%Y-%m-%d")
+            q_bonus_date_to = selected_kibetu_period.end_date.strftime("%Y-%m-%d")
 
         year = None
         month = None
@@ -5422,34 +5484,15 @@ LIMIT %s OFFSET %s
             cols = [col[0] for col in cursor.description]
             return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
-    def _copy_from_view(self) -> int:
+    def _rebuild_cache(self) -> int:
         delete_sql = "DELETE FROM bonus_db.C_users_placement_tree_cache"
-
-        insert_sql = """
-INSERT INTO bonus_db.C_users_placement_tree_cache (
-    placement_code,
-    placement_name,
-    placement_rank,
-    jwoa_code,
-    send_bv_name,
-    `rank`,
-    tree_level
-)
-SELECT
-    placement_code,
-    placement_name,
-    placement_rank,
-    jmoa_code,
-    send_bv_name,
-    `rank`,
-    tree_level
-FROM bonus_db.v_user_placement_tree
-        """
 
         with transaction.atomic(using="rds"):
             with connections["rds"].cursor() as cursor:
+                logger.info("上位者Treeキャッシュ再作成前削除SQLを実行します。")
                 cursor.execute(delete_sql)
-                cursor.execute(insert_sql)
+                logger.info("上位者Treeキャッシュ再作成INSERT SQLを実行します。")
+                cursor.execute(PLACEMENT_TREE_REBUILD_CACHE_SQL)
                 inserted_count = cursor.rowcount
 
         return inserted_count
@@ -5469,20 +5512,20 @@ FROM bonus_db.v_user_placement_tree
 
         try:
             if action == "copy":
-                inserted_count = self._copy_from_view()
+                inserted_count = self._rebuild_cache()
                 record_change_audit(
                     request,
                     screen_name="上位者 Tree",
                     action_type="bulk_create",
                     target_table="C_users_placement_tree_cache",
                     target_pk=None,
-                    summary=f"上位者 Treeテーブルへ {inserted_count}件コピー登録",
+                    summary=f"上位者 Treeテーブルを再作成: {inserted_count}件",
                     before_values=None,
                     after_values={"count": inserted_count},
                 )
                 messages.success(
                     request,
-                    f"上位者 Treeテーブルへ {inserted_count} 件コピー登録しました。"
+                    f"上位者 Treeテーブルを {inserted_count} 件で再作成しました。"
                 )
             elif action == "delete":
                 deleted_count = self._delete_all_cache()
@@ -5587,6 +5630,93 @@ FROM bonus_db.v_user_placement_tree
             base_params=base_params,
         )
 
+
+class PlacementTreeExportView(PlacementTreeView):
+    EXPORT_FETCH_SIZE = 5000
+    RANK_LABELS = {
+        1: "シルバー",
+        2: "ゴールド",
+        3: "プラチナ",
+        4: "ダイヤ",
+        9: "一般会員",
+    }
+
+    def _rank_label(self, value):
+        return self.RANK_LABELS.get(value, "-")
+
+    def get(self, request, *args, **kwargs):
+        q_jwoa_code = (request.GET.get("q_jwoa_code") or "").strip()
+        q_name = (request.GET.get("q_name") or "").strip()
+        q_placement_code = (request.GET.get("q_placement_code") or "").strip()
+        q_placement_rank = (request.GET.get("q_placement_rank") or "").strip()
+        q_rank = (request.GET.get("q_rank") or "").strip()
+
+        where_sql, params = self._build_where(
+            q_jwoa_code=q_jwoa_code,
+            q_name=q_name,
+            q_placement_code=q_placement_code,
+            q_placement_rank=q_placement_rank,
+            q_rank=q_rank,
+        )
+
+        sql = f"""
+SELECT
+    c.id,
+    c.placement_code,
+    c.placement_name,
+    c.placement_rank,
+    c.jwoa_code,
+    c.send_bv_name,
+    c.`rank`,
+    c.tree_level,
+    c.created_at
+FROM bonus_db.C_users_placement_tree_cache c
+{where_sql}
+ORDER BY c.id
+        """
+
+        wb = openpyxl.Workbook(write_only=True)
+        ws = wb.create_sheet("上位者Tree")
+        ws.append([
+            "ID",
+            "上位者コード",
+            "上位者名",
+            "上位者ランク",
+            "会員コード",
+            "会員名",
+            "ランク",
+            "階層",
+            "作成日時",
+        ])
+
+        with connections["rds"].cursor() as cursor:
+            logger.info("上位者Tree Excel出力SQLを実行します。")
+            cursor.execute(sql, params)
+            while True:
+                rows = cursor.fetchmany(self.EXPORT_FETCH_SIZE)
+                if not rows:
+                    break
+                for row in rows:
+                    ws.append([
+                        row[0],
+                        row[1],
+                        row[2],
+                        self._rank_label(row[3]),
+                        row[4],
+                        row[5],
+                        self._rank_label(row[6]),
+                        row[7],
+                        row[8],
+                    ])
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = (
+            'attachment; filename="placement_tree.xlsx"'
+        )
+        wb.save(response)
+        return response
 
 
 class MatchingBonusView(generic.ListView):
@@ -7507,6 +7637,66 @@ class BusinessPersonalWeekPerformanceView(KeysetPaginationMixin, generic.Templat
         )
 
 
+_FULLWIDTH_KANA_TO_HALFWIDTH = {
+    "ア": "ｱ", "イ": "ｲ", "ウ": "ｳ", "エ": "ｴ", "オ": "ｵ",
+    "カ": "ｶ", "キ": "ｷ", "ク": "ｸ", "ケ": "ｹ", "コ": "ｺ",
+    "サ": "ｻ", "シ": "ｼ", "ス": "ｽ", "セ": "ｾ", "ソ": "ｿ",
+    "タ": "ﾀ", "チ": "ﾁ", "ツ": "ﾂ", "テ": "ﾃ", "ト": "ﾄ",
+    "ナ": "ﾅ", "ニ": "ﾆ", "ヌ": "ﾇ", "ネ": "ﾈ", "ノ": "ﾉ",
+    "ハ": "ﾊ", "ヒ": "ﾋ", "フ": "ﾌ", "ヘ": "ﾍ", "ホ": "ﾎ",
+    "マ": "ﾏ", "ミ": "ﾐ", "ム": "ﾑ", "メ": "ﾒ", "モ": "ﾓ",
+    "ヤ": "ﾔ", "ユ": "ﾕ", "ヨ": "ﾖ",
+    "ラ": "ﾗ", "リ": "ﾘ", "ル": "ﾙ", "レ": "ﾚ", "ロ": "ﾛ",
+    "ワ": "ﾜ", "ヲ": "ｦ", "ン": "ﾝ",
+    "ァ": "ｧ", "ィ": "ｨ", "ゥ": "ｩ", "ェ": "ｪ", "ォ": "ｫ",
+    "ャ": "ｬ", "ュ": "ｭ", "ョ": "ｮ", "ッ": "ｯ",
+    "ー": "ｰ", "・": "･",
+}
+
+_FULLWIDTH_VOICED_KANA_TO_HALFWIDTH = {
+    "ガ": "ｶﾞ", "ギ": "ｷﾞ", "グ": "ｸﾞ", "ゲ": "ｹﾞ", "ゴ": "ｺﾞ",
+    "ザ": "ｻﾞ", "ジ": "ｼﾞ", "ズ": "ｽﾞ", "ゼ": "ｾﾞ", "ゾ": "ｿﾞ",
+    "ダ": "ﾀﾞ", "ヂ": "ﾁﾞ", "ヅ": "ﾂﾞ", "デ": "ﾃﾞ", "ド": "ﾄﾞ",
+    "バ": "ﾊﾞ", "ビ": "ﾋﾞ", "ブ": "ﾌﾞ", "ベ": "ﾍﾞ", "ボ": "ﾎﾞ",
+    "ヴ": "ｳﾞ",
+}
+
+_FULLWIDTH_SEMIVOICED_KANA_TO_HALFWIDTH = {
+    "パ": "ﾊﾟ", "ピ": "ﾋﾟ", "プ": "ﾌﾟ", "ペ": "ﾍﾟ", "ポ": "ﾎﾟ",
+}
+
+
+def _fullwidth_kana_to_halfwidth(value):
+    converted = []
+    for char in value:
+        if char in _FULLWIDTH_VOICED_KANA_TO_HALFWIDTH:
+            converted.append(_FULLWIDTH_VOICED_KANA_TO_HALFWIDTH[char])
+        elif char in _FULLWIDTH_SEMIVOICED_KANA_TO_HALFWIDTH:
+            converted.append(_FULLWIDTH_SEMIVOICED_KANA_TO_HALFWIDTH[char])
+        else:
+            converted.append(_FULLWIDTH_KANA_TO_HALFWIDTH.get(char, char))
+    return "".join(converted)
+
+
+def _kana_search_variants(value):
+    raw = (value or "").strip()
+    if not raw:
+        return []
+
+    fullwidth = unicodedata.normalize("NFKC", raw)
+    candidates = [
+        raw,
+        fullwidth,
+        _fullwidth_kana_to_halfwidth(raw),
+        _fullwidth_kana_to_halfwidth(fullwidth),
+    ]
+    variants = []
+    for candidate in candidates:
+        if candidate and candidate not in variants:
+            variants.append(candidate)
+    return variants
+
+
 class UsersView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "users.html"
     EXPORT_FETCH_SIZE = 5000
@@ -7515,6 +7705,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         self,
         q_jpid: str = "",
         q_name: str = "",
+        q_name_kana: str = "",
         q_introducer: str = "",
         q_placement: str = "",
         q_status: str = "",
@@ -7531,6 +7722,16 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             where.append("(u.send_bv_name LIKE %s OR u.name LIKE %s)")
             params.append(f"%{q_name}%")
             params.append(f"%{q_name}%")
+
+        if q_name_kana:
+            kana_variants = _kana_search_variants(q_name_kana)
+            if kana_variants:
+                where.append(
+                    "("
+                    + " OR ".join(["u.name_kana LIKE %s"] * len(kana_variants))
+                    + ")"
+                )
+                params.extend([f"%{variant}%" for variant in kana_variants])
 
         if q_introducer:
             where.append("u.introducer_code LIKE %s")
@@ -7556,6 +7757,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         self,
         q_jpid: str = "",
         q_name: str = "",
+        q_name_kana: str = "",
         q_introducer: str = "",
         q_placement: str = "",
         q_status: str = "",
@@ -7565,6 +7767,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         where_sql, params = self._build_where(
             q_jpid=q_jpid,
             q_name=q_name,
+            q_name_kana=q_name_kana,
             q_introducer=q_introducer,
             q_placement=q_placement,
             q_status=q_status,
@@ -7587,6 +7790,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         self,
         q_jpid: str = "",
         q_name: str = "",
+        q_name_kana: str = "",
         q_introducer: str = "",
         q_placement: str = "",
         q_status: str = "",
@@ -7598,6 +7802,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         where_sql, params = self._build_where(
             q_jpid=q_jpid,
             q_name=q_name,
+            q_name_kana=q_name_kana,
             q_introducer=q_introducer,
             q_placement=q_placement,
             q_status=q_status,
@@ -7610,6 +7815,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
                 u.group_code,
                 u.jmoa_code,
                 u.send_bv_name,
+                u.name_kana,
                 u.introducer_code,
                 u.placement_code,
                 u.rank,
@@ -7639,6 +7845,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
 
         q_jpid = (self.request.GET.get("q_jpid") or "").strip()
         q_name = (self.request.GET.get("q_name") or "").strip()
+        q_name_kana = (self.request.GET.get("q_name_kana") or "").strip()
         q_introducer = (self.request.GET.get("q_introducer") or "").strip()
         q_placement = (self.request.GET.get("q_placement") or "").strip()
         q_status = (self.request.GET.get("q_status") or "").strip()
@@ -7649,6 +7856,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         total_count = self._fetch_total_count(
             q_jpid=q_jpid,
             q_name=q_name,
+            q_name_kana=q_name_kana,
             q_introducer=q_introducer,
             q_placement=q_placement,
             q_status=q_status,
@@ -7662,6 +7870,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         rows = self._fetch_rows(
             q_jpid=q_jpid,
             q_name=q_name,
+            q_name_kana=q_name_kana,
             q_introducer=q_introducer,
             q_placement=q_placement,
             q_status=q_status,
@@ -7672,6 +7881,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
 
         ctx["q_jpid"] = q_jpid
         ctx["q_name"] = q_name
+        ctx["q_name_kana"] = q_name_kana
         ctx["q_introducer"] = q_introducer
         ctx["q_placement"] = q_placement
         ctx["q_status"] = q_status
@@ -7684,6 +7894,9 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
 
         if q_name:
             base_params["q_name"] = q_name
+
+        if q_name_kana:
+            base_params["q_name_kana"] = q_name_kana
 
         if q_introducer:
             base_params["q_introducer"] = q_introducer
@@ -7742,6 +7955,7 @@ class UsersExportView(UsersView):
     def get(self, request, *args, **kwargs):
         q_jpid = (request.GET.get("q_jpid") or "").strip()
         q_name = (request.GET.get("q_name") or "").strip()
+        q_name_kana = (request.GET.get("q_name_kana") or "").strip()
         q_introducer = (request.GET.get("q_introducer") or "").strip()
         q_placement = (request.GET.get("q_placement") or "").strip()
         q_status = (request.GET.get("q_status") or "").strip()
@@ -7750,6 +7964,7 @@ class UsersExportView(UsersView):
         where_sql, params = self._build_where(
             q_jpid=q_jpid,
             q_name=q_name,
+            q_name_kana=q_name_kana,
             q_introducer=q_introducer,
             q_placement=q_placement,
             q_status=q_status,
