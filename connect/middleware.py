@@ -15,6 +15,8 @@ from accounts.access import (
     user_can_access_url,
     user_has_permission,
 )
+from accounts.login_history import record_login_history
+from accounts.models import LoginHistory
 
 
 LAST_VISITED_PATH_SESSION_KEY = "last_visited_path"
@@ -34,6 +36,8 @@ class SessionIdleTimeoutMiddleware:
 
             if last_activity is not None and (now - last_activity) > self.timeout:
                 redirect_path = self._get_redirect_path(request)
+                record_login_history(request, request.user, LoginHistory.EVENT_TIMEOUT_LOGOUT)
+                request._skip_login_history_logout = True
                 logout(request)
                 request.session.flush()
                 login_url = reverse("account_login")

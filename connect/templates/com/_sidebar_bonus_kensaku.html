@@ -2,7 +2,7 @@
 <nav class="col-12 col-md-3 col-lg-2">
   <div class="card shadow-sm position-sticky" style="top: 1rem;">
 
-    {% if user_access|can_menu:"s_drive_bonus" or user_access|can_menu:"s_basic_bonus" or user_access|can_menu:"s_matching_bonus" or user_access|can_menu:"s_month_title" %}
+    {% if user_access|can_menu:"s_drive_bonus" or user_access|can_menu:"s_basic_bonus" or user_access|can_menu:"basic_income_line_detail" or user_access|can_menu:"s_matching_bonus" or user_access|can_menu:"s_month_title" %}
     <div class="card-body">
       <div class="fw-bold mb-2">■ 週ボーナス</div>
 
@@ -15,6 +15,11 @@
         {% if user_access|can_menu:"s_basic_bonus" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'basic_bonus' %}active{% endif %}"
            href="{% url 'connect:s_basic_bonus' %}">ベーシックボーナス</a>
+        {% endif %}
+
+        {% if user_access|can_menu:"basic_income_line_detail" %}
+        <a class="list-group-item list-group-item-action {% if active_menu == 'basic_income_line_detail' %}active{% endif %}"
+           href="{% url 'connect:basic_income_line_detail' %}">収入ライン購入者詳細</a>
         {% endif %}
 
         {% if user_access|can_menu:"s_matching_bonus" %}

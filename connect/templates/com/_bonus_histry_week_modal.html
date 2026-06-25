@@ -1,3 +1,4 @@
+{% firstof select_param_name "kibetu" as history_select_param_name %}
 <div
   class="modal fade bonus-history-modal"
   id="{{ modal_id }}"
@@ -46,7 +47,11 @@
                 {% for h in history_rows %}
                   <tr class="{% if h.kibetu == selected_kibetu %}table-success{% elif h.is_next_completion_date %}table-primary{% endif %}">
                     <td class="text-center">
-                      <a class="btn btn-primary btn-sm" href="{% url history_target_url_name %}?kibetu={{ h.kibetu|urlencode }}">選択</a>
+                      <a class="btn btn-primary btn-sm"
+                         href="{% url history_target_url_name %}?{% if history_select_base_qs %}{{ history_select_base_qs }}&{% endif %}{{ history_select_param_name }}={{ h.kibetu|urlencode }}"
+                         data-history-select-link
+                         data-history-param-name="{{ history_select_param_name }}"
+                         data-history-kibetu="{{ h.kibetu }}">選択</a>
                     </td>
                     <td class="text-center">{{ h.kibetu }}</td>
                     <td class="text-center">{{ h.completion_date|default:"" }}</td>

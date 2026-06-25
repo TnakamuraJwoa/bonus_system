@@ -239,24 +239,14 @@ group by
  ラインコード
 ),
 
--- 収入ライン or 基本ラインの判定
+-- 基本ライン or 収入ラインの判定
 line_flg AS (
 SELECT
     a.*,
-
-    CASE
-        WHEN ROW_NUMBER() OVER (
-            PARTITION BY a.上位者コード
-            ORDER BY a.plus_carry_bv DESC
-        ) >= 3
-        THEN 2
-
-        ELSE ROW_NUMBER() OVER (
-            PARTITION BY a.上位者コード
-            ORDER BY a.plus_carry_bv DESC
-        )
-    END AS rn
-
+    ROW_NUMBER() OVER (
+        PARTITION BY a.上位者コード
+        ORDER BY a.plus_carry_bv DESC, a.ラインコード
+    ) AS line_rank
 FROM (
     SELECT
         上位者コード,
@@ -271,47 +261,24 @@ order by 上位者コード
 ),
 
 -- 基本ライン、収入ラインごとに合計
-sum_line_flg as (
+line_role_summary AS (
 select
  上位者コード,
- rn,
- sum(plus_carry_bv) as sum_plus_carry_bv
+ SUM(CASE WHEN line_rank = 1 THEN plus_carry_bv ELSE 0 END) AS basic_line_bv,
+ SUM(CASE WHEN line_rank BETWEEN 2 AND 5 THEN plus_carry_bv ELSE 0 END) AS income_line_bv
 from line_flg
 group by
- 上位者コード,
- rn
-order by
- 上位者コード,
- rn
+ 上位者コード
 ),
 
--- rn1 - rn2
+-- 基本ラインBV - 収入ラインBV
 line_diff AS (
 SELECT
     上位者コード,
-
-    IFNULL(
-        MAX(CASE WHEN rn = 1 THEN sum_plus_carry_bv END),
-        0
-    ) AS rn1_bv,
-
-    IFNULL(
-        MAX(CASE WHEN rn = 2 THEN sum_plus_carry_bv END),
-        0
-    ) AS rn2_bv,
-
-    IFNULL(
-        MAX(CASE WHEN rn = 1 THEN sum_plus_carry_bv END),
-        0
-    )
-    -
-    IFNULL(
-        MAX(CASE WHEN rn = 2 THEN sum_plus_carry_bv END),
-        0
-    ) AS diff_bv
-
-FROM sum_line_flg
-GROUP BY 上位者コード
+    basic_line_bv,
+    income_line_bv,
+    GREATEST(IFNULL(basic_line_bv, 0) - IFNULL(income_line_bv, 0), 0) AS diff_bv
+FROM line_role_summary
 )
 
 select
@@ -322,5 +289,5 @@ select
 from line_flg as a
 left join line_diff as b
 on a.上位者コード = b.上位者コード
-where a.rn = 1
+where a.line_rank = 1
 """

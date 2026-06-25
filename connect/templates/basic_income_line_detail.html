@@ -1,0 +1,768 @@
+{% extends 'base.html' %}
+{% load humanize static custom_filters %}
+
+{% block head %}
+  <link href="{% static 'css/common.css' %}?v=52" rel="stylesheet">
+  <style>
+    .income-line-detail-table {
+      min-width: 1450px;
+      white-space: nowrap;
+    }
+
+    .income-line-detail-table__badge-cell {
+      text-align: center !important;
+      vertical-align: middle;
+    }
+
+    .income-line-detail-table__badge-cell .badge {
+      display: inline-block;
+      float: none;
+    }
+
+    .income-line-carry-row {
+      background: #fff7e6;
+    }
+
+    .income-line-search-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .income-line-view-mode {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 0.2rem;
+    }
+
+    .view-mode-toggle {
+      position: relative;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      align-items: center;
+      min-width: 180px;
+      height: 38px;
+      padding: 3px;
+      border: 1px solid #dbe4f0;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #f8fafc, #eef2ff);
+      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.08);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .view-mode-toggle__input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .view-mode-toggle__thumb {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: calc(50% - 3px);
+      height: calc(100% - 6px);
+      border-radius: 999px;
+      background: linear-gradient(135deg, #4f46e5, #0ea5e9);
+      box-shadow: 0 6px 14px rgba(79, 70, 229, 0.28);
+      transition: transform 0.18s ease;
+    }
+
+    .view-mode-toggle__label {
+      position: relative;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.25rem;
+      color: #64748b;
+      font-size: 0.86rem;
+      font-weight: 700;
+      transition: color 0.18s ease;
+    }
+
+    .view-mode-toggle__label--list {
+      color: #fff;
+    }
+
+    .view-mode-toggle__input:checked ~ .view-mode-toggle__thumb {
+      transform: translateX(100%);
+    }
+
+    .view-mode-toggle__input:checked ~ .view-mode-toggle__label--list {
+      color: #64748b;
+    }
+
+    .view-mode-toggle__input:checked ~ .view-mode-toggle__label--tree {
+      color: #fff;
+    }
+
+    .view-mode-toggle:focus-within {
+      border-color: #4f46e5;
+      box-shadow: 0 0 0 0.2rem rgba(79, 70, 229, 0.16);
+    }
+
+    @media (max-width: 767.98px) {
+      .income-line-search-header {
+        flex-direction: column;
+      }
+
+      .income-line-view-mode {
+        align-items: flex-start;
+      }
+    }
+
+    .income-line-tree {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    .income-line-tree-scroll {
+      overflow: visible;
+    }
+
+    .income-line-tree__placement {
+      border-left: 4px solid #4f46e5;
+    }
+
+    .income-line-tree__line {
+      border-left: 3px solid #0ea5e9;
+      margin-left: 1rem;
+    }
+
+    .income-line-tree__items {
+      margin-left: 1.5rem;
+      border-left: 1px dashed #cbd5e1;
+      padding-left: 1rem;
+    }
+
+    .income-line-tree__line.is-collapsed .income-line-tree__items {
+      display: none;
+    }
+
+    .income-line-tree__line-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .income-line-tree__line-member {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .income-line-tree__line-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      align-items: center;
+    }
+
+    .income-line-tree__line-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 0.4rem;
+      align-items: center;
+    }
+
+    .income-line-tree__item {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.35rem 0;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    .income-line-tree__item:last-child {
+      border-bottom: 0;
+    }
+
+    .income-line-tree__path {
+      display: grid;
+      gap: 0.25rem;
+      padding: 0.35rem 0;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    .income-line-tree__path-node {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      align-items: center;
+      padding: 0.15rem 0;
+    }
+
+    .income-line-tree__path-node::before {
+      content: "└";
+      color: #94a3b8;
+      margin-right: 0.35rem;
+    }
+
+    .income-line-tree__path.is-collapsed .income-line-tree__path-node--intermediate {
+      display: none;
+    }
+
+    .income-line-tree__path-header {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 0.2rem;
+    }
+
+    .income-line-tree__path-name {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .income-line-tree__summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .income-line-tree-card:fullscreen,
+    .income-line-tree-card:-webkit-full-screen {
+      background: #fff;
+      overflow: hidden;
+      padding: 1rem;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    .income-line-tree-card:fullscreen > .card-body,
+    .income-line-tree-card:-webkit-full-screen > .card-body {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .income-line-tree-card:fullscreen .income-line-tree-scroll,
+    .income-line-tree-card:-webkit-full-screen .income-line-tree-scroll {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      padding-right: 0.5rem;
+      padding-bottom: 0.5rem;
+    }
+
+    .income-line-tree-card:fullscreen .income-line-tree,
+    .income-line-tree-card:-webkit-full-screen .income-line-tree {
+      min-height: calc(100vh - 8rem);
+      min-width: 1280px;
+    }
+  </style>
+{% endblock %}
+
+{% block contents %}
+<div class="container-fluid mt-3 app-page-viewport">
+  <div class="row g-1 h-100">
+    {% include "com/_sidebar_bonus_kensaku.html" with active_menu="basic_income_line_detail" %}
+
+    <main class="col-12 col-md-9 col-lg-10 app-page-main">
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <form method="get" class="bonus-search-form">
+            <input type="hidden" name="view_mode" value="list">
+            <div class="income-line-search-header">
+              <h5 class="page-title mb-0">【ボーナス検索 - 収入ライン購入者詳細】</h5>
+
+              {% if q_placement_code or show_tree or view_mode == "tree" %}
+                <div class="income-line-view-mode">
+                  <label class="view-mode-toggle" for="viewModeTree" title="一覧 / Tree表示を切り替え">
+                    <input class="view-mode-toggle__input"
+                           type="checkbox"
+                           role="switch"
+                           id="viewModeTree"
+                           name="view_mode"
+                           value="tree"
+                           aria-label="Tree表示に切り替え"
+                           data-return-url="{% if return_qs %}{% url 'connect:basic_income_line_detail' %}?{{ return_qs }}{% endif %}"
+                           {% if view_mode == "tree" %}checked{% endif %}>
+                    <span class="view-mode-toggle__thumb" aria-hidden="true"></span>
+                    <span class="view-mode-toggle__label view-mode-toggle__label--list">一覧</span>
+                    <span class="view-mode-toggle__label view-mode-toggle__label--tree">Tree</span>
+                  </label>
+                </div>
+              {% endif %}
+            </div>
+
+            <div class="bonus-search-filters">
+              <div>
+                {% bonus_calc_kibetu_input selected_kibetu period_type="weekly" %}
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">上位者コード</label>
+                <input type="text"
+                       name="q_placement_code"
+                       class="form-control"
+                       value="{{ q_placement_code|default:'' }}"
+                       placeholder="例：JP00000000">
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">ラインコード</label>
+                <input type="text"
+                       name="q_line_code"
+                       class="form-control"
+                       value="{{ q_line_code|default:'' }}"
+                       placeholder="例：JP00000000">
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">購入者コード</label>
+                <input type="text"
+                       name="q_purchaser_code"
+                       class="form-control"
+                       value="{{ q_purchaser_code|default:'' }}"
+                       placeholder="例：JP00000000">
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">購入者名</label>
+                <input type="text"
+                       name="q_purchaser_name"
+                       class="form-control"
+                       value="{{ q_purchaser_name|default:'' }}"
+                       placeholder="部分一致">
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">明細種別</label>
+                <select name="detail_type" class="form-select">
+                  <option value="" {% if not detail_type %}selected{% endif %}>全て</option>
+                  <option value="purchase" {% if detail_type == "purchase" %}selected{% endif %}>購入</option>
+                  <option value="carry_over" {% if detail_type == "carry_over" %}selected{% endif %}>繰り越し</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">ライン種別</label>
+                <select name="line_role" class="form-select">
+                  <option value="" {% if not line_role %}selected{% endif %}>全て</option>
+                  <option value="basic" {% if line_role == "basic" %}selected{% endif %}>基本ライン</option>
+                  <option value="income" {% if line_role == "income" %}selected{% endif %}>収入ライン</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">表示件数</label>
+                <select name="per_page" class="form-select">
+                  <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                  <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                  <option value="300" {% if per_page == 300 %}selected{% endif %}>300</option>
+                  <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+                </select>
+              </div>
+
+              <div class="bonus-search-actions">
+                <button type="submit" class="btn btn-primary">表示</button>
+                <a class="btn btn-outline-secondary" href="{% url 'connect:basic_income_line_detail' %}">リセット</a>
+              </div>
+            </div>
+          </form>
+
+          <div class="bonus-calc-selection-status mt-3">
+            {% bonus_calc_period_status empty_message="期別を選択してください" %}
+          </div>
+
+          {% if period_error %}
+            <div class="alert alert-warning mt-3 mb-0">{{ period_error }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if show_tree %}
+      <div class="card shadow-sm mb-3 income-line-tree-card" id="incomeLineTree" data-income-line-tree-card>
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <div class="fw-bold">Tree表示</div>
+              <div class="small text-muted">上位者コード指定時のみ表示します。</div>
+            </div>
+            <div class="d-flex gap-2 flex-wrap justify-content-end">
+              <button type="button"
+                      class="btn btn-outline-secondary btn-sm"
+                      data-income-line-list-toggle
+                      data-return-url="{% if return_qs %}{% url 'connect:basic_income_line_detail' %}?{{ return_qs }}{% endif %}">
+                一覧表示
+              </button>
+              {% if return_qs %}
+                <a class="btn btn-outline-secondary btn-sm"
+                   href="{% url 'connect:basic_income_line_detail' %}?{{ return_qs }}">
+                  一覧へ戻る
+                </a>
+              {% endif %}
+              <button type="button"
+                      class="btn btn-outline-primary btn-sm"
+                      data-income-line-tree-fullscreen>
+                全画面表示
+              </button>
+            </div>
+          </div>
+
+          <div class="income-line-tree-scroll">
+            <div class="income-line-tree">
+              {% for placement in tree_groups %}
+                <div class="card income-line-tree__placement">
+                <div class="card-body py-3">
+                  <div class="d-flex justify-content-between align-items-start flex-wrap mb-2">
+                    <div>
+                      <div class="fw-bold">
+                        上位者 {{ placement.placement_code }} {{ placement.placement_name }}
+                      </div>
+                      <div class="small text-muted">
+                        ランク:
+                        <span class="badge {{ placement.placement_rank|rank_badge_class }}">
+                          {{ placement.placement_rank|rank_label }}
+                        </span>
+                        {% if placement.placement_member.is_prev_month_active %}
+                          <span class="badge badge-success">前月アクティブ</span>
+                        {% endif %}
+                      </div>
+                    </div>
+                    <div class="income-line-tree__summary text-end">
+                      <span class="badge badge-primary">収入ライン合計BV {{ placement.income_line_bv|default:0|intcomma }}</span>
+                      <span class="badge badge-secondary">基本ライン合計BV {{ placement.basic_line_bv|default:0|intcomma }}</span>
+                      <span class="badge badge-danger">今回繰り越し予定BV {{ placement.next_carry_over_bv|default:0|intcomma }}</span>
+                    </div>
+                  </div>
+
+                  {% for line in placement.lines %}
+                    <div class="card income-line-tree__line mt-3 is-collapsed" data-income-line>
+                      <div class="card-body py-2">
+                        <div class="income-line-tree__line-header">
+                          <div class="income-line-tree__line-member">
+                            <div class="fw-bold">
+                              └ {{ line.line_role_label }} {{ line.line_code }} {{ line.line_member.name }}
+                            </div>
+                            <div class="income-line-tree__line-badges">
+                              {% if line.line_member.new_rank %}
+                                <span class="badge {{ line.line_member.new_rank|rank_badge_class }}">nランク:{{ line.line_member.new_rank|rank_label }}</span>
+                              {% endif %}
+                              {% if line.line_member.is_prev_month_active %}
+                                <span class="badge badge-success">前月アクティブ</span>
+                              {% endif %}
+                              {% if line.line_member.has_purchase %}
+                                <span class="badge badge-success">期間内購入あり</span>
+                                <span class="fw-bold text-success">{{ line.line_member.purchase_bv|default:0|intcomma }} BV</span>
+                              {% else %}
+                                <span class="badge badge-secondary">期間内購入なし</span>
+                              {% endif %}
+                            </div>
+                          </div>
+                          <div class="income-line-tree__line-actions">
+                            <span class="badge {% if line.line_rank == 1 %}badge-secondary{% else %}badge-info{% endif %}">
+                              ライン合計BV {{ line.line_total_bv|default:0|intcomma }}
+                            </span>
+                            <button type="button"
+                                    class="btn btn-outline-secondary btn-sm"
+                                    data-income-line-toggle>
+                              明細を表示
+                            </button>
+                          </div>
+                        </div>
+
+                        <div class="income-line-tree__items">
+                          {% for carry in line.carry_over_rows %}
+                            <div class="income-line-tree__item">
+                              <div>
+                                <span class="badge badge-warning mr-1">繰り越し</span>
+                                前回繰り越しBV
+                              </div>
+                              <div class="fw-bold text-primary">{{ carry.carry_over_bv|default:0|intcomma }}</div>
+                            </div>
+                          {% endfor %}
+
+                          {% for purchase in line.purchase_rows %}
+                            <div class="income-line-tree__path is-collapsed" data-income-line-path>
+                              {% if purchase.intermediate_count %}
+                                <div class="income-line-tree__path-header">
+                                  <button type="button"
+                                          class="btn btn-outline-secondary btn-sm"
+                                          data-income-line-path-toggle>
+                                    中間を表示（{{ purchase.intermediate_count }}人）
+                                  </button>
+                                </div>
+                              {% endif %}
+                              {% for node in purchase.path_nodes %}
+                                <div class="income-line-tree__path-node{% if not node.is_line_root and not node.is_purchaser %} income-line-tree__path-node--intermediate{% endif %}"
+                                     style="margin-left: {{ node.indent_px }}px;">
+                                  <div class="income-line-tree__path-name">
+                                    {% if node.is_line_root %}
+                                      <span class="badge badge-info">ライン</span>
+                                    {% elif node.is_purchaser %}
+                                      <span class="badge badge-primary">購入者</span>
+                                    {% else %}
+                                      <span class="badge badge-light">中間</span>
+                                    {% endif %}
+                                    <span>{{ node.code }} {{ node.name }}</span>
+                                    {% if not node.is_line_root %}
+                                      {% if node.new_rank %}
+                                        <span class="badge {{ node.new_rank|rank_badge_class }}">nランク:{{ node.new_rank|rank_label }}</span>
+                                      {% endif %}
+                                      {% if node.is_prev_month_active %}
+                                        <span class="badge badge-success">前月アクティブ</span>
+                                      {% endif %}
+                                    {% endif %}
+                                  </div>
+                                  <div>
+                                    {% if not node.is_line_root %}
+                                      {% if node.has_purchase %}
+                                        <span class="badge badge-success">期間内購入あり</span>
+                                        <span class="fw-bold ml-1">{{ node.purchase_bv|default:0|intcomma }} BV</span>
+                                      {% else %}
+                                        <span class="badge badge-secondary">期間内購入なし</span>
+                                      {% endif %}
+                                    {% endif %}
+                                  </div>
+                                </div>
+                              {% endfor %}
+                            </div>
+                          {% endfor %}
+
+                          {% if not line.carry_over_rows and not line.purchase_rows %}
+                            <div class="text-muted small">明細はありません。</div>
+                          {% endif %}
+                        </div>
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="card shadow-sm flex-grow-1" style="min-height: 0;">
+        <div class="card-body d-flex flex-column" style="min-height: 0; overflow: hidden;">
+          {% if rows %}
+            {% include "com/_list_summary.html" with list_title="収入ライン購入者詳細" %}
+
+            <div class="table-responsive flex-grow-1" style="min-height: 0; overflow-x: auto; overflow-y: auto;">
+              <table class="table table-bordered table-sm align-middle mb-0 income-line-detail-table">
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                  <tr>
+                    <th class="text-center">期別</th>
+                    <th class="text-center">上位者コード</th>
+                    <th class="text-center">上位者名</th>
+                    <th class="text-center">上位者ランク</th>
+                    <th class="text-center">ライン種別</th>
+                    <th class="text-center">ラインコード</th>
+                    <th class="text-center">購入者コード</th>
+                    <th class="text-center">購入者名</th>
+                    <th class="text-center">明細種別</th>
+                    <th class="text-center">購入者BV</th>
+                    <th class="text-center">前回繰り越しBV</th>
+                    <th class="text-center">明細BV</th>
+                    <th class="text-center">収入ライン合計BV</th>
+                    <th class="text-center">基本ライン合計BV</th>
+                    <th class="text-center">今回繰り越し予定BV</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for r in rows %}
+                    <tr class="{% if r.detail_type == 'carry_over' %}income-line-carry-row{% endif %}">
+                      <td>{{ r.kibetu }}</td>
+                      <td>
+                        <a href="{% url 'connect:basic_income_line_detail' %}?kibetu={{ r.kibetu|urlencode }}&q_placement_code={{ r.placement_code|urlencode }}&view_mode=tree&return_qs={{ request.GET.urlencode|urlencode }}#incomeLineTree"
+                           class="fw-bold"
+                           title="この上位者のTree表示へ移動">
+                          {{ r.placement_code }}
+                        </a>
+                      </td>
+                      <td>{{ r.placement_name }}</td>
+                      <td class="income-line-detail-table__badge-cell">
+                        <span class="badge {{ r.placement_rank|rank_badge_class }}">
+                          {{ r.placement_rank|rank_label }}
+                        </span>
+                      </td>
+                      <td class="income-line-detail-table__badge-cell">
+                        <span class="badge {% if r.line_rank == 1 %}badge-secondary{% else %}badge-info{% endif %}">
+                          {{ r.line_role_label }}
+                        </span>
+                      </td>
+                      <td>{{ r.line_code }}</td>
+                      <td>{{ r.purchaser_code|default:"-" }}</td>
+                      <td>{{ r.purchaser_name|default:"-" }}</td>
+                      <td class="income-line-detail-table__badge-cell">
+                        {% if r.detail_type == "carry_over" %}
+                          <span class="badge badge-warning">{{ r.detail_type_label }}</span>
+                        {% else %}
+                          <span class="badge badge-primary">{{ r.detail_type_label }}</span>
+                        {% endif %}
+                      </td>
+                      <td class="text-end">{{ r.purchase_bv|default:0|intcomma }}</td>
+                      <td class="fw-bold text-primary text-end">{{ r.carry_over_bv|default:0|intcomma }}</td>
+                      <td class="text-end">{{ r.calc_bv|default:0|intcomma }}</td>
+                      <td class="fw-bold text-end">{{ r.income_line_bv|default:0|intcomma }}</td>
+                      <td class="text-end">{{ r.basic_line_bv|default:0|intcomma }}</td>
+                      <td class="fw-bold text-danger text-end">{{ r.next_carry_over_bv|default:0|intcomma }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            {% include "com/_pagination.html" %}
+          {% else %}
+            {% if selected_kibetu %}
+              <p class="mb-0">この条件のデータはありません。</p>
+            {% else %}
+              <p class="mb-0 text-muted">期別を選択して「表示」を押してください。</p>
+            {% endif %}
+          {% endif %}
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+(function () {
+  var viewModeTree = document.getElementById("viewModeTree");
+  if (!viewModeTree) {
+    return;
+  }
+
+  viewModeTree.addEventListener("change", function () {
+    if (!viewModeTree.checked && viewModeTree.dataset.returnUrl) {
+      window.location.href = viewModeTree.dataset.returnUrl;
+      return;
+    }
+
+    var form = viewModeTree.closest("form");
+    if (!form) {
+      return;
+    }
+
+    form.action = window.location.pathname + (viewModeTree.checked ? "#incomeLineTree" : "");
+    if (form.requestSubmit) {
+      form.requestSubmit();
+    } else {
+      form.submit();
+    }
+  });
+
+  document.querySelectorAll("[data-income-line-list-toggle]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      if (button.dataset.returnUrl) {
+        window.location.href = button.dataset.returnUrl;
+        return;
+      }
+
+      viewModeTree.checked = false;
+      var form = viewModeTree.closest("form");
+      if (!form) {
+        return;
+      }
+      form.action = window.location.pathname;
+      if (form.requestSubmit) {
+        form.requestSubmit();
+      } else {
+        form.submit();
+      }
+    });
+  });
+})();
+
+(function () {
+  var treeCard = document.querySelector("[data-income-line-tree-card]");
+  var fullscreenButton = document.querySelector("[data-income-line-tree-fullscreen]");
+  if (!treeCard || !fullscreenButton) {
+    return;
+  }
+
+  function fullscreenElement() {
+    return document.fullscreenElement || document.webkitFullscreenElement || null;
+  }
+
+  function requestFullscreen(element) {
+    if (element.requestFullscreen) {
+      return element.requestFullscreen();
+    }
+    if (element.webkitRequestFullscreen) {
+      return element.webkitRequestFullscreen();
+    }
+    return Promise.reject(new Error("全画面表示に対応していません。"));
+  }
+
+  function exitFullscreen() {
+    if (document.exitFullscreen) {
+      return document.exitFullscreen();
+    }
+    if (document.webkitExitFullscreen) {
+      return document.webkitExitFullscreen();
+    }
+    return Promise.resolve();
+  }
+
+  function syncButtonLabel() {
+    fullscreenButton.textContent = fullscreenElement() === treeCard ? "元に戻す" : "全画面表示";
+  }
+
+  fullscreenButton.addEventListener("click", function () {
+    if (fullscreenElement() === treeCard) {
+      exitFullscreen().then(syncButtonLabel).catch(syncButtonLabel);
+    } else {
+      requestFullscreen(treeCard).then(syncButtonLabel).catch(function () {
+        alert("このブラウザでは全画面表示を開始できませんでした。");
+        syncButtonLabel();
+      });
+    }
+  });
+
+  document.addEventListener("fullscreenchange", syncButtonLabel);
+  document.addEventListener("webkitfullscreenchange", syncButtonLabel);
+})();
+
+(function () {
+  document.querySelectorAll("[data-income-line-toggle]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var line = button.closest("[data-income-line]");
+      if (!line) {
+        return;
+      }
+
+      var collapsed = line.classList.toggle("is-collapsed");
+      button.textContent = collapsed ? "明細を表示" : "明細を閉じる";
+    });
+  });
+})();
+
+(function () {
+  document.querySelectorAll("[data-income-line-path-toggle]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var path = button.closest("[data-income-line-path]");
+      if (!path) {
+        return;
+      }
+
+      var collapsed = path.classList.toggle("is-collapsed");
+      var countText = "";
+      var match = button.textContent.match(/（[^）]+）/);
+      if (match) {
+        countText = match[0];
+      }
+      button.textContent = collapsed ? "中間を表示" + countText : "中間を閉じる" + countText;
+    });
+  });
+})();
+</script>
+{% endblock %}

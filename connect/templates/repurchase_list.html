@@ -28,6 +28,18 @@
     background: #d1fae5;
     color: #047857;
   }
+
+  .repurchase-period-controlled.is-period-locked .form-control:disabled {
+    background: antiquewhite;
+    border-color: #e8dcc8;
+    color: #5c4a3a;
+    cursor: not-allowed;
+    opacity: 1;
+  }
+
+  .repurchase-period-controlled.is-period-locked .form-label {
+    color: #6b5b4d;
+  }
 </style>
 {% endblock %}
 
@@ -49,6 +61,18 @@
               <div class="text-muted small">購入情報を検索し、登録済みデータを確認します。</div>
             </div>
             <div class="d-flex align-items-center gap-2">
+              <button type="button"
+                      class="btn btn-sm btn-outline-secondary rounded-circle"
+                      data-toggle="modal"
+                      data-target="#repurchaseHistoryModal"
+                      aria-label="登録履歴から期別を選択"
+                      title="登録履歴から期別を選択"
+                      style="width: 1.8rem; height: 1.8rem; padding: 0; line-height: 1;">
+                <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                  <path fill="currentColor" d="M3 2.5A1.5 1.5 0 0 1 4.5 1h7A1.5 1.5 0 0 1 13 2.5v11a.5.5 0 0 1-.76.43L8 11.38l-4.24 2.55A.5.5 0 0 1 3 13.5v-11ZM4.5 2a.5.5 0 0 0-.5.5v10.12l3.74-2.25a.5.5 0 0 1 .52 0L12 12.62V2.5a.5.5 0 0 0-.5-.5h-7Z"/>
+                  <path fill="currentColor" d="M5.5 4.5A.5.5 0 0 1 6 4h4a.5.5 0 0 1 0 1H6a.5.5 0 0 1-.5-.5Zm0 2A.5.5 0 0 1 6 6h4a.5.5 0 0 1 0 1H6a.5.5 0 0 1-.5-.5Z"/>
+                </svg>
+              </button>
               {% if user_access.can_export %}
                 <button type="button"
                         class="btn btn-sm btn-outline-success rounded-circle"
@@ -82,6 +106,21 @@
             </div>
 
             <div style="width: 145px;">
+              <label class="form-label mb-0 small text-muted">期別</label>
+              <select name="q_kibetu" class="form-select" data-period-kibetu-select>
+                <option value="">指定なし</option>
+                {% for obj in period_choices %}
+                  <option value="{{ obj.kibetu }}"
+                          data-st-date="{{ obj.st_date|date:'Y-m-d' }}"
+                          data-end-date="{{ obj.end_date|date:'Y-m-d' }}"
+                          {% if obj.kibetu == q_kibetu %}selected{% endif %}>
+                    {{ obj.kibetu }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div style="width: 145px;">
               <label class="form-label mb-0 small text-muted">注文番号</label>
               <input type="text"
                      name="q_order_code"
@@ -108,20 +147,28 @@
                      placeholder="">
             </div>
 
-            <div style="width: 130px;">
+            <div class="repurchase-period-controlled{% if selected_kibetu_period %} is-period-locked{% endif %}"
+                 style="width: 130px;"
+                 data-period-date-group>
               <label class="form-label mb-0 small text-muted">ボーナス支払日FROM</label>
               <input type="date"
                      name="q_bonus_date_from"
                      class="form-control js-date-paste-normalize"
-                     value="{{ q_bonus_date_from|default:'' }}">
+                     value="{{ q_bonus_date_from|default:'' }}"
+                     data-period-date-from
+                     {% if selected_kibetu_period %}disabled{% endif %}>
             </div>
 
-            <div style="width: 130px;">
+            <div class="repurchase-period-controlled{% if selected_kibetu_period %} is-period-locked{% endif %}"
+                 style="width: 130px;"
+                 data-period-date-group>
               <label class="form-label mb-0 small text-muted">ボーナス支払日TO</label>
               <input type="date"
                      name="q_bonus_date_to"
                      class="form-control js-date-paste-normalize"
-                     value="{{ q_bonus_date_to|default:'' }}">
+                     value="{{ q_bonus_date_to|default:'' }}"
+                     data-period-date-to
+                     {% if selected_kibetu_period %}disabled{% endif %}>
             </div>
 
             <div style="width: 150px;">
@@ -225,7 +272,7 @@
 
           </form>
 
-          {% if selected_period or q_order_types %}
+          {% if selected_period or q_kibetu or selected_kibetu_period or q_order_types or q_code or q_name or q_order_code or q_bonus_date_from or q_bonus_date_to %}
             <div class="selection-indicator-group mt-3">
               <span class="selection-indicator__label mr-1">選択中：</span>
               {% if selected_period %}
@@ -234,10 +281,33 @@
               {% else %}
                 <span class="selection-indicator__badge selection-indicator__badge--all badge badge-pill">全件表示</span>
               {% endif %}
+              {% if q_code %}
+                <span class="selection-indicator__badge selection-indicator__badge--code badge badge-pill">会員番号={{ q_code }}</span>
+              {% endif %}
+              {% if q_name %}
+                <span class="selection-indicator__badge selection-indicator__badge--name badge badge-pill">会員名={{ q_name }}</span>
+              {% endif %}
+              {% if q_order_code %}
+                <span class="selection-indicator__badge selection-indicator__badge--order-code badge badge-pill">注文番号={{ q_order_code }}</span>
+              {% endif %}
               {% if q_order_types %}
                 {% for order_type in q_order_types %}
                   <span class="selection-indicator__badge selection-indicator__badge--order-type badge badge-pill">{{ order_type }}</span>
                 {% endfor %}
+              {% endif %}
+              {% if selected_kibetu_period %}
+                <span class="selection-indicator__badge selection-indicator__badge--period badge badge-pill">
+                  期別={{ selected_kibetu_period.kibetu }}（{{ selected_kibetu_period.st_date|date:"Y-m-d" }} ～ {{ selected_kibetu_period.end_date|date:"Y-m-d" }}）
+                </span>
+              {% elif kibetu_period_error %}
+                <span class="badge badge-warning">{{ kibetu_period_error }}</span>
+              {% elif q_kibetu %}
+                <span class="selection-indicator__badge selection-indicator__badge--period badge badge-pill">期別={{ q_kibetu }}</span>
+              {% endif %}
+              {% if q_bonus_date_from or q_bonus_date_to %}
+                <span class="selection-indicator__badge selection-indicator__badge--bonus-date badge badge-pill">
+                  ボーナス支払日={% if q_bonus_date_from %}{{ q_bonus_date_from }}{% else %}指定なし{% endif %} ～ {% if q_bonus_date_to %}{{ q_bonus_date_to }}{% else %}指定なし{% endif %}
+                </span>
               {% endif %}
             </div>
           {% endif %}
@@ -309,7 +379,7 @@
             {% include "com/_pagination.html" %}
 
           {% else %}
-            {% if selected_month or q_code or q_name or q_order_code or q_order_types or q_bonus_date_from or q_bonus_date_to %}
+            {% if selected_month or q_kibetu or q_code or q_name or q_order_code or q_order_types or q_bonus_date_from or q_bonus_date_to %}
               <p class="mb-0">この条件のデータはありません。</p>
             {% else %}
               <p class="mb-0 text-muted">検索条件を指定して「検索」を押してください。</p>
@@ -322,6 +392,8 @@
     </main>
   </div>
 </div>
+
+{% include "com/_bonus_histry_week_modal.html" with modal_id="repurchaseHistoryModal" select_param_name="q_kibetu" %}
 
 {% if user_access.can_export %}
 <div class="modal fade" id="repurchaseExportModal" tabindex="-1" role="dialog" aria-labelledby="repurchaseExportModalLabel" aria-hidden="true">
@@ -351,6 +423,18 @@
           <div class="mb-1">注文番号：<strong>{{ q_order_code|default:"指定なし" }}</strong></div>
           <div class="mb-1">会員番号：<strong>{{ q_code|default:"指定なし" }}</strong></div>
           <div class="mb-1">会員名：<strong>{{ q_name|default:"指定なし" }}</strong></div>
+          <div class="mb-1">
+            期別：
+            <strong>
+              {% if selected_kibetu_period %}
+                {{ selected_kibetu_period.kibetu }}（{{ selected_kibetu_period.st_date|date:"Y-m-d" }} ～ {{ selected_kibetu_period.end_date|date:"Y-m-d" }}）
+              {% elif q_kibetu %}
+                {{ q_kibetu }}
+              {% else %}
+                指定なし
+              {% endif %}
+            </strong>
+          </div>
           <div class="mb-1">ボーナス支払日FROM：<strong>{{ q_bonus_date_from|default:"指定なし" }}</strong></div>
           <div class="mb-1">ボーナス支払日TO：<strong>{{ q_bonus_date_to|default:"指定なし" }}</strong></div>
           <div>
@@ -387,6 +471,74 @@
       $("#repurchaseExportModal").modal("hide");
     });
   }
+})();
+
+(function () {
+  var periodSelect = document.querySelector("[data-period-kibetu-select]");
+  var dateFrom = document.querySelector("[data-period-date-from]");
+  var dateTo = document.querySelector("[data-period-date-to]");
+  var dateGroups = document.querySelectorAll("[data-period-date-group]");
+  if (!periodSelect || !dateFrom || !dateTo) {
+    return;
+  }
+
+  function syncPeriodDates(clearDatesOnReset) {
+    var selected = periodSelect.options[periodSelect.selectedIndex];
+    var stDate = selected ? selected.getAttribute("data-st-date") : "";
+    var endDate = selected ? selected.getAttribute("data-end-date") : "";
+    var hasPeriod = Boolean(periodSelect.value && stDate && endDate);
+
+    if (hasPeriod) {
+      dateFrom.value = stDate;
+      dateTo.value = endDate;
+    } else if (clearDatesOnReset) {
+      dateFrom.value = "";
+      dateTo.value = "";
+    }
+
+    dateFrom.disabled = hasPeriod;
+    dateTo.disabled = hasPeriod;
+    dateGroups.forEach(function (group) {
+      group.classList.toggle("is-period-locked", hasPeriod);
+    });
+  }
+
+  periodSelect.addEventListener("change", function () {
+    syncPeriodDates(true);
+  });
+  syncPeriodDates(false);
+})();
+
+(function () {
+  var filterForm = document.querySelector(".repurchase-list-filter");
+  if (!filterForm) {
+    return;
+  }
+
+  document.querySelectorAll("#repurchaseHistoryModal [data-history-select-link]").forEach(function (link) {
+    link.addEventListener("click", function (event) {
+      var kibetu = link.getAttribute("data-history-kibetu");
+      var paramName = link.getAttribute("data-history-param-name") || "q_kibetu";
+      if (!kibetu) {
+        return;
+      }
+
+      event.preventDefault();
+
+      var targetUrl = new URL(link.href, window.location.href);
+      var params = new URLSearchParams(new FormData(filterForm));
+      params.set(paramName, kibetu);
+
+      Array.from(params.keys()).forEach(function (key) {
+        if (params.getAll(key).every(function (value) { return value === ""; })) {
+          params.delete(key);
+        }
+      });
+
+      targetUrl.search = params.toString();
+      window.location.href = targetUrl.toString();
+    });
+  });
 })();
 
 (function () {

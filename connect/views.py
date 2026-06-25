@@ -2127,10 +2127,31 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
                 for row in cursor.fetchall()
             ]
 
+    def _get_period_choices(self):
+        return list(
+            PeriodMaster.objects.using("rds")
+            .exclude(st_date__isnull=True)
+            .exclude(end_date__isnull=True)
+            .order_by("-st_date", "-kibetu")
+        )
+
+    def _resolve_kibetu_period(self, q_kibetu):
+        if not q_kibetu:
+            return None
+
+        return (
+            PeriodMaster.objects.using("rds")
+            .filter(kibetu=q_kibetu)
+            .exclude(st_date__isnull=True)
+            .exclude(end_date__isnull=True)
+            .first()
+        )
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
         selected_month = (self.request.GET.get("target_month") or "").strip()
+        q_kibetu = (self.request.GET.get("q_kibetu") or "").strip()
 
         q_code = (self.request.GET.get("q_code") or "").strip()
         q_name = (self.request.GET.get("q_name") or "").strip()
@@ -2157,15 +2178,39 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
         page = max(1, page)
 
         ctx["month_choices"] = self._get_month_choices()
+        ctx["period_choices"] = self._get_period_choices()
 
         ctx["selected_month"] = selected_month
+        ctx["q_kibetu"] = q_kibetu
+        ctx["selected_kibetu"] = q_kibetu
+        ctx["history_rows"] = get_week_bonus_history_rows()
+        ctx["history_target_url_name"] = "connect:repurchase_list"
         ctx["q_code"] = q_code
         ctx["q_name"] = q_name
         ctx["q_order_code"] = q_order_code
         ctx["q_order_types"] = q_order_types
-        ctx["q_bonus_date_from"] = q_bonus_date_from
-        ctx["q_bonus_date_to"] = q_bonus_date_to
         ctx["per_page"] = per_page
+
+        history_select_base_params = {}
+        if selected_month:
+            history_select_base_params["target_month"] = selected_month
+        if q_code:
+            history_select_base_params["q_code"] = q_code
+        if q_name:
+            history_select_base_params["q_name"] = q_name
+        if q_order_code:
+            history_select_base_params["q_order_code"] = q_order_code
+        if q_bonus_date_from:
+            history_select_base_params["q_bonus_date_from"] = q_bonus_date_from
+        if q_bonus_date_to:
+            history_select_base_params["q_bonus_date_to"] = q_bonus_date_to
+        if per_page != self.DEFAULT_PER_PAGE:
+            history_select_base_params["per_page"] = per_page
+        ctx["history_select_base_qs"] = urlencode(history_select_base_params)
+        for order_type in q_order_types:
+            if ctx["history_select_base_qs"]:
+                ctx["history_select_base_qs"] += "&"
+            ctx["history_select_base_qs"] += urlencode({"q_order_type": order_type})
 
         year = None
         month = None
@@ -2182,6 +2227,23 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
                 year = None
                 month = None
 
+        selected_kibetu_period = self._resolve_kibetu_period(q_kibetu)
+        ctx["selected_kibetu_period"] = selected_kibetu_period
+        if q_kibetu and not selected_kibetu_period:
+            ctx["kibetu_period_error"] = "選択された期別の期間が見つかりません。"
+
+        if selected_kibetu_period:
+            effective_bonus_date_from = selected_kibetu_period.st_date.strftime("%Y-%m-%d")
+            effective_bonus_date_to = selected_kibetu_period.end_date.strftime("%Y-%m-%d")
+        else:
+            effective_bonus_date_from = q_bonus_date_from
+            effective_bonus_date_to = q_bonus_date_to
+
+        ctx["input_bonus_date_from"] = q_bonus_date_from
+        ctx["input_bonus_date_to"] = q_bonus_date_to
+        ctx["q_bonus_date_from"] = effective_bonus_date_from
+        ctx["q_bonus_date_to"] = effective_bonus_date_to
+
         total_count = self._count_rows(
             year=year,
             month=month,
@@ -2189,8 +2251,8 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
             q_name=q_name,
             q_order_code=q_order_code,
             q_order_types=q_order_types,
-            q_bonus_date_from=q_bonus_date_from,
-            q_bonus_date_to=q_bonus_date_to,
+            q_bonus_date_from=effective_bonus_date_from,
+            q_bonus_date_to=effective_bonus_date_to,
         )
 
         total_pages = max(1, math.ceil(total_count / per_page))
@@ -2207,8 +2269,8 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
             q_name=q_name,
             q_order_code=q_order_code,
             q_order_types=q_order_types,
-            q_bonus_date_from=q_bonus_date_from,
-            q_bonus_date_to=q_bonus_date_to,
+            q_bonus_date_from=effective_bonus_date_from,
+            q_bonus_date_to=effective_bonus_date_to,
             limit=per_page,
             offset=offset,
         )
@@ -2217,15 +2279,17 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
 
         if selected_month:
             base_params["target_month"] = selected_month
+        if q_kibetu:
+            base_params["q_kibetu"] = q_kibetu
         if q_code:
             base_params["q_code"] = q_code
         if q_name:
             base_params["q_name"] = q_name
         if q_order_code:
             base_params["q_order_code"] = q_order_code
-        if q_bonus_date_from:
+        if q_bonus_date_from and not selected_kibetu_period:
             base_params["q_bonus_date_from"] = q_bonus_date_from
-        if q_bonus_date_to:
+        if q_bonus_date_to and not selected_kibetu_period:
             base_params["q_bonus_date_to"] = q_bonus_date_to
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
@@ -4188,6 +4252,7 @@ class RepurchaseExportView(RepurchaseListView):
 
     def get(self, request):
         selected_month = (request.GET.get("target_month") or "").strip()
+        q_kibetu = (request.GET.get("q_kibetu") or "").strip()
 
         q_code = (request.GET.get("q_code") or "").strip()
         q_name = (request.GET.get("q_name") or "").strip()
@@ -4199,6 +4264,10 @@ class RepurchaseExportView(RepurchaseListView):
 
         q_bonus_date_from = (request.GET.get("q_bonus_date_from") or "").strip()
         q_bonus_date_to = (request.GET.get("q_bonus_date_to") or "").strip()
+        selected_kibetu_period = self._resolve_kibetu_period(q_kibetu)
+        if selected_kibetu_period:
+            q_bonus_date_from = selected_kibetu_period.st_date.strftime("%Y-%m-%d")
+            q_bonus_date_to = selected_kibetu_period.end_date.strftime("%Y-%m-%d")
 
         year = None
         month = None
