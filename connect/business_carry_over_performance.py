@@ -210,6 +210,14 @@ class CarryOverPerformanceView(KeysetPaginationMixin, generic.TemplateView):
         if not q_kibetu:
             messages.error(request, "期別を選択してください。")
             return redirect("connect:business_carry_over_performance")
+        registered_kibetu_set = {
+            row.get("kibetu")
+            for row in fetch_carry_over_history_rows()
+            if row.get("kibetu") and (row.get("row_count") or 0) > 0
+        }
+        if q_kibetu not in registered_kibetu_set:
+            messages.error(request, "登録されている期別のみ削除できます。")
+            return redirect("connect:business_carry_over_performance")
 
         delete_sql = f"DELETE FROM {BASIC_BV_LINE_TABLE} WHERE kibetu = %s"
 
@@ -378,6 +386,15 @@ class CarryOverPerformanceView(KeysetPaginationMixin, generic.TemplateView):
         q_placement_code = (self.request.GET.get("q_placement_code") or "").strip()
         q_jmoa_code = (self.request.GET.get("q_jmoa_code") or "").strip()
         kibetu_choice_mode = self.request.GET.get("kibetu_choice_mode") or "recent"
+        registration_history_rows = fetch_carry_over_history_rows()
+        registered_kibetu_set = {
+            row.get("kibetu")
+            for row in registration_history_rows
+            if row.get("kibetu") and (row.get("row_count") or 0) > 0
+        }
+        if q_kibetu and q_kibetu not in registered_kibetu_set:
+            messages.warning(self.request, "登録されている期別のみ選択できます。")
+            q_kibetu = ""
 
         per_page = self.get_per_page()
         total_count = self._fetch_total_count(
@@ -401,7 +418,7 @@ class CarryOverPerformanceView(KeysetPaginationMixin, generic.TemplateView):
         ctx["q_placement_code"] = q_placement_code
         ctx["q_jmoa_code"] = q_jmoa_code
         ctx["active_menu"] = "business_carry_over_performance"
-        ctx["registration_history_rows"] = fetch_carry_over_history_rows()
+        ctx["registration_history_rows"] = registration_history_rows
         ctx["registration_history_modal_id"] = "carryOverPerformanceHistoryModal"
         ctx["registration_modal_title"] = "登録履歴（繰り越し業績照会）"
         ctx["registration_target_url_name"] = "connect:business_carry_over_performance"
@@ -420,3 +437,59 @@ class CarryOverPerformanceView(KeysetPaginationMixin, generic.TemplateView):
                 "kibetu_choice_mode": kibetu_choice_mode,
             },
         )
+
+
+class CarryOverPerformanceExportView(CarryOverPerformanceView):
+    def get(self, request, *args, **kwargs):
+        q_kibetu = (request.GET.get("q_kibetu") or "").strip()
+        q_placement_code = (request.GET.get("q_placement_code") or "").strip()
+        q_jmoa_code = (request.GET.get("q_jmoa_code") or "").strip()
+        registered_kibetu_set = {
+            row.get("kibetu")
+            for row in fetch_carry_over_history_rows()
+            if row.get("kibetu") and (row.get("row_count") or 0) > 0
+        }
+        if q_kibetu and q_kibetu not in registered_kibetu_set:
+            q_kibetu = ""
+
+        rows = self._fetch_rows(
+            q_kibetu=q_kibetu,
+            q_placement_code=q_placement_code,
+            q_jmoa_code=q_jmoa_code,
+            limit=1000000,
+            offset=0,
+        )
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "繰り越し業績照会"
+        ws.append([
+            "期別",
+            "上位者コード",
+            "会員コード",
+            "BV",
+            "繰り越しBV",
+            "作成日時",
+        ])
+
+        for row in rows:
+            created_at = row.get("created_at")
+            if created_at is not None and hasattr(created_at, "strftime"):
+                created_at = created_at.strftime("%Y-%m-%d %H:%M:%S")
+            ws.append([
+                row.get("kibetu"),
+                row.get("placement_code"),
+                row.get("jmoa_code"),
+                row.get("bv") or 0,
+                row.get("carry_over_bv") or 0,
+                created_at,
+            ])
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = (
+            'attachment; filename="business_carry_over_performance.xlsx"'
+        )
+        wb.save(response)
+        return response

@@ -43,11 +43,11 @@
     <main class="col-12 col-md-9 col-lg-10 list-page-main">
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          {% include "com/_bonus_calc_help.html" with title="【繰り越し照会 - 繰り越し業績照会】" help_title="繰り越し業績照会" help_key="business_carry_over_performance" history_modal_id=registration_history_modal_id history_title="登録履歴を表示" import_modal_id="carryOverImportModal" import_title="CSV/Excel取込" %}
+          {% include "com/_bonus_calc_help.html" with title="【繰り越し照会 - 繰り越し業績照会】" help_title="繰り越し業績照会" help_key="business_carry_over_performance" history_modal_id=registration_history_modal_id history_title="登録履歴を表示" import_modal_id="carryOverImportModal" import_title="CSV/Excel取込" export_modal_id="carryOverExportModal" export_title="Excel出力" %}
 
           <div class="business-performance-toolbar">
             <form method="get" class="business-performance-filter mb-0" autocomplete="off">
-              {% business_search_kibetu_input q_kibetu period_type="weekly" %}
+              {% business_search_kibetu_input q_kibetu period_type="weekly" registered_only=True %}
 
               <div style="width: 180px;">
                 <label class="form-label mb-0 small text-muted">上位者コード</label>
@@ -197,6 +197,38 @@
 </div>
 {% endif %}
 
+{% if user_access.can_export %}
+<div class="modal fade bonus-export-modal" id="carryOverExportModal" tabindex="-1" role="dialog" aria-labelledby="carryOverExportModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title" id="carryOverExportModalLabel">Excel出力</h5>
+          <div class="small text-muted">現在の検索条件で繰り越し業績を出力します。</div>
+        </div>
+        <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="border rounded p-3 bg-light">
+          <div class="mb-1">期別：<strong>{{ q_kibetu|default:"指定なし" }}</strong></div>
+          <div class="mb-1">上位者コード：<strong>{{ q_placement_code|default:"指定なし" }}</strong></div>
+          <div class="mb-1">会員コード：<strong>{{ q_jmoa_code|default:"指定なし" }}</strong></div>
+          <div>件数：<strong>{{ total_count|default:0|intcomma }} 件</strong></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
+        <a href="{% url 'connect:business_carry_over_performance_export' %}?{{ request.GET.urlencode }}"
+           class="btn btn-success"
+           id="carryOverExportButton">Excel出力</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% include "com/_business_search_registration_modal.html" with modal_id=registration_history_modal_id modal_title=registration_modal_title selected_q_kibetu=q_kibetu registration_target_url_name=registration_target_url_name %}
 
 <div class="bonus-calculating-overlay" id="carryOverRegisterOverlay" aria-live="polite" aria-hidden="true">
@@ -210,6 +242,15 @@
 
 {% block script %}
 <script>
+(function () {
+  var exportButton = document.getElementById("carryOverExportButton");
+  if (exportButton) {
+    exportButton.addEventListener("click", function () {
+      $("#carryOverExportModal").modal("hide");
+    });
+  }
+})();
+
 (function () {
   var kibetuInput = document.querySelector('input[name="q_kibetu"]');
   var deleteForm = document.querySelector("[data-carry-over-delete-form]");
