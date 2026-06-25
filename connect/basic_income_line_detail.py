@@ -177,6 +177,47 @@ class BasicIncomeLineDetailView(generic.TemplateView):
             cols = [c[0] for c in cursor.description]
             return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
+    def _fetch_tree_rows(self, base_params, filters):
+        where_sql, filter_params = self._build_where(filters)
+        sql = f"""
+            {BASIC_INCOME_LINE_DETAIL_CTE_SQL}
+            SELECT
+                kibetu,
+                placement_code,
+                placement_name,
+                placement_rank,
+                line_code,
+                purchaser_code,
+                purchaser_name,
+                path_codes,
+                purchase_bv,
+                carry_over_bv,
+                calc_bv,
+                line_rank,
+                line_role_label,
+                line_total_bv,
+                income_line_bv,
+                basic_line_bv,
+                next_carry_over_bv,
+                detail_type,
+                detail_type_label
+            FROM income_line_detail
+            {where_sql}
+            ORDER BY
+                placement_code,
+                line_rank,
+                line_total_bv DESC,
+                line_code,
+                detail_sort,
+                purchaser_code
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, base_params + filter_params)
+            logger.info("収入ライン購入者詳細 Tree SELECT SQLを実行します。")
+            cols = [c[0] for c in cursor.description]
+            return [dict(zip(cols, row)) for row in cursor.fetchall()]
+
     def _fetch_member_purchase_map(self, base_params, rows):
         codes = set()
         for row in rows:
@@ -424,8 +465,9 @@ class BasicIncomeLineDetailView(generic.TemplateView):
         page = self._get_page(total_pages)
         offset = (page - 1) * per_page
         rows = self._fetch_rows(base_params, filters, per_page, offset) if total_count else []
-        show_tree = view_mode == "tree" and bool(filters["q_placement_code"] and rows)
-        member_purchase_map = self._fetch_member_purchase_map(base_params, rows) if show_tree else {}
+        show_tree = view_mode == "tree" and bool(filters["q_placement_code"] and total_count)
+        tree_rows = self._fetch_tree_rows(base_params, filters) if show_tree else []
+        member_purchase_map = self._fetch_member_purchase_map(base_params, tree_rows) if tree_rows else {}
 
         base_qs_params = {
             "kibetu": selected_kibetu,
@@ -443,7 +485,7 @@ class BasicIncomeLineDetailView(generic.TemplateView):
         ctx.update({
             "rows": rows,
             "show_tree": show_tree,
-            "tree_groups": self._build_tree_groups(rows, member_purchase_map) if show_tree else [],
+            "tree_groups": self._build_tree_groups(tree_rows, member_purchase_map) if tree_rows else [],
             "total_count": total_count,
             "display_from": (page - 1) * per_page + 1 if total_count else 0,
             "display_to": min(page * per_page, total_count) if total_count else 0,
