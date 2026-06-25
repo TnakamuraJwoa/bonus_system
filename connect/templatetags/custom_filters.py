@@ -329,7 +329,7 @@ def bonus_calc_kibetu_input(context, selected_kibetu="", period_type="weekly"):
 
 
 @register.inclusion_tag("com/_business_search_kibetu_input.html", takes_context=True)
-def business_search_kibetu_input(context, q_kibetu="", period_type="weekly", placeholder=""):
+def business_search_kibetu_input(context, q_kibetu="", period_type="weekly", placeholder="", registered_only=False):
     request = context.get("request")
     created_kibetu_set = set()
     for row in context.get("registration_history_rows") or []:
@@ -342,10 +342,17 @@ def business_search_kibetu_input(context, q_kibetu="", period_type="weekly", pla
         period_type,
         created_kibetu_set=created_kibetu_set,
     )
+    if registered_only:
+        period_context["period_choices"] = [
+            period
+            for period in period_context["period_choices"]
+            if period.kibetu in created_kibetu_set
+        ]
 
     return {
         "q_kibetu": q_kibetu or "",
         "placeholder": placeholder or "期別を入力または選択",
+        "registered_only": registered_only,
         **period_context,
     }
 

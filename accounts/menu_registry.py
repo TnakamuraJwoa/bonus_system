@@ -188,6 +188,9 @@ for _feature in MENU_FEATURES:
 
 # export 等は親画面の権限に紐づける
 URL_NAME_TO_MENU_KEY["repurchase_export"] = "repurchase_list"
+URL_NAME_TO_MENU_KEY["business_carry_over_performance_export"] = (
+    "business_carry_over_performance"
+)
 
 ALL_MENU_KEYS = tuple(feature.key for feature in MENU_FEATURES)
 

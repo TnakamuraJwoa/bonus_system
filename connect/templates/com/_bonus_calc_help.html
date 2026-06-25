@@ -1,19 +1,23 @@
 {% load custom_filters %}
-{% bonus_help help_key help_title as help_data %}
+{% if request.user.is_staff or request.user.is_superuser %}
+  {% bonus_help help_key help_title as help_data %}
+{% endif %}
 
 <div class="d-flex align-items-center gap-2 mb-3">
   <h5 class="page-title mb-0">{{ title }}</h5>
-  <button
-    type="button"
-    class="btn btn-sm btn-outline-info rounded-circle bonus-help-button"
-    data-toggle="modal"
-    data-target="#bonusHelpModal_{{ help_key }}"
-    aria-label="{{ help_title }}の説明を表示"
-    title="説明を表示"
-    style="width: 1.65rem; height: 1.65rem; padding: 0; line-height: 1;"
-  >
-    ?
-  </button>
+  {% if request.user.is_staff or request.user.is_superuser %}
+    <button
+      type="button"
+      class="btn btn-sm btn-outline-info rounded-circle bonus-help-button"
+      data-toggle="modal"
+      data-target="#bonusHelpModal_{{ help_key }}"
+      aria-label="{{ help_title }}の説明を表示"
+      title="説明を表示"
+      style="width: 1.65rem; height: 1.65rem; padding: 0; line-height: 1;"
+    >
+      ?
+    </button>
+  {% endif %}
   {% if history_modal_id %}
     <button
       type="button"
@@ -44,39 +48,56 @@
       </svg>
     </button>
   {% endif %}
+  {% if export_modal_id and user_access.can_export %}
+    <button
+      type="button"
+      class="btn btn-sm btn-outline-success rounded-circle bonus-export-button"
+      data-toggle="modal"
+      data-target="#{{ export_modal_id }}"
+      aria-label="{{ export_title|default:'Excel出力' }}"
+      title="{{ export_title|default:'Excel出力' }}"
+      style="width: 1.65rem; height: 1.65rem; padding: 0; line-height: 1;"
+    >
+      <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+        <path fill="currentColor" d="M8.5 1.5A.5.5 0 0 0 8 1H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6.5a.5.5 0 0 0-.15-.35l-4.5-4.5a.5.5 0 0 0-.35-.15H8.5ZM9 2.7 12.3 6H10a1 1 0 0 1-1-1V2.7ZM5.1 8h1.1l.8 1.35L7.8 8h1.05l-1.3 2 1.38 2H7.82L7 10.58 6.17 12H5.1l1.36-2L5.1 8Z"/>
+      </svg>
+    </button>
+  {% endif %}
 </div>
 
-<div
-  class="modal fade bonus-help-modal"
-  id="bonusHelpModal_{{ help_key }}"
-  tabindex="-1"
-  role="dialog"
-  aria-labelledby="bonusHelpModalLabel_{{ help_key }}"
-  aria-hidden="true"
->
-  <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="bonusHelpModalLabel_{{ help_key }}">{{ help_data.title }}</h5>
-        <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
-          <span aria-hidden="true">&times;</span>
-        </button>
-      </div>
-      <div class="modal-body">
-        <div class="bonus-help-content">
-          {{ help_data.content|linebreaksbr }}
+{% if request.user.is_staff or request.user.is_superuser %}
+  <div
+    class="modal fade bonus-help-modal"
+    id="bonusHelpModal_{{ help_key }}"
+    tabindex="-1"
+    role="dialog"
+    aria-labelledby="bonusHelpModalLabel_{{ help_key }}"
+    aria-hidden="true"
+  >
+    <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="bonusHelpModalLabel_{{ help_key }}">{{ help_data.title }}</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+            <span aria-hidden="true">&times;</span>
+          </button>
         </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">閉じる</button>
+        <div class="modal-body">
+          <div class="bonus-help-content">
+            {{ help_data.content|linebreaksbr }}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">閉じる</button>
+        </div>
       </div>
     </div>
   </div>
-</div>
+{% endif %}
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {
-  document.querySelectorAll(".bonus-help-modal, .bonus-history-modal, .bonus-import-modal").forEach(function(modal) {
+  document.querySelectorAll(".bonus-help-modal, .bonus-history-modal, .bonus-import-modal, .bonus-export-modal").forEach(function(modal) {
     if (modal.parentElement !== document.body) {
       document.body.appendChild(modal);
     }

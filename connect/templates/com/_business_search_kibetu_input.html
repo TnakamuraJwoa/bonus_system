@@ -27,6 +27,7 @@
            value="{{ q_kibetu|default:'' }}"
            placeholder="{{ placeholder|default:'期別を入力または選択' }}"
            autocomplete="off"
+           {% if registered_only %}readonly{% endif %}
            aria-expanded="false">
     <button type="button"
             class="bonus-calc-kibetu-toggle"

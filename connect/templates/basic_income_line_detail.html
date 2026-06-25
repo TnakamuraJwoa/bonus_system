@@ -229,6 +229,34 @@
       gap: 0.5rem;
     }
 
+    .income-line-tree__empty-income {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 0.65rem 0 0.25rem 1rem;
+      padding: 0.55rem 0.75rem;
+      border: 1px solid #fecaca;
+      border-left: 3px solid #dc3545;
+      border-radius: 0.35rem;
+      background: #fef2f2;
+      color: #991b1b;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    .income-line-tree__empty-income-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.25rem;
+      height: 1.25rem;
+      border-radius: 999px;
+      background: #fee2e2;
+      color: #b91c1c;
+      font-size: 0.8rem;
+      flex: 0 0 auto;
+    }
+
     .income-line-tree-card:fullscreen,
     .income-line-tree-card:-webkit-full-screen {
       background: #fff;
@@ -438,6 +466,13 @@
                       <span class="badge badge-danger">今回繰り越し予定BV {{ placement.next_carry_over_bv|default:0|intcomma }}</span>
                     </div>
                   </div>
+
+                  {% if not placement.income_line_bv %}
+                    <div class="income-line-tree__empty-income">
+                      <span class="income-line-tree__empty-income-icon" aria-hidden="true">i</span>
+                      <span>収入ラインはありません</span>
+                    </div>
+                  {% endif %}
 
                   {% for line in placement.lines %}
                     <div class="card income-line-tree__line mt-3 is-collapsed" data-income-line>
