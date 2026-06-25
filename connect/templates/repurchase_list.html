@@ -272,7 +272,7 @@
 
           </form>
 
-          {% if selected_period or q_kibetu or selected_kibetu_period or q_order_types %}
+          {% if selected_period or q_kibetu or selected_kibetu_period or q_order_types or q_code or q_name or q_order_code or q_bonus_date_from or q_bonus_date_to %}
             <div class="selection-indicator-group mt-3">
               <span class="selection-indicator__label mr-1">選択中：</span>
               {% if selected_period %}
@@ -280,6 +280,15 @@
                 <span class="selection-indicator__badge selection-indicator__badge--period badge badge-pill">{{ period_label }}</span>
               {% else %}
                 <span class="selection-indicator__badge selection-indicator__badge--all badge badge-pill">全件表示</span>
+              {% endif %}
+              {% if q_code %}
+                <span class="selection-indicator__badge selection-indicator__badge--code badge badge-pill">会員番号={{ q_code }}</span>
+              {% endif %}
+              {% if q_name %}
+                <span class="selection-indicator__badge selection-indicator__badge--name badge badge-pill">会員名={{ q_name }}</span>
+              {% endif %}
+              {% if q_order_code %}
+                <span class="selection-indicator__badge selection-indicator__badge--order-code badge badge-pill">注文番号={{ q_order_code }}</span>
               {% endif %}
               {% if q_order_types %}
                 {% for order_type in q_order_types %}
@@ -292,6 +301,13 @@
                 </span>
               {% elif kibetu_period_error %}
                 <span class="badge badge-warning">{{ kibetu_period_error }}</span>
+              {% elif q_kibetu %}
+                <span class="selection-indicator__badge selection-indicator__badge--period badge badge-pill">期別={{ q_kibetu }}</span>
+              {% endif %}
+              {% if q_bonus_date_from or q_bonus_date_to %}
+                <span class="selection-indicator__badge selection-indicator__badge--bonus-date badge badge-pill">
+                  ボーナス支払日={% if q_bonus_date_from %}{{ q_bonus_date_from }}{% else %}指定なし{% endif %} ～ {% if q_bonus_date_to %}{{ q_bonus_date_to }}{% else %}指定なし{% endif %}
+                </span>
               {% endif %}
             </div>
           {% endif %}
@@ -466,7 +482,7 @@
     return;
   }
 
-  function syncPeriodDates() {
+  function syncPeriodDates(clearDatesOnReset) {
     var selected = periodSelect.options[periodSelect.selectedIndex];
     var stDate = selected ? selected.getAttribute("data-st-date") : "";
     var endDate = selected ? selected.getAttribute("data-end-date") : "";
@@ -475,7 +491,7 @@
     if (hasPeriod) {
       dateFrom.value = stDate;
       dateTo.value = endDate;
-    } else if (!periodSelect.value) {
+    } else if (clearDatesOnReset) {
       dateFrom.value = "";
       dateTo.value = "";
     }
@@ -487,8 +503,10 @@
     });
   }
 
-  periodSelect.addEventListener("change", syncPeriodDates);
-  syncPeriodDates();
+  periodSelect.addEventListener("change", function () {
+    syncPeriodDates(true);
+  });
+  syncPeriodDates(false);
 })();
 
 (function () {

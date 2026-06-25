@@ -2239,6 +2239,8 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
             effective_bonus_date_from = q_bonus_date_from
             effective_bonus_date_to = q_bonus_date_to
 
+        ctx["input_bonus_date_from"] = q_bonus_date_from
+        ctx["input_bonus_date_to"] = q_bonus_date_to
         ctx["q_bonus_date_from"] = effective_bonus_date_from
         ctx["q_bonus_date_to"] = effective_bonus_date_to
 
