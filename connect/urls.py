@@ -9,10 +9,7 @@ from .business_team_performance import (
     BusinessTeamWeekPerformanceView,
 )
 from .active_user_search import ActiveUserSearchExportView, ActiveUserSearchView
-<<<<<<< HEAD
-=======
 from .basic_income_line_detail import BasicIncomeLineDetailView
->>>>>>> dev
 from .introducer_tree import IntroducerTreeExportView, IntroducerTreeView
 
 
