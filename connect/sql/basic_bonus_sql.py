@@ -239,24 +239,14 @@ group by
  ラインコード
 ),
 
--- 収入ライン or 基本ラインの判定
+-- 基本ライン or 収入ラインの判定
 line_flg AS (
 SELECT
     a.*,
-
-    CASE
-        WHEN ROW_NUMBER() OVER (
-            PARTITION BY a.上位者コード
-            ORDER BY a.plus_carry_bv DESC
-        ) >= 3
-        THEN 2
-
-        ELSE ROW_NUMBER() OVER (
-            PARTITION BY a.上位者コード
-            ORDER BY a.plus_carry_bv DESC
-        )
-    END AS rn
-
+    ROW_NUMBER() OVER (
+        PARTITION BY a.上位者コード
+        ORDER BY a.plus_carry_bv DESC, a.ラインコード
+    ) AS line_rank
 FROM (
     SELECT
         上位者コード,
@@ -270,15 +260,22 @@ FROM (
 order by 上位者コード
 ),
 
+-- 基本ライン、収入ラインごとの合計
+line_role_summary AS (
+SELECT
+    上位者コード,
+    SUM(CASE WHEN line_rank = 1 THEN plus_carry_bv ELSE 0 END) AS basic_line_bv,
+    SUM(CASE WHEN line_rank BETWEEN 2 AND 5 THEN plus_carry_bv ELSE 0 END) AS income_line_bv
+FROM line_flg
+GROUP BY 上位者コード
+),
+
 -- ブルーダイヤ
 blue_daiya as (
 SELECT 上位者コード
-FROM line_flg
-WHERE rn IN (1, 2)
-GROUP BY 上位者コード
-HAVING
-    COUNT(*) = 2
-    AND MIN(plus_carry_bv) >= 250000
+FROM line_role_summary
+WHERE basic_line_bv >= 250000
+  AND income_line_bv >= 250000
 ),
 
 -- ans_basic_bonus
@@ -319,7 +316,7 @@ FROM payer_list_prevMonth_users_add_carry_bv AS a
 JOIN line_flg
   ON a.上位者コード = line_flg.上位者コード
  AND a.ラインコード = line_flg.ラインコード
- AND line_flg.rn = 2
+ AND line_flg.line_rank BETWEEN 2 AND 5
 
 left join bonus_db.users_target_rank as b
 on a.上位者コード = b.jmoa_code

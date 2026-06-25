@@ -63,6 +63,12 @@ MENU_FEATURES = (
     MenuFeature("s_drive_bonus", "ドライブボーナス（検索）", "bonus_search", ("s_drive_bonus",)),
     MenuFeature("s_basic_bonus", "ベーシックボーナス（検索）", "bonus_search", ("s_basic_bonus",)),
     MenuFeature(
+        "basic_income_line_detail",
+        "収入ライン購入者詳細",
+        "bonus_search",
+        ("basic_income_line_detail",),
+    ),
+    MenuFeature(
         "s_matching_bonus",
         "マッチングボーナス（検索）",
         "bonus_search",
