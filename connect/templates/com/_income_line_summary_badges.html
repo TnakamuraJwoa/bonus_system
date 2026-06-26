@@ -1,0 +1,7 @@
+{% load humanize %}
+<div class="income-line-tree__summary text-end">
+  <span class="badge badge-primary">収入ライン合計BV {{ summary.income_line_bv|default:0|intcomma }}</span>
+  <span class="badge badge-secondary">基本ライン合計BV {{ summary.basic_line_bv|default:0|intcomma }}</span>
+  <span class="badge badge-warning">前回繰り越しBV {{ summary.prev_carry_over_bv|default:0|intcomma }}</span>
+  <span class="badge badge-danger">今回繰り越し予定BV {{ summary.next_carry_over_bv|default:0|intcomma }}</span>
+</div>

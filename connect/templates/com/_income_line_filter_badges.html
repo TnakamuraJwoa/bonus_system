@@ -1,0 +1,12 @@
+{% if active_filter_badges %}
+  <div class="selection-indicator income-line-filter-status{% if not compact %} mt-3{% endif %}">
+    {% if show_label != False %}
+      <span class="selection-indicator__label mr-1">{{ label|default:"絞り込み" }}：</span>
+    {% endif %}
+    {% for badge in active_filter_badges %}
+      <span class="selection-indicator__badge income-line-filter-badge--{{ badge.class }} badge badge-pill">
+        {{ badge.label }}={{ badge.value }}
+      </span>
+    {% endfor %}
+  </div>
+{% endif %}
