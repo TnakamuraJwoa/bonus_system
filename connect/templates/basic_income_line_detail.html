@@ -9,6 +9,13 @@
       white-space: nowrap;
     }
 
+    .income-line-detail-table th,
+    .income-line-detail-table td {
+      padding-top: 0.28rem;
+      padding-bottom: 0.28rem;
+      line-height: 1.2;
+    }
+
     .income-line-detail-table__badge-cell {
       text-align: center !important;
       vertical-align: middle;
@@ -21,6 +28,135 @@
 
     .income-line-carry-row {
       background: #fff7e6;
+    }
+
+    .income-line-filter-status {
+      display: flex;
+      align-items: center;
+      flex-wrap: nowrap;
+      gap: 0.4rem;
+      max-width: 100%;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding-bottom: 0.1rem;
+      white-space: nowrap;
+    }
+
+    .income-line-filter-status .selection-indicator__label,
+    .income-line-filter-status .selection-indicator__badge {
+      flex: 0 0 auto;
+    }
+
+    .income-line-filter-badge--placement {
+      background: linear-gradient(135deg, #06b6d4, #0ea5e9);
+    }
+
+    .income-line-filter-badge--line {
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+    }
+
+    .income-line-filter-badge--purchaser-code {
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+    }
+
+    .income-line-filter-badge--purchaser-name {
+      background: linear-gradient(135deg, #ec4899, #be185d);
+    }
+
+    .income-line-filter-badge--detail-type {
+      background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+    }
+
+    .income-line-filter-badge--line-role {
+      background: linear-gradient(135deg, #ef4444, #b91c1c);
+    }
+
+    .income-line-filter-badge--view-mode {
+      background: linear-gradient(135deg, #14b8a6, #0f766e);
+    }
+
+    .income-line-filter-badge--per-page {
+      background: linear-gradient(135deg, #64748b, #334155);
+    }
+
+    .income-line-filter-badge--all {
+      background: linear-gradient(135deg, #78716c, #57534e);
+    }
+
+    .bonus-calc-selection-status {
+      display: flex;
+      align-items: center;
+      flex-wrap: nowrap;
+      gap: 0.4rem;
+      max-width: 100%;
+      overflow-x: auto;
+      overflow-y: hidden;
+      white-space: nowrap;
+      scrollbar-width: none;
+    }
+
+    .bonus-calc-selection-status::-webkit-scrollbar {
+      display: none;
+    }
+
+    .bonus-calc-selection-status .selection-indicator {
+      flex: 0 0 auto;
+      margin-top: 0 !important;
+    }
+
+    .bonus-calc-selection-status .income-line-filter-status {
+      flex: 0 0 auto;
+      margin-top: 0 !important;
+    }
+
+    .income-line-summary-note {
+      color: #64748b;
+      font-size: 0.82rem;
+    }
+
+    .income-line-fullscreen-only {
+      display: none;
+    }
+
+    .income-line-tree-card:fullscreen .income-line-fullscreen-only,
+    .income-line-tree-card:-webkit-full-screen .income-line-fullscreen-only,
+    .income-line-list-card:fullscreen .income-line-fullscreen-only,
+    .income-line-list-card:-webkit-full-screen .income-line-fullscreen-only {
+      display: block;
+    }
+
+    .income-line-list-card .list-summary__title {
+      display: none;
+    }
+
+    .income-line-list-card > .card-body {
+      padding-top: 0.75rem;
+      padding-bottom: 0.75rem;
+    }
+
+    .income-line-list-card__header {
+      margin-bottom: -0.6rem !important;
+    }
+
+    .income-line-list-card__summary {
+      margin-bottom: 0.45rem !important;
+    }
+
+    .income-line-list-card__summary-row {
+      margin-bottom: 0 !important;
+      padding-bottom: 0 !important;
+      border-bottom: 0 !important;
+    }
+
+    .income-line-list-card__summary-row + .income-line-list-card__summary-row {
+      margin-top: 0.35rem;
+      padding-top: 0.35rem;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .income-line-list-card:fullscreen .list-summary__title,
+    .income-line-list-card:-webkit-full-screen .list-summary__title {
+      display: flex;
     }
 
     .income-line-search-header {
@@ -258,7 +394,9 @@
     }
 
     .income-line-tree-card:fullscreen,
-    .income-line-tree-card:-webkit-full-screen {
+    .income-line-tree-card:-webkit-full-screen,
+    .income-line-list-card:fullscreen,
+    .income-line-list-card:-webkit-full-screen {
       background: #fff;
       overflow: hidden;
       padding: 1rem;
@@ -267,7 +405,9 @@
     }
 
     .income-line-tree-card:fullscreen > .card-body,
-    .income-line-tree-card:-webkit-full-screen > .card-body {
+    .income-line-tree-card:-webkit-full-screen > .card-body,
+    .income-line-list-card:fullscreen > .card-body,
+    .income-line-list-card:-webkit-full-screen > .card-body {
       display: flex;
       flex-direction: column;
       height: 100%;
@@ -288,6 +428,14 @@
     .income-line-tree-card:-webkit-full-screen .income-line-tree {
       min-height: calc(100vh - 8rem);
       min-width: 1280px;
+    }
+
+    .income-line-list-card:fullscreen .table-responsive,
+    .income-line-list-card:-webkit-full-screen .table-responsive {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto !important;
+      padding-bottom: 0.5rem;
     }
   </style>
 {% endblock %}
@@ -401,8 +549,9 @@
             </div>
           </form>
 
-          <div class="bonus-calc-selection-status mt-3">
+          <div class="selection-indicator-group bonus-calc-selection-status mt-3">
             {% bonus_calc_period_status empty_message="期別を選択してください" %}
+            {% include "com/_income_line_filter_badges.html" with show_label=False compact=True %}
           </div>
 
           {% if period_error %}
@@ -439,6 +588,15 @@
               </button>
             </div>
           </div>
+          <div class="income-line-fullscreen-only">
+            <div class="selection-indicator-group bonus-calc-selection-status">
+              {% bonus_calc_period_status empty_message="期別を選択してください" %}
+              {% include "com/_income_line_filter_badges.html" with show_label=False compact=True %}
+            </div>
+            <div class="income-line-summary-note mt-1 mb-3">
+              サマリーは上位者全体のライン合計です。Treeは絞り込み条件に一致する明細のみ表示しています。
+            </div>
+          </div>
 
           <div class="income-line-tree-scroll">
             <div class="income-line-tree">
@@ -461,9 +619,7 @@
                       </div>
                     </div>
                     <div class="income-line-tree__summary text-end">
-                      <span class="badge badge-primary">収入ライン合計BV {{ placement.income_line_bv|default:0|intcomma }}</span>
-                      <span class="badge badge-secondary">基本ライン合計BV {{ placement.basic_line_bv|default:0|intcomma }}</span>
-                      <span class="badge badge-danger">今回繰り越し予定BV {{ placement.next_carry_over_bv|default:0|intcomma }}</span>
+                      {% include "com/_income_line_summary_badges.html" with summary=placement %}
                     </div>
                   </div>
 
@@ -583,10 +739,42 @@
       </div>
       {% endif %}
 
-      <div class="card shadow-sm flex-grow-1" style="min-height: 0;">
+      <div class="card shadow-sm flex-grow-1 income-line-list-card" id="incomeLineList" data-income-line-fullscreen-card style="min-height: 0;">
         <div class="card-body d-flex flex-column" style="min-height: 0; overflow: hidden;">
           {% if rows %}
-            {% include "com/_list_summary.html" with list_title="収入ライン購入者詳細" %}
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3 income-line-list-card__header">
+              {% include "com/_list_summary.html" with list_title="収入ライン購入者詳細" %}
+              <button type="button"
+                      class="btn btn-outline-primary btn-sm"
+                      data-income-line-fullscreen>
+                全画面表示
+              </button>
+            </div>
+            <div class="income-line-fullscreen-only">
+              <div class="selection-indicator-group bonus-calc-selection-status">
+                {% bonus_calc_period_status empty_message="期別を選択してください" %}
+                {% include "com/_income_line_filter_badges.html" with show_label=False compact=True %}
+              </div>
+            </div>
+
+            {% if placement_summaries %}
+              <div class="mb-3 income-line-list-card__summary">
+                {% for summary in placement_summaries %}
+                  <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2 income-line-list-card__summary-row">
+                    <div>
+                      <div class="fw-bold">{{ summary.placement_code }} {{ summary.placement_name }}</div>
+                      <div class="small text-muted">
+                        ランク:
+                        <span class="badge {{ summary.placement_rank|rank_badge_class }}">
+                          {{ summary.placement_rank|rank_label }}
+                        </span>
+                      </div>
+                    </div>
+                    {% include "com/_income_line_summary_badges.html" with summary=summary %}
+                  </div>
+                {% endfor %}
+              </div>
+            {% endif %}
 
             <div class="table-responsive flex-grow-1" style="min-height: 0; overflow-x: auto; overflow-y: auto;">
               <table class="table table-bordered table-sm align-middle mb-0 income-line-detail-table">
@@ -718,12 +906,6 @@
 })();
 
 (function () {
-  var treeCard = document.querySelector("[data-income-line-tree-card]");
-  var fullscreenButton = document.querySelector("[data-income-line-tree-fullscreen]");
-  if (!treeCard || !fullscreenButton) {
-    return;
-  }
-
   function fullscreenElement() {
     return document.fullscreenElement || document.webkitFullscreenElement || null;
   }
@@ -748,23 +930,33 @@
     return Promise.resolve();
   }
 
-  function syncButtonLabel() {
-    fullscreenButton.textContent = fullscreenElement() === treeCard ? "元に戻す" : "全画面表示";
+  function syncButtonLabels() {
+    document.querySelectorAll("[data-income-line-tree-fullscreen], [data-income-line-fullscreen]").forEach(function (button) {
+      var card = button.closest("[data-income-line-tree-card], [data-income-line-fullscreen-card]");
+      button.textContent = card && fullscreenElement() === card ? "元に戻す" : "全画面表示";
+    });
   }
 
-  fullscreenButton.addEventListener("click", function () {
-    if (fullscreenElement() === treeCard) {
-      exitFullscreen().then(syncButtonLabel).catch(syncButtonLabel);
-    } else {
-      requestFullscreen(treeCard).then(syncButtonLabel).catch(function () {
-        alert("このブラウザでは全画面表示を開始できませんでした。");
-        syncButtonLabel();
-      });
+  document.querySelectorAll("[data-income-line-tree-fullscreen], [data-income-line-fullscreen]").forEach(function (button) {
+    var card = button.closest("[data-income-line-tree-card], [data-income-line-fullscreen-card]");
+    if (!card) {
+      return;
     }
+
+    button.addEventListener("click", function () {
+      if (fullscreenElement() === card) {
+        exitFullscreen().then(syncButtonLabels).catch(syncButtonLabels);
+      } else {
+        requestFullscreen(card).then(syncButtonLabels).catch(function () {
+          alert("このブラウザでは全画面表示を開始できませんでした。");
+          syncButtonLabels();
+        });
+      }
+    });
   });
 
-  document.addEventListener("fullscreenchange", syncButtonLabel);
-  document.addEventListener("webkitfullscreenchange", syncButtonLabel);
+  document.addEventListener("fullscreenchange", syncButtonLabels);
+  document.addEventListener("webkitfullscreenchange", syncButtonLabels);
 })();
 
 (function () {

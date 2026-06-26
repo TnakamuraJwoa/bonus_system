@@ -334,6 +334,72 @@ class BasicIncomeLineDetailView(generic.TemplateView):
         return nodes
 
     @staticmethod
+    def _build_placement_summaries(rows):
+        summaries = {}
+        for row in rows:
+            placement_code = row.get("placement_code") or ""
+            if not placement_code:
+                continue
+            summary = summaries.setdefault(
+                placement_code,
+                {
+                    "placement_code": placement_code,
+                    "placement_name": row.get("placement_name") or "",
+                    "placement_rank": row.get("placement_rank") or 0,
+                    "income_line_bv": row.get("income_line_bv") or 0,
+                    "basic_line_bv": row.get("basic_line_bv") or 0,
+                    "next_carry_over_bv": row.get("next_carry_over_bv") or 0,
+                    "prev_carry_over_bv": 0,
+                },
+            )
+            if row.get("detail_type") == "carry_over":
+                summary["prev_carry_over_bv"] += row.get("carry_over_bv") or 0
+        return sorted(summaries.values(), key=lambda item: item.get("placement_code") or "")
+
+    @staticmethod
+    def _build_filter_badges(selected_kibetu, filters, view_mode, per_page, kibetu_choice_mode):
+        detail_type_labels = {
+            "purchase": "購入",
+            "carry_over": "繰り越し",
+        }
+        line_role_labels = {
+            "basic": "基本ライン",
+            "income": "収入ライン",
+        }
+        view_mode_labels = {
+            "list": "一覧",
+            "tree": "Tree",
+        }
+        badges = []
+        if kibetu_choice_mode == "all":
+            badges.append({"label": "期別候補", "value": "全件表示", "class": "all"})
+        if filters["q_placement_code"]:
+            badges.append({"label": "上位者コード", "value": filters["q_placement_code"], "class": "placement"})
+        if filters["q_line_code"]:
+            badges.append({"label": "ラインコード", "value": filters["q_line_code"], "class": "line"})
+        if filters["q_purchaser_code"]:
+            badges.append({"label": "購入者コード", "value": filters["q_purchaser_code"], "class": "purchaser-code"})
+        if filters["q_purchaser_name"]:
+            badges.append({"label": "購入者名", "value": filters["q_purchaser_name"], "class": "purchaser-name"})
+        if filters["detail_type"]:
+            badges.append({
+                "label": "明細種別",
+                "value": detail_type_labels.get(filters["detail_type"], filters["detail_type"]),
+                "class": "detail-type",
+            })
+        if filters["line_role"]:
+            badges.append({
+                "label": "ライン種別",
+                "value": line_role_labels.get(filters["line_role"], filters["line_role"]),
+                "class": "line-role",
+            })
+        if view_mode == "tree":
+            badges.append({"label": "表示形式", "value": view_mode_labels.get(view_mode, view_mode), "class": "view-mode"})
+        if per_page != BasicIncomeLineDetailView.DEFAULT_PER_PAGE:
+            badges.append({"label": "表示件数", "value": str(per_page), "class": "per-page"})
+        return badges
+
+    @staticmethod
     def _build_tree_groups(rows, member_purchase_map=None):
         member_purchase_map = member_purchase_map or {}
         placement_map = {}
@@ -403,10 +469,18 @@ class BasicIncomeLineDetailView(generic.TemplateView):
                 line["purchase_rows"].append(row)
 
         tree_groups = []
+        placement_carry_map = {
+            item["placement_code"]: item.get("prev_carry_over_bv") or 0
+            for item in BasicIncomeLineDetailView._build_placement_summaries(rows)
+        }
         for placement in placement_map.values():
             placement["lines"] = sorted(
                 placement["lines"].values(),
                 key=lambda item: (item.get("line_rank") or 0, item.get("line_code") or ""),
+            )
+            placement["prev_carry_over_bv"] = placement_carry_map.get(
+                placement.get("placement_code"),
+                0,
             )
             tree_groups.append(placement)
 
@@ -425,6 +499,14 @@ class BasicIncomeLineDetailView(generic.TemplateView):
         }
         view_mode = "tree" if self.request.GET.get("view_mode") == "tree" else "list"
         per_page = self._get_per_page()
+        kibetu_choice_mode = self.request.GET.get("kibetu_choice_mode") or "recent"
+        active_filter_badges = self._build_filter_badges(
+            selected_kibetu,
+            filters,
+            view_mode,
+            per_page,
+            kibetu_choice_mode,
+        )
 
         ctx.update(filters)
         ctx.update({
@@ -436,6 +518,7 @@ class BasicIncomeLineDetailView(generic.TemplateView):
             "rows": [],
             "show_tree": False,
             "tree_groups": [],
+            "placement_summaries": [],
             "total_count": 0,
             "display_from": 0,
             "display_to": 0,
@@ -448,6 +531,7 @@ class BasicIncomeLineDetailView(generic.TemplateView):
             "next_page": 1,
             "pagination_pages": [],
             "base_qs": "",
+            "active_filter_badges": active_filter_badges,
         })
 
         if not selected_kibetu:
@@ -468,6 +552,10 @@ class BasicIncomeLineDetailView(generic.TemplateView):
         show_tree = view_mode == "tree" and bool(filters["q_placement_code"] and total_count)
         tree_rows = self._fetch_tree_rows(base_params, filters) if show_tree else []
         member_purchase_map = self._fetch_member_purchase_map(base_params, tree_rows) if tree_rows else {}
+        placement_summaries = []
+        if total_count and view_mode == "list" and filters["q_placement_code"]:
+            summary_rows = self._fetch_rows(base_params, filters, 1000000, 0)
+            placement_summaries = self._build_placement_summaries(summary_rows)
 
         base_qs_params = {
             "kibetu": selected_kibetu,
@@ -486,6 +574,7 @@ class BasicIncomeLineDetailView(generic.TemplateView):
             "rows": rows,
             "show_tree": show_tree,
             "tree_groups": self._build_tree_groups(tree_rows, member_purchase_map) if tree_rows else [],
+            "placement_summaries": placement_summaries,
             "total_count": total_count,
             "display_from": (page - 1) * per_page + 1 if total_count else 0,
             "display_to": min(page * per_page, total_count) if total_count else 0,
