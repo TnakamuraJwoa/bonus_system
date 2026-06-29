@@ -43,14 +43,6 @@
                      value="{{ q_order_code|default:'' }}">
             </div>
 
-            <div style="width: 120px;">
-              <label class="form-label mb-0 small text-muted">会員ID</label>
-              <input type="text"
-                     name="q_user_id"
-                     class="form-control"
-                     value="{{ q_user_id|default:'' }}">
-            </div>
-
             <div>
               <label class="form-label mb-0 small text-muted">JWOA会員ID</label>
               <input type="text"
@@ -108,10 +100,10 @@
                   <tr>
                     <th>ID</th>
                     <th>注文番号</th>
-                    <th>会員ID</th>
                     <th>JWOA会員ID</th>
-                    <th>振分BV</th>
-                    <th>システム使用料</th>
+                    <th>氏名</th>
+                    <th>total_bv</th>
+                    <th>BV</th>
                     <th>作成日時</th>
                     <th>更新日時</th>
                   </tr>
@@ -122,30 +114,30 @@
                     <tr>
                       <td class="text-end">{{ r.id }}</td>
                       <td>{{ r.order_code }}</td>
-                      <td class="text-end">{{ r.user_id }}</td>
                       <td>{{ r.jwoa_code }}</td>
+                      <td>{{ r.send_bv_name }}</td>
+                      <td class="text-end">{{ r.total_bv|intcomma }}</td>
                       <td class="text-end">
                         {% if user_access.can_update %}
                           <form method="post"
                                 class="bv-update-form"
-                                data-confirm="ID {{ r.id }} の振分BVを更新します。よろしいですか？">
+                                data-confirm="ID {{ r.id }} のBVを更新します。よろしいですか？">
                             {% csrf_token %}
                             <input type="hidden" name="id" value="{{ r.id }}">
                             <input type="hidden" name="next_query" value="{{ request.GET.urlencode }}">
                             <input type="number"
-                                   name="distribution_bv"
+                                   name="bv"
                                    class="form-control form-control-sm text-end"
-                                   value="{{ r.distribution_bv }}"
+                                   value="{{ r.bv }}"
                                    min="0"
                                    step="1"
                                    required>
                             <button type="submit" class="btn btn-warning btn-sm">更新</button>
                           </form>
                         {% else %}
-                          {{ r.distribution_bv|intcomma }}
+                          {{ r.bv|intcomma }}
                         {% endif %}
                       </td>
-                      <td class="text-end">{{ r.usage_fee|intcomma }}</td>
                       <td>{{ r.created_at }}</td>
                       <td>{{ r.updated_at }}</td>
                     </tr>

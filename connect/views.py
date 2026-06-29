@@ -8845,13 +8845,129 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
 class OrdersDistributionBvUpdateView(OrdersDistributionBvView):
     template_name = "orders_distribution_bv_update.html"
 
+    def _build_where(
+        self,
+        q_order_code="",
+        q_user_id="",
+        q_jwoa_code="",
+        q_created_from="",
+        q_created_to="",
+    ):
+        where = []
+        params = []
+
+        if q_order_code:
+            where.append("a.order_code LIKE %s")
+            params.append(f"%{q_order_code}%")
+
+        if q_jwoa_code:
+            where.append("a.jwoa_code LIKE %s")
+            params.append(f"%{q_jwoa_code}%")
+
+        if q_created_from:
+            where.append("a.created_at >= %s")
+            params.append(q_created_from)
+
+        if q_created_to:
+            where.append("a.created_at < DATE_ADD(%s, INTERVAL 1 DAY)")
+            params.append(q_created_to)
+
+        where_sql = "WHERE " + " AND ".join(where) if where else ""
+
+        return where_sql, params
+
+    def _fetch_total_count(self, **filters):
+        where_sql, params = self._build_where(**filters)
+
+        sql = f"""
+            SELECT COUNT(*)
+            FROM bonus_db.purchase_info_list AS a
+            {where_sql}
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            row = cursor.fetchone()
+
+        return int(row[0]) if row else 0
+
+    def _fetch_rows(self, limit=200, offset=0, **filters):
+        where_sql, params = self._build_where(**filters)
+
+        sql = f"""
+            SELECT
+                a.id,
+                a.order_code,
+                a.jwoa_code,
+                a.send_bv_name,
+                a.total_bv,
+                a.bv,
+                a.created_at,
+                a.updated_at
+            FROM bonus_db.purchase_info_list AS a
+            {where_sql}
+            ORDER BY a.id DESC
+            LIMIT %s OFFSET %s
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params + [limit, offset])
+            cols = [c[0] for c in cursor.description]
+            rows = [
+                dict(zip(cols, r))
+                for r in cursor.fetchall()
+            ]
+
+        return rows
+
+    def get_context_data(self, **kwargs):
+        ctx = super(OrdersDistributionBvView, self).get_context_data(**kwargs)
+
+        filters = {
+            "q_order_code": (self.request.GET.get("q_order_code") or "").strip(),
+            "q_jwoa_code": (self.request.GET.get("q_jwoa_code") or "").strip(),
+            "q_created_from": (self.request.GET.get("q_created_from") or "").strip(),
+            "q_created_to": (self.request.GET.get("q_created_to") or "").strip(),
+        }
+
+        per_page = self.get_per_page()
+        total_count = self._fetch_total_count(**filters)
+        total_pages = max(1, math.ceil(total_count / per_page))
+        page = self.get_page_number(total_pages)
+        offset = (page - 1) * per_page
+
+        rows = self._fetch_rows(
+            limit=per_page,
+            offset=offset,
+            **filters,
+        )
+
+        ctx.update(filters)
+        base_params = {
+            k: v for k, v in filters.items()
+            if v
+        }
+
+        if per_page != self.DEFAULT_PER_PAGE:
+            base_params["per_page"] = per_page
+
+        return self.set_page_context(
+            ctx=ctx,
+            rows=rows,
+            per_page=per_page,
+            total_count=total_count,
+            total_pages=total_pages,
+            page=page,
+            base_params=base_params,
+        )
+
     def post(self, request, *args, **kwargs):
         user_access = get_user_access(request.user)
         if not user_access.can_menu("orders_distribution_bv_update") or not user_access.can_update:
             return HttpResponse("権限がありません。", status=403)
 
         row_id = (request.POST.get("id") or "").strip()
-        distribution_bv = (request.POST.get("distribution_bv") or "").strip()
+        bv = (request.POST.get("bv") or "").strip()
         next_query = (request.POST.get("next_query") or "").strip()
         redirect_url = reverse("connect:orders_distribution_bv_update")
         if next_query:
@@ -8864,13 +8980,13 @@ class OrdersDistributionBvUpdateView(OrdersDistributionBvView):
             return redirect(redirect_url)
 
         try:
-            distribution_bv_int = int(distribution_bv)
+            bv_int = int(bv)
         except ValueError:
-            messages.error(request, "振分BVは整数で入力してください。")
+            messages.error(request, "BVは整数で入力してください。")
             return redirect(redirect_url)
 
-        if distribution_bv_int < 0:
-            messages.error(request, "振分BVは0以上で入力してください。")
+        if bv_int < 0:
+            messages.error(request, "BVは0以上で入力してください。")
             return redirect(redirect_url)
 
         before_row = fetch_one_dict(
@@ -8879,11 +8995,13 @@ class OrdersDistributionBvUpdateView(OrdersDistributionBvView):
                 SELECT
                     id,
                     order_code,
-                    user_id,
                     jwoa_code,
-                    distribution_bv,
-                    usage_fee
-                FROM bonus_db.orders_distribution_bv
+                    send_bv_name,
+                    total_bv,
+                    bv,
+                    created_at,
+                    updated_at
+                FROM bonus_db.purchase_info_list
                 WHERE id = %s
             """,
             [row_id_int],
@@ -8893,43 +9011,45 @@ class OrdersDistributionBvUpdateView(OrdersDistributionBvView):
             return redirect(redirect_url)
 
         sql = """
-            UPDATE bonus_db.orders_distribution_bv
-            SET distribution_bv = %s
+            UPDATE bonus_db.purchase_info_list
+            SET
+                bv = %s,
+                updated_at = CURRENT_TIMESTAMP
             WHERE id = %s
         """
 
         try:
             with connections["rds"].cursor() as cursor:
                 logger.info(
-                    "BV振分変更画面から振分BV更新SQLを実行します。id=%s distribution_bv=%s",
+                    "BV振分変更画面からpurchase_info_listのBV更新SQLを実行します。id=%s bv=%s",
                     row_id_int,
-                    distribution_bv_int,
+                    bv_int,
                 )
-                cursor.execute(sql, [distribution_bv_int, row_id_int])
+                cursor.execute(sql, [bv_int, row_id_int])
                 updated_count = cursor.rowcount
 
             if updated_count:
                 after_row = dict(before_row)
-                after_row["distribution_bv"] = distribution_bv_int
+                after_row["bv"] = bv_int
                 record_change_audit(
                     request,
                     screen_name="BV振分変更",
                     action_type="update",
-                    target_table="orders_distribution_bv",
+                    target_table="purchase_info_list",
                     target_pk=row_id_int,
                     summary=(
                         f"注文番号 {before_row.get('order_code')} / "
-                        f"JWOA会員ID {before_row.get('jwoa_code')} の振分BVを更新"
+                        f"JWOA会員ID {before_row.get('jwoa_code')} のBVを更新"
                     ),
                     before_values=before_row,
                     after_values=after_row,
                 )
-                messages.success(request, "振分BVを更新しました。")
+                messages.success(request, "BVを更新しました。")
             else:
-                messages.info(request, "振分BVは変更されていません。")
+                messages.info(request, "BVは変更されていません。")
         except Exception as e:
-            logger.exception("BV振分変更画面の振分BV更新エラー")
-            messages.error(request, f"振分BVの更新中にエラーが発生しました: {e}")
+            logger.exception("BV振分変更画面のBV更新エラー")
+            messages.error(request, f"BVの更新中にエラーが発生しました: {e}")
 
         return redirect(redirect_url)
 
