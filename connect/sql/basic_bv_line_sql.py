@@ -279,8 +279,10 @@ SELECT
     income_line_bv,
     GREATEST(IFNULL(basic_line_bv, 0) - IFNULL(income_line_bv, 0), 0) AS diff_bv
 FROM line_role_summary
-)
+),
 
+-- 繰り越しの結果
+result_bv_line AS (
 select
  a.上位者コード as placement_code,
  a.ラインコード as jmoa_code,
@@ -290,4 +292,20 @@ from line_flg as a
 left join line_diff as b
 on a.上位者コード = b.上位者コード
 where a.line_rank = 1
+)
+
+select
+    a.placement_code,
+    a.jmoa_code,
+    a.bv,
+    CASE
+        WHEN IFNULL(b.new_rank, 0) = 1
+            THEN LEAST(IFNULL(a.carry_over_bv, 0), 5000)
+        ELSE
+            LEAST(IFNULL(a.carry_over_bv, 0), 125000)
+    END AS carry_over_bv,
+    b.new_rank
+from result_bv_line as a
+left join bonus_db.users_target_rank as b
+  on a.placement_code = b.jmoa_code
 """
