@@ -3172,7 +3172,7 @@ class BasicBonusView(generic.ListView):
 
         with connections["rds"].cursor() as cursor:
             cursor.execute(BASIC_BV_LINE_SQL, params)
-            logger.info(f"Executed SQL: {cursor._executed}")
+            # logger.info(f"Executed SQL: {cursor._executed}")
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
 

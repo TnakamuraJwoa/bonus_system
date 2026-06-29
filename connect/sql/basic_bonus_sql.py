@@ -278,6 +278,60 @@ WHERE basic_line_bv >= 250000
   AND income_line_bv >= 250000
 ),
 
+-- 収入ラインの明細
+income_line_bonus_base AS (
+SELECT
+    a.*
+FROM payer_list_prevMonth_users_add_carry_bv AS a
+JOIN line_flg
+  ON a.上位者コード = line_flg.上位者コード
+ AND a.ラインコード = line_flg.ラインコード
+ AND line_flg.line_rank BETWEEN 2 AND 5
+),
+
+-- 収入ラインごとの上限超過分
+income_line_over_cap AS (
+SELECT
+    a.上位者コード,
+    MAX(a.上位者名) AS 上位者名,
+    a.ラインコード,
+    SUM(IFNULL(a.sum_bv, 0)) AS line_sum_bv,
+    CASE
+        WHEN MAX(IFNULL(b.new_rank, 0)) = 1 THEN 5000
+        ELSE 125000
+    END AS line_cap
+FROM income_line_bonus_base AS a
+LEFT JOIN bonus_db.users_target_rank AS b
+  ON a.上位者コード = b.jmoa_code
+GROUP BY
+    a.上位者コード,
+    a.ラインコード
+HAVING line_sum_bv > line_cap
+),
+
+-- ライン上限を超えた分をマイナス行として追加
+income_line_bonus_rows AS (
+SELECT
+    上位者コード,
+    上位者名,
+    ラインコード,
+    購入者コード,
+    購入者名,
+    sum_bv
+FROM income_line_bonus_base
+
+UNION ALL
+
+SELECT
+    上位者コード,
+    上位者名,
+    ラインコード,
+    CONCAT('ADJ_', ラインコード) AS 購入者コード,
+    'ライン上限超過調整' AS 購入者名,
+    -(line_sum_bv - line_cap) AS sum_bv
+FROM income_line_over_cap
+),
+
 -- ans_basic_bonus
 ans_basic_bonus AS (
 SELECT
@@ -298,9 +352,9 @@ SELECT
 
     TRUNCATE(
         CASE
-            WHEN bd.上位者コード IS NOT NULL THEN LEAST(IFNULL(a.sum_bv, 0), 250000) * 0.20
-            WHEN b.new_rank = 1 THEN LEAST(IFNULL(a.sum_bv, 0), 5000) * 0.10
-            WHEN b.new_rank = 4 THEN LEAST(IFNULL(a.sum_bv, 0), 125000) * 0.12
+            WHEN bd.上位者コード IS NOT NULL THEN IFNULL(a.sum_bv, 0) * 0.20
+            WHEN b.new_rank = 1 THEN IFNULL(a.sum_bv, 0) * 0.10
+            WHEN b.new_rank = 4 THEN IFNULL(a.sum_bv, 0) * 0.12
             ELSE 0
         END,
     2
@@ -311,12 +365,7 @@ SELECT
         ELSE 0
     END AS blue_daiya_flg
 
-FROM payer_list_prevMonth_users_add_carry_bv AS a
-
-JOIN line_flg
-  ON a.上位者コード = line_flg.上位者コード
- AND a.ラインコード = line_flg.ラインコード
- AND line_flg.line_rank BETWEEN 2 AND 5
+FROM income_line_bonus_rows AS a
 
 left join bonus_db.users_target_rank as b
 on a.上位者コード = b.jmoa_code
@@ -329,6 +378,6 @@ LEFT JOIN blue_daiya bd
 select
  *
 from ans_basic_bonus
-where bonus_amount > 0
+where bonus_amount <> 0
 order by 上位者コード, 購入者コード
 """
