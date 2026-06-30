@@ -5507,6 +5507,167 @@ LIMIT %s OFFSET %s
             cols = [col[0] for col in cursor.description]
             return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
+    def _build_downline_where(
+        self,
+        q_name: str,
+        q_placement_code: str,
+        q_placement_rank: str,
+        q_rank: str,
+    ):
+        where = []
+        params = []
+
+        if q_name:
+            where.append("d.send_bv_name LIKE %s")
+            params.append(f"%{q_name}%")
+
+        if q_placement_code:
+            where.append("d.placement_code LIKE %s")
+            params.append(f"{q_placement_code}%")
+
+        if q_placement_rank:
+            where.append("d.placement_rank = %s")
+            params.append(q_placement_rank)
+
+        if q_rank:
+            where.append("d.`rank` = %s")
+            params.append(q_rank)
+
+        where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+        return where_sql, params
+
+    def _fetch_downline_total_count(
+        self,
+        q_jwoa_code: str,
+        q_name: str,
+        q_placement_code: str,
+        q_placement_rank: str,
+        q_rank: str,
+    ) -> int:
+        if not q_jwoa_code:
+            return 0
+
+        where_sql, params = self._build_downline_where(
+            q_name,
+            q_placement_code,
+            q_placement_rank,
+            q_rank,
+        )
+        sql = f"""
+WITH RECURSIVE downline AS (
+    SELECT
+        c.id,
+        c.placement_code,
+        c.placement_name,
+        c.placement_rank,
+        c.jwoa_code,
+        c.send_bv_name,
+        c.`rank`,
+        c.tree_level,
+        c.created_at,
+        1 AS rel_level
+    FROM bonus_db.C_users_placement_tree_cache c
+    WHERE c.placement_code = %s
+
+    UNION ALL
+
+    SELECT
+        c.id,
+        c.placement_code,
+        c.placement_name,
+        c.placement_rank,
+        c.jwoa_code,
+        c.send_bv_name,
+        c.`rank`,
+        c.tree_level,
+        c.created_at,
+        d.rel_level + 1 AS rel_level
+    FROM bonus_db.C_users_placement_tree_cache c
+    INNER JOIN downline d
+        ON c.placement_code = d.jwoa_code
+)
+SELECT COUNT(*)
+FROM downline d
+{where_sql}
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, [q_jwoa_code] + params)
+            row = cursor.fetchone()
+        return int(row[0]) if row else 0
+
+    def _fetch_downline_rows(
+        self,
+        q_jwoa_code: str,
+        q_name: str,
+        q_placement_code: str,
+        q_placement_rank: str,
+        q_rank: str,
+        limit: int,
+        offset: int = 0,
+    ):
+        if not q_jwoa_code:
+            return []
+
+        where_sql, params = self._build_downline_where(
+            q_name,
+            q_placement_code,
+            q_placement_rank,
+            q_rank,
+        )
+        sql = f"""
+WITH RECURSIVE downline AS (
+    SELECT
+        c.id,
+        c.placement_code,
+        c.placement_name,
+        c.placement_rank,
+        c.jwoa_code,
+        c.send_bv_name,
+        c.`rank`,
+        c.tree_level,
+        c.created_at,
+        1 AS rel_level
+    FROM bonus_db.C_users_placement_tree_cache c
+    WHERE c.placement_code = %s
+
+    UNION ALL
+
+    SELECT
+        c.id,
+        c.placement_code,
+        c.placement_name,
+        c.placement_rank,
+        c.jwoa_code,
+        c.send_bv_name,
+        c.`rank`,
+        c.tree_level,
+        c.created_at,
+        d.rel_level + 1 AS rel_level
+    FROM bonus_db.C_users_placement_tree_cache c
+    INNER JOIN downline d
+        ON c.placement_code = d.jwoa_code
+)
+SELECT
+    d.id,
+    d.placement_code,
+    d.placement_name,
+    d.placement_rank,
+    d.jwoa_code,
+    d.send_bv_name,
+    d.`rank`,
+    d.tree_level,
+    d.rel_level,
+    d.created_at
+FROM downline d
+{where_sql}
+ORDER BY d.rel_level, d.placement_code, d.jwoa_code
+LIMIT %s OFFSET %s
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, [q_jwoa_code] + params + [limit, offset])
+            cols = [col[0] for col in cursor.description]
+            return [dict(zip(cols, row)) for row in cursor.fetchall()]
+
     def _rebuild_cache(self) -> int:
         delete_sql = "DELETE FROM bonus_db.C_users_placement_tree_cache"
 
@@ -5581,33 +5742,64 @@ LIMIT %s OFFSET %s
         q_placement_code = (self.request.GET.get("q_placement_code") or "").strip()
         q_placement_rank = (self.request.GET.get("q_placement_rank") or "").strip()
         q_rank = (self.request.GET.get("q_rank") or "").strip()
+        view_mode = (self.request.GET.get("view") or "list").strip()
+        if view_mode not in ("list", "tree", "downline"):
+            view_mode = "list"
+        downline_fullscreen = (
+            view_mode == "downline"
+            and self.request.GET.get("downline_fullscreen") == "1"
+        )
 
         try:
             per_page = int(self.request.GET.get("per_page") or str(self.DEFAULT_PER_PAGE))
         except ValueError:
             per_page = self.DEFAULT_PER_PAGE
-        per_page = max(1, min(per_page, self.MAX_PER_PAGE))
+        if downline_fullscreen:
+            per_page = 5000
+        else:
+            per_page = max(1, min(per_page, self.MAX_PER_PAGE))
 
-        total_count = self._fetch_total_count(
-            q_jwoa_code,
-            q_name,
-            q_placement_code,
-            q_placement_rank,
-            q_rank,
-        )
+        if view_mode == "downline":
+            total_count = self._fetch_downline_total_count(
+                q_jwoa_code,
+                q_name,
+                q_placement_code,
+                q_placement_rank,
+                q_rank,
+            )
+        else:
+            total_count = self._fetch_total_count(
+                q_jwoa_code,
+                q_name,
+                q_placement_code,
+                q_placement_rank,
+                q_rank,
+            )
         total_pages = max(1, math.ceil(total_count / per_page)) if total_count > 0 else 1
         page = self.get_page_number(total_pages)
+        fetch_limit = per_page
         offset = (page - 1) * per_page
 
-        rows = self._fetch_rows(
-            q_jwoa_code=q_jwoa_code,
-            q_name=q_name,
-            q_placement_code=q_placement_code,
-            q_placement_rank=q_placement_rank,
-            q_rank=q_rank,
-            limit=per_page,
-            offset=offset,
-        )
+        if view_mode == "downline":
+            rows = self._fetch_downline_rows(
+                q_jwoa_code=q_jwoa_code,
+                q_name=q_name,
+                q_placement_code=q_placement_code,
+                q_placement_rank=q_placement_rank,
+                q_rank=q_rank,
+                limit=fetch_limit,
+                offset=offset,
+            )
+        else:
+            rows = self._fetch_rows(
+                q_jwoa_code=q_jwoa_code,
+                q_name=q_name,
+                q_placement_code=q_placement_code,
+                q_placement_rank=q_placement_rank,
+                q_rank=q_rank,
+                limit=per_page,
+                offset=offset,
+            )
 
         base_params = {}
         if q_jwoa_code:
@@ -5622,6 +5814,8 @@ LIMIT %s OFFSET %s
             base_params["q_rank"] = q_rank
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
+        if downline_fullscreen:
+            base_params["downline_fullscreen"] = "1"
 
         ctx["q_jwoa_code"] = q_jwoa_code
         ctx["q_name"] = q_name
@@ -5629,19 +5823,34 @@ LIMIT %s OFFSET %s
         ctx["q_placement_rank"] = q_placement_rank
         ctx["q_rank"] = q_rank
 
-        view_mode = (self.request.GET.get("view") or "list").strip()
-        if view_mode not in ("list", "tree"):
-            view_mode = "list"
         ctx["view_mode"] = view_mode
+        ctx["downline_fullscreen"] = downline_fullscreen
 
         tab_params = dict(base_params)
+        tab_params.pop("downline_fullscreen", None)
+        if downline_fullscreen:
+            tab_params.pop("per_page", None)
         ctx["list_tab_query"] = urlencode(tab_params) if tab_params else ""
         tree_tab_params = dict(tab_params)
         tree_tab_params["view"] = "tree"
         ctx["tree_tab_query"] = urlencode(tree_tab_params)
+        downline_tab_params = dict(tab_params)
+        downline_tab_params["view"] = "downline"
+        ctx["downline_tab_query"] = urlencode(downline_tab_params)
+        downline_fullscreen_params = dict(tab_params)
+        downline_fullscreen_params["view"] = "downline"
+        downline_fullscreen_params["downline_fullscreen"] = "1"
+        downline_fullscreen_params["per_page"] = 5000
+        ctx["downline_fullscreen_query"] = urlencode(downline_fullscreen_params)
+        ctx["downline_exit_fullscreen_query"] = urlencode(downline_tab_params)
 
         tree_context = build_member_tree_view(q_jwoa_code)
         ctx.update(tree_context)
+        ctx["downline_unavailable_reason"] = (
+            "会員コードを入力して検索してください。"
+            if view_mode == "downline" and not q_jwoa_code
+            else None
+        )
 
         return self.set_page_context(
             ctx=ctx,

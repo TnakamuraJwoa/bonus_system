@@ -1,4 +1,46 @@
 {% load access_tags %}
+<style>
+  .sidebar-menu-parent {
+    border-left: 0;
+    border-right: 0;
+  }
+
+  .sidebar-menu-parent.active {
+    z-index: 2;
+  }
+
+  .sidebar-menu-parent__row {
+    min-height: 2.5rem;
+  }
+
+  .sidebar-submenu-toggle {
+    width: 1.5rem;
+    text-align: center;
+    line-height: 1;
+    color: #475569;
+    text-decoration: none !important;
+  }
+
+  .sidebar-submenu-toggle:hover {
+    color: #1d4ed8;
+  }
+
+  .sidebar-submenu-toggle-spacer {
+    display: inline-block;
+    width: 1.5rem;
+  }
+
+  .sidebar-submenu.is-collapsed {
+    display: none;
+  }
+
+  .sidebar-submenu-item {
+    padding-left: .25rem;
+    font-size: 0.92rem;
+    border-left: 0;
+    border-right: 0;
+  }
+</style>
 <nav class="col-12 col-md-3 col-lg-2">
   <div class="card shadow-sm position-sticky" style="top: 1rem;">
 
@@ -12,14 +54,37 @@
            href="{% url 'connect:s_drive_bonus' %}">ドライブボーナス</a>
         {% endif %}
 
-        {% if user_access|can_menu:"s_basic_bonus" %}
-        <a class="list-group-item list-group-item-action {% if active_menu == 'basic_bonus' %}active{% endif %}"
-           href="{% url 'connect:s_basic_bonus' %}">ベーシックボーナス</a>
-        {% endif %}
-
-        {% if user_access|can_menu:"basic_income_line_detail" %}
-        <a class="list-group-item list-group-item-action {% if active_menu == 'basic_income_line_detail' %}active{% endif %}"
-           href="{% url 'connect:basic_income_line_detail' %}">収入ライン購入者詳細</a>
+        {% if user_access|can_menu:"s_basic_bonus" or user_access|can_menu:"basic_income_line_detail" %}
+          {% if user_access|can_menu:"s_basic_bonus" %}
+            <div class="list-group-item sidebar-menu-parent p-0 {% if active_menu == 'basic_bonus' %}active{% endif %}">
+              <div class="d-flex align-items-center sidebar-menu-parent__row">
+                {% if user_access|can_menu:"basic_income_line_detail" %}
+                  <button type="button"
+                          class="btn btn-link sidebar-submenu-toggle"
+                          data-sidebar-submenu-toggle
+                          data-target="basicBonusSubmenu"
+                          aria-expanded="{% if active_menu == 'basic_income_line_detail' %}true{% else %}false{% endif %}"
+                          aria-label="{% if active_menu == 'basic_income_line_detail' %}収入ライン購入者詳細を折りたたむ{% else %}収入ライン購入者詳細を展開{% endif %}">
+                    {% if active_menu == 'basic_income_line_detail' %}−{% else %}+{% endif %}
+                  </button>
+                {% else %}
+                  <span class="sidebar-submenu-toggle-spacer"></span>
+                {% endif %}
+                <a class="flex-grow-1 text-decoration-none {% if active_menu == 'basic_bonus' %}text-white{% else %}text-body{% endif %} py-2 pr-3"
+                   href="{% url 'connect:s_basic_bonus' %}">ベーシックボーナス</a>
+              </div>
+            </div>
+            {% if user_access|can_menu:"basic_income_line_detail" %}
+              <div id="basicBonusSubmenu"
+                   class="sidebar-submenu {% if active_menu != 'basic_income_line_detail' %}is-collapsed{% endif %}">
+                <a class="list-group-item list-group-item-action sidebar-submenu-item {% if active_menu == 'basic_income_line_detail' %}active{% endif %}"
+                   href="{% url 'connect:basic_income_line_detail' %}">　ベーシック・収入ライン詳細</a>
+              </div>
+            {% endif %}
+          {% elif user_access|can_menu:"basic_income_line_detail" %}
+            <a class="list-group-item list-group-item-action {% if active_menu == 'basic_income_line_detail' %}active{% endif %}"
+               href="{% url 'connect:basic_income_line_detail' %}">　ベーシック・収入ライン詳細</a>
+          {% endif %}
         {% endif %}
 
         {% if user_access|can_menu:"s_matching_bonus" %}
@@ -67,3 +132,39 @@
     {% endif %}
   </div>
 </nav>
+<script>
+(function () {
+  if (window.__bonusKensakuSidebarInit) {
+    return;
+  }
+  window.__bonusKensakuSidebarInit = true;
+
+  function setSubmenuToggleState(button, expanded) {
+    button.textContent = expanded ? "−" : "+";
+    button.setAttribute("aria-expanded", expanded ? "true" : "false");
+    button.setAttribute(
+      "aria-label",
+      expanded ? "収入ライン購入者詳細を折りたたむ" : "収入ライン購入者詳細を展開"
+    );
+  }
+
+  document.addEventListener("click", function (event) {
+    var button = event.target.closest("[data-sidebar-submenu-toggle]");
+    if (!button) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    var targetId = button.getAttribute("data-target");
+    var submenu = targetId ? document.getElementById(targetId) : null;
+    if (!submenu) {
+      return;
+    }
+
+    submenu.classList.toggle("is-collapsed");
+    setSubmenuToggleState(button, !submenu.classList.contains("is-collapsed"));
+  });
+})();
+</script>
