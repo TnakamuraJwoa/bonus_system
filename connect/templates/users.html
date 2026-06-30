@@ -13,16 +13,49 @@
       display: inline-flex;
       align-items: center;
       margin: 0.12rem 0.15rem;
-      padding: 0.35rem 0.55rem;
+      padding: 0.4rem 0.62rem;
       border-radius: 999px;
-      color: #fff !important;
-      background: #475569 !important;
+      color: #0f172a !important;
+      background: #f8fafc !important;
+      border: 1px solid #cbd5e1;
       font-weight: 600;
       line-height: 1.1;
     }
 
-    .users-filter-status .badge.text-dark {
-      color: #0f172a !important;
+    .users-filter-status .badge.bg-info {
+      color: #075985 !important;
+      background: #e0f2fe !important;
+      border-color: #7dd3fc;
+    }
+
+    .users-filter-status .badge.bg-secondary {
+      color: #334155 !important;
+      background: #f1f5f9 !important;
+      border-color: #cbd5e1;
+    }
+
+    .users-filter-status .badge.bg-success {
+      color: #166534 !important;
+      background: #dcfce7 !important;
+      border-color: #86efac;
+    }
+
+    .users-filter-status .badge.bg-primary {
+      color: #1d4ed8 !important;
+      background: #dbeafe !important;
+      border-color: #93c5fd;
+    }
+
+    .users-filter-status .badge.bg-warning {
+      color: #854d0e !important;
+      background: #fef3c7 !important;
+      border-color: #fcd34d;
+    }
+
+    .users-filter-status .badge.bg-dark {
+      color: #312e81 !important;
+      background: #e0e7ff !important;
+      border-color: #a5b4fc;
     }
 
     .users-table {
@@ -58,6 +91,10 @@
 
     .users-search-name {
       width: 230px;
+    }
+
+    .users-search-period {
+      width: 190px;
     }
   </style>
 {% endblock %}
@@ -164,6 +201,18 @@
                   </select>
                 </div>
 
+                <div class="mr-2 mb-2 users-search-period">
+                  <label class="form-label mb-0 small text-muted">アクティブ確認</label>
+                  <select name="q_active_kibetu" class="form-control">
+                    <option value="">指定なし</option>
+                    {% for period in monthly_period_choices %}
+                      <option value="{{ period.kibetu }}" {% if q_active_kibetu == period.kibetu %}selected{% endif %}>
+                        {{ period.kibetu }}（{{ period.year }}/{{ period.month }}）
+                      </option>
+                    {% endfor %}
+                  </select>
+                </div>
+
                 <div class="mr-2 mb-2" style="width: 110px;">
                   <label class="form-label mb-0 small text-muted">表示件数</label>
                   <select name="per_page" class="form-control">
@@ -177,7 +226,7 @@
             </form>
 
             <div class="users-filter-status bonus-calc-selection-status small">
-              {% if q_jpid or q_name or q_name_kana or q_introducer or q_placement or q_status or q_rank %}
+              {% if q_jpid or q_name or q_name_kana or q_introducer or q_placement or q_status or q_rank or q_active_kibetu %}
                 絞り込み中：
 
                 {% if q_jpid %}
@@ -206,6 +255,12 @@
 
                 {% if q_rank %}
                   <span class="badge bg-dark">ランク={{ q_rank }}</span>
+                {% endif %}
+
+                {% if q_active_kibetu %}
+                  <span class="badge bg-info text-dark">
+                    アクティブ確認={{ q_active_kibetu }}
+                  </span>
                 {% endif %}
               {% else %}
                 全件表示中
@@ -241,6 +296,7 @@
                     <th class="text-center col-member-kana">氏名(カナ)</th>
                     <th class="text-center">上位者ID</th>
                     <th class="text-center">紹介者ID</th>
+                    <th class="text-center">アクティブ確認</th>
                     <th class="text-center">ランク</th>
                     <th class="text-center">ステータス</th>
                     <th class="text-center">本登録FLG</th>
@@ -263,6 +319,18 @@
                     <td class="col-member-kana">{{ r.name_kana|default:"-" }}</td>
                     <td>{{ r.introducer_code }}</td>
                     <td>{{ r.placement_code }}</td>
+
+                    <td class="text-center">
+                      {% if q_active_kibetu %}
+                        {% if r.prev_month_active_status == 1 %}
+                          <span class="badge badge-success">アクティブ</span>
+                        {% else %}
+                          <span class="badge badge-secondary">非アクティブ</span>
+                        {% endif %}
+                      {% else %}
+                        -
+                      {% endif %}
+                    </td>
 
                     <!-- ランク -->
                     <td class="text-center">

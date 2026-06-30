@@ -281,8 +281,8 @@ SELECT
 FROM line_role_summary
 ),
 
--- 繰り越しの結果
-result_bv_line AS (
+-- 通常計算による繰り越し結果
+paid_result_bv_line AS (
 select
  a.上位者コード as placement_code,
  a.ラインコード as jmoa_code,
@@ -292,6 +292,30 @@ from line_flg as a
 left join line_diff as b
 on a.上位者コード = b.上位者コード
 where a.line_rank = 1
+),
+
+-- 下の会員の今期購入がなくても、前月アクティブ上位者の前回繰り越しを残す
+result_bv_line AS (
+select
+ placement_code,
+ jmoa_code,
+ bv,
+ carry_over_bv
+from paid_result_bv_line
+
+UNION ALL
+
+select
+ p.placement_code,
+ p.jwoa_code,
+ 0 as bv,
+ p.carry_over_bv
+from active_prev_basic_carry_over_bv as p
+left join paid_result_bv_line as c
+on p.placement_code = c.placement_code
+and p.jwoa_code = c.jmoa_code
+where c.placement_code is null
+  and IFNULL(p.carry_over_bv, 0) > 0
 )
 
 select

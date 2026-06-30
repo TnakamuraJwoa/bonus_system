@@ -3131,7 +3131,7 @@ class BasicBonusView(generic.ListView):
 
         with connections["rds"].cursor() as cursor:
             cursor.execute(BASIC_BONUS_SQL, params)
-            logger.info(f"Executed SQL: {cursor._executed}")
+#             logger.info(f"Executed SQL: {cursor._executed}")
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
 
@@ -3172,7 +3172,7 @@ class BasicBonusView(generic.ListView):
 
         with connections["rds"].cursor() as cursor:
             cursor.execute(BASIC_BV_LINE_SQL, params)
-            # logger.info(f"Executed SQL: {cursor._executed}")
+            logger.info(f"Executed SQL: {cursor._executed}")
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
 
@@ -7818,6 +7818,10 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         q_placement: str = "",
         q_status: str = "",
         q_rank: str = "",
+        active_year=None,
+        active_month=None,
+        active_start_date=None,
+        active_end_date=None,
         limit: int = 200,
         offset: int = 0,
     ):
@@ -7831,6 +7835,44 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             q_status=q_status,
             q_rank=q_rank,
         )
+
+        active_params = []
+        if active_year and active_month and active_start_date and active_end_date:
+            active_select_sql = """
+                CASE
+                    WHEN au.active_status = 1 OR IFNULL(pb.prev_month_bv, 0) >= 50 THEN 1
+                    ELSE 0
+                END AS prev_month_active_status,
+                IFNULL(pb.prev_month_bv, 0) AS prev_month_bv
+            """
+            active_join_sql = """
+            LEFT JOIN bonus_db.active_users au
+              ON au.jwoa_code = u.jmoa_code
+             AND au.year = %s
+             AND au.month = %s
+            LEFT JOIN (
+                SELECT
+                    jwoa_code,
+                    SUM(IFNULL(bv, 0)) AS prev_month_bv
+                FROM bonus_db.purchase_info_list
+                WHERE bonus_payment_date >= %s
+                  AND bonus_payment_date < %s
+                GROUP BY jwoa_code
+            ) pb
+              ON pb.jwoa_code = u.jmoa_code
+            """
+            active_params = [
+                active_year,
+                active_month,
+                active_start_date,
+                active_end_date,
+            ]
+        else:
+            active_select_sql = """
+                NULL AS prev_month_active_status,
+                NULL AS prev_month_bv
+            """
+            active_join_sql = ""
 
         sql = f"""
             SELECT
@@ -7849,19 +7891,43 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
                 u.company,
                 u.last_purchase_at,
                 u.created_at,
-                u.updated_at
+                u.updated_at,
+                {active_select_sql}
             FROM nexus_production.users u
+            {active_join_sql}
             {where_sql}
             ORDER BY u.status_code, u.jmoa_code
             LIMIT %s OFFSET %s
         """
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, params + [limit, offset])
+            cursor.execute(sql, active_params + params + [limit, offset])
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
 
         return rows
+
+    def _resolve_active_period(self, q_active_kibetu):
+        if not q_active_kibetu:
+            return None, None, None, None, None
+
+        period = (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu=q_active_kibetu)
+            .first()
+        )
+        if not period:
+            return None, None, None, None, None
+
+        selected_month_start = date(period.year, period.month, 1)
+        selected_month_end = selected_month_start + relativedelta(months=1)
+        return (
+            period,
+            selected_month_start.year,
+            selected_month_start.month,
+            selected_month_start,
+            selected_month_end,
+        )
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -7873,6 +7939,14 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         q_placement = (self.request.GET.get("q_placement") or "").strip()
         q_status = (self.request.GET.get("q_status") or "").strip()
         q_rank = (self.request.GET.get("q_rank") or "").strip()
+        q_active_kibetu = (self.request.GET.get("q_active_kibetu") or "").strip()
+        (
+            selected_active_period,
+            active_year,
+            active_month,
+            active_start_date,
+            active_end_date,
+        ) = self._resolve_active_period(q_active_kibetu)
 
         per_page = self.get_per_page()
 
@@ -7898,6 +7972,10 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             q_placement=q_placement,
             q_status=q_status,
             q_rank=q_rank,
+            active_year=active_year,
+            active_month=active_month,
+            active_start_date=active_start_date,
+            active_end_date=active_end_date,
             limit=per_page,
             offset=offset,
         )
@@ -7909,6 +7987,14 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         ctx["q_placement"] = q_placement
         ctx["q_status"] = q_status
         ctx["q_rank"] = q_rank
+        ctx["q_active_kibetu"] = q_active_kibetu
+        ctx["selected_active_period"] = selected_active_period
+        ctx["active_year"] = active_year
+        ctx["active_month"] = active_month
+        ctx["monthly_period_choices"] = (
+            MonthlyPeriod.objects.using("rds")
+            .order_by("-kibetu")
+        )
 
         base_params = {}
 
@@ -7932,6 +8018,9 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
 
         if q_rank:
             base_params["q_rank"] = q_rank
+
+        if q_active_kibetu:
+            base_params["q_active_kibetu"] = q_active_kibetu
 
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
@@ -7975,6 +8064,34 @@ class UsersExportView(UsersView):
     def _company_label(self, value):
         return "法人" if value == 1 else "-"
 
+    def _active_status_label(self, row, q_active_kibetu):
+        if not q_active_kibetu:
+            return "-"
+        if row.get("prev_month_active_status") == 1:
+            return "アクティブ"
+        return "非アクティブ"
+
+    def _row_to_excel(self, row, q_active_kibetu):
+        return [
+            row.get("id"),
+            row.get("group_code"),
+            row.get("jmoa_code"),
+            row.get("send_bv_name"),
+            row.get("name_kana") or "-",
+            row.get("introducer_code"),
+            row.get("placement_code"),
+            self._active_status_label(row, q_active_kibetu),
+            self._rank_label(row.get("rank")),
+            self._status_label(row.get("status_code")),
+            self._activated_label(row.get("activated")),
+            self._company_label(row.get("company")),
+            row.get("interim_at"),
+            row.get("activated_at"),
+            row.get("last_purchase_at"),
+            row.get("created_at"),
+            row.get("updated_at"),
+        ]
+
     def get(self, request, *args, **kwargs):
         q_jpid = (request.GET.get("q_jpid") or "").strip()
         q_name = (request.GET.get("q_name") or "").strip()
@@ -7983,38 +8100,14 @@ class UsersExportView(UsersView):
         q_placement = (request.GET.get("q_placement") or "").strip()
         q_status = (request.GET.get("q_status") or "").strip()
         q_rank = (request.GET.get("q_rank") or "").strip()
-
-        where_sql, params = self._build_where(
-            q_jpid=q_jpid,
-            q_name=q_name,
-            q_name_kana=q_name_kana,
-            q_introducer=q_introducer,
-            q_placement=q_placement,
-            q_status=q_status,
-            q_rank=q_rank,
-        )
-
-        sql = f"""
-            SELECT
-                u.id,
-                u.group_code,
-                u.jmoa_code,
-                u.send_bv_name,
-                u.introducer_code,
-                u.placement_code,
-                u.rank,
-                u.status_code,
-                u.activated,
-                u.interim_at,
-                u.activated_at,
-                u.company,
-                u.last_purchase_at,
-                u.created_at,
-                u.updated_at
-            FROM nexus_production.users u
-            {where_sql}
-            ORDER BY u.status_code, u.jmoa_code
-        """
+        q_active_kibetu = (request.GET.get("q_active_kibetu") or "").strip()
+        (
+            _selected_active_period,
+            active_year,
+            active_month,
+            active_start_date,
+            active_end_date,
+        ) = self._resolve_active_period(q_active_kibetu)
 
         wb = openpyxl.Workbook(write_only=True)
         ws = wb.create_sheet("会員一覧")
@@ -8023,8 +8116,10 @@ class UsersExportView(UsersView):
             "グループID",
             "会員ID",
             "会員名",
+            "氏名(カナ)",
             "上位者ID",
             "紹介者ID",
+            "アクティブ確認",
             "ランク",
             "ステータス",
             "本登録FLG",
@@ -8036,30 +8131,30 @@ class UsersExportView(UsersView):
             "更新日時",
         ])
 
-        with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, params)
-            while True:
-                rows = cursor.fetchmany(self.EXPORT_FETCH_SIZE)
-                if not rows:
-                    break
-                for row in rows:
-                    ws.append([
-                        row[0],
-                        row[1],
-                        row[2],
-                        row[3],
-                        row[4],
-                        row[5],
-                        self._rank_label(row[6]),
-                        self._status_label(row[7]),
-                        self._activated_label(row[8]),
-                        self._company_label(row[11]),
-                        row[9],
-                        row[10],
-                        row[12],
-                        row[13],
-                        row[14],
-                    ])
+        offset = 0
+        while True:
+            rows = self._fetch_rows(
+                q_jpid=q_jpid,
+                q_name=q_name,
+                q_name_kana=q_name_kana,
+                q_introducer=q_introducer,
+                q_placement=q_placement,
+                q_status=q_status,
+                q_rank=q_rank,
+                active_year=active_year,
+                active_month=active_month,
+                active_start_date=active_start_date,
+                active_end_date=active_end_date,
+                limit=self.EXPORT_FETCH_SIZE,
+                offset=offset,
+            )
+            if not rows:
+                break
+            for row in rows:
+                ws.append(self._row_to_excel(row, q_active_kibetu))
+            if len(rows) < self.EXPORT_FETCH_SIZE:
+                break
+            offset += self.EXPORT_FETCH_SIZE
 
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
