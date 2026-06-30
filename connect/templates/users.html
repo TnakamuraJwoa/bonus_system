@@ -213,6 +213,17 @@
                   </select>
                 </div>
 
+                {% if q_active_kibetu %}
+                  <div class="mr-2 mb-2">
+                    <label class="form-label mb-0 small text-muted">判定結果</label>
+                    <select name="q_active_result" class="form-control">
+                      <option value="">全て</option>
+                      <option value="active" {% if q_active_result == "active" %}selected{% endif %}>アクティブのみ</option>
+                      <option value="inactive" {% if q_active_result == "inactive" %}selected{% endif %}>非アクティブのみ</option>
+                    </select>
+                  </div>
+                {% endif %}
+
                 <div class="mr-2 mb-2" style="width: 110px;">
                   <label class="form-label mb-0 small text-muted">表示件数</label>
                   <select name="per_page" class="form-control">
@@ -226,7 +237,7 @@
             </form>
 
             <div class="users-filter-status bonus-calc-selection-status small">
-              {% if q_jpid or q_name or q_name_kana or q_introducer or q_placement or q_status or q_rank or q_active_kibetu %}
+              {% if q_jpid or q_name or q_name_kana or q_introducer or q_placement or q_status or q_rank or q_active_kibetu or q_active_result %}
                 絞り込み中：
 
                 {% if q_jpid %}
@@ -261,6 +272,12 @@
                   <span class="badge bg-info text-dark">
                     アクティブ確認={{ q_active_kibetu }}
                   </span>
+                {% endif %}
+
+                {% if q_active_result == "active" %}
+                  <span class="badge bg-success">判定結果=アクティブのみ</span>
+                {% elif q_active_result == "inactive" %}
+                  <span class="badge bg-secondary">判定結果=非アクティブのみ</span>
                 {% endif %}
               {% else %}
                 全件表示中

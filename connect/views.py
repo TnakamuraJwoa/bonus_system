@@ -7776,6 +7776,42 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
 
         return where_sql, params
 
+    @staticmethod
+    def _has_active_period(active_year, active_month, active_start_date, active_end_date):
+        return bool(active_year and active_month and active_start_date and active_end_date)
+
+    @staticmethod
+    def _apply_active_result_filter(where_sql, q_active_result):
+        if q_active_result == "active":
+            condition = "(IFNULL(au.active_status, 0) = 1 OR IFNULL(pb.prev_month_bv, 0) >= 50)"
+        elif q_active_result == "inactive":
+            condition = "(IFNULL(au.active_status, 0) <> 1 AND IFNULL(pb.prev_month_bv, 0) < 50)"
+        else:
+            return where_sql
+
+        if where_sql:
+            return f"{where_sql} AND {condition}"
+        return f"WHERE {condition}"
+
+    @staticmethod
+    def _build_active_join_sql():
+        return """
+            LEFT JOIN bonus_db.active_users au
+              ON au.jwoa_code = u.jmoa_code
+             AND au.year = %s
+             AND au.month = %s
+            LEFT JOIN (
+                SELECT
+                    jwoa_code,
+                    SUM(IFNULL(bv, 0)) AS prev_month_bv
+                FROM bonus_db.purchase_info_list
+                WHERE bonus_payment_date >= %s
+                  AND bonus_payment_date < %s
+                GROUP BY jwoa_code
+            ) pb
+              ON pb.jwoa_code = u.jmoa_code
+            """
+
     def _fetch_total_count(
         self,
         q_jpid: str = "",
@@ -7785,6 +7821,11 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         q_placement: str = "",
         q_status: str = "",
         q_rank: str = "",
+        active_year=None,
+        active_month=None,
+        active_start_date=None,
+        active_end_date=None,
+        q_active_result: str = "",
     ) -> int:
 
         where_sql, params = self._build_where(
@@ -7796,15 +7837,35 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             q_status=q_status,
             q_rank=q_rank,
         )
+        active_params = []
+        active_join_sql = ""
+        if (
+            q_active_result in ("active", "inactive")
+            and self._has_active_period(
+                active_year,
+                active_month,
+                active_start_date,
+                active_end_date,
+            )
+        ):
+            active_join_sql = self._build_active_join_sql()
+            active_params = [
+                active_year,
+                active_month,
+                active_start_date,
+                active_end_date,
+            ]
+            where_sql = self._apply_active_result_filter(where_sql, q_active_result)
 
         sql = f"""
-            SELECT COUNT(*)
+            SELECT COUNT(DISTINCT u.id)
             FROM nexus_production.users u
+            {active_join_sql}
             {where_sql}
         """
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, params)
+            cursor.execute(sql, active_params + params)
             row = cursor.fetchone()
 
         return int(row[0]) if row else 0
@@ -7822,6 +7883,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         active_month=None,
         active_start_date=None,
         active_end_date=None,
+        q_active_result: str = "",
         limit: int = 200,
         offset: int = 0,
     ):
@@ -7837,7 +7899,12 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         )
 
         active_params = []
-        if active_year and active_month and active_start_date and active_end_date:
+        if self._has_active_period(
+            active_year,
+            active_month,
+            active_start_date,
+            active_end_date,
+        ):
             active_select_sql = """
                 CASE
                     WHEN au.active_status = 1 OR IFNULL(pb.prev_month_bv, 0) >= 50 THEN 1
@@ -7845,28 +7912,14 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
                 END AS prev_month_active_status,
                 IFNULL(pb.prev_month_bv, 0) AS prev_month_bv
             """
-            active_join_sql = """
-            LEFT JOIN bonus_db.active_users au
-              ON au.jwoa_code = u.jmoa_code
-             AND au.year = %s
-             AND au.month = %s
-            LEFT JOIN (
-                SELECT
-                    jwoa_code,
-                    SUM(IFNULL(bv, 0)) AS prev_month_bv
-                FROM bonus_db.purchase_info_list
-                WHERE bonus_payment_date >= %s
-                  AND bonus_payment_date < %s
-                GROUP BY jwoa_code
-            ) pb
-              ON pb.jwoa_code = u.jmoa_code
-            """
+            active_join_sql = self._build_active_join_sql()
             active_params = [
                 active_year,
                 active_month,
                 active_start_date,
                 active_end_date,
             ]
+            where_sql = self._apply_active_result_filter(where_sql, q_active_result)
         else:
             active_select_sql = """
                 NULL AS prev_month_active_status,
@@ -7940,6 +7993,9 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         q_status = (self.request.GET.get("q_status") or "").strip()
         q_rank = (self.request.GET.get("q_rank") or "").strip()
         q_active_kibetu = (self.request.GET.get("q_active_kibetu") or "").strip()
+        q_active_result = (self.request.GET.get("q_active_result") or "").strip()
+        if not q_active_kibetu or q_active_result not in ("active", "inactive"):
+            q_active_result = ""
         (
             selected_active_period,
             active_year,
@@ -7958,6 +8014,11 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             q_placement=q_placement,
             q_status=q_status,
             q_rank=q_rank,
+            active_year=active_year,
+            active_month=active_month,
+            active_start_date=active_start_date,
+            active_end_date=active_end_date,
+            q_active_result=q_active_result,
         )
 
         total_pages = max(1, math.ceil(total_count / per_page))
@@ -7976,6 +8037,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             active_month=active_month,
             active_start_date=active_start_date,
             active_end_date=active_end_date,
+            q_active_result=q_active_result,
             limit=per_page,
             offset=offset,
         )
@@ -7988,6 +8050,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         ctx["q_status"] = q_status
         ctx["q_rank"] = q_rank
         ctx["q_active_kibetu"] = q_active_kibetu
+        ctx["q_active_result"] = q_active_result
         ctx["selected_active_period"] = selected_active_period
         ctx["active_year"] = active_year
         ctx["active_month"] = active_month
@@ -8021,6 +8084,9 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
 
         if q_active_kibetu:
             base_params["q_active_kibetu"] = q_active_kibetu
+
+        if q_active_result:
+            base_params["q_active_result"] = q_active_result
 
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
@@ -8101,6 +8167,9 @@ class UsersExportView(UsersView):
         q_status = (request.GET.get("q_status") or "").strip()
         q_rank = (request.GET.get("q_rank") or "").strip()
         q_active_kibetu = (request.GET.get("q_active_kibetu") or "").strip()
+        q_active_result = (request.GET.get("q_active_result") or "").strip()
+        if not q_active_kibetu or q_active_result not in ("active", "inactive"):
+            q_active_result = ""
         (
             _selected_active_period,
             active_year,
@@ -8145,6 +8214,7 @@ class UsersExportView(UsersView):
                 active_month=active_month,
                 active_start_date=active_start_date,
                 active_end_date=active_end_date,
+                q_active_result=q_active_result,
                 limit=self.EXPORT_FETCH_SIZE,
                 offset=offset,
             )

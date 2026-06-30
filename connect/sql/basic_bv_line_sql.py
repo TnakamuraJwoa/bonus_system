@@ -322,12 +322,7 @@ select
     a.placement_code,
     a.jmoa_code,
     a.bv,
-    CASE
-        WHEN IFNULL(b.new_rank, 0) = 1
-            THEN LEAST(IFNULL(a.carry_over_bv, 0), 5000)
-        ELSE
-            LEAST(IFNULL(a.carry_over_bv, 0), 125000)
-    END AS carry_over_bv,
+    IFNULL(a.carry_over_bv, 0) AS carry_over_bv,
     b.new_rank
 from result_bv_line as a
 left join bonus_db.users_target_rank as b
