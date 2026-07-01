@@ -200,9 +200,43 @@
     }
   }
 
+  function showTreePath(trigger) {
+    var parts = getTreeSearchParts(trigger);
+    var input = parts.input;
+    var message = parts.message;
+    if (!input) {
+      return;
+    }
+
+    var keyword = input.value || "";
+    syncTreeSearchInputs(keyword);
+    if (redirectToDbTreeSearch(keyword)) {
+      if (message) {
+        message.textContent = "起点会員から検索対象までの経路を表示しています。";
+        message.classList.remove("text-danger");
+        message.classList.add("text-success");
+      }
+      return;
+    }
+
+    if (message) {
+      message.textContent = keyword.trim()
+        ? "会員コードを入力してから経路表示してください。"
+        : "経路表示する会員コードまたは会員名を入力してください。";
+      message.classList.remove("text-success");
+      message.classList.add("text-danger");
+    }
+  }
+
   scopeRoot.querySelectorAll("[data-tree-search-button]").forEach(function (button) {
     button.addEventListener("click", function () {
       searchTreeNode(button);
+    });
+  });
+
+  scopeRoot.querySelectorAll("[data-tree-path-button]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      showTreePath(button);
     });
   });
 
@@ -240,6 +274,46 @@
       var url = new URL(window.location.href);
       url.searchParams.delete("tree_search");
       window.history.replaceState({}, "", url.toString());
+    });
+  });
+
+  panel.querySelectorAll("[data-tree-path-resize-handle]").forEach(function (handle) {
+    var pathPanel = handle.closest("[data-tree-db-search-panel]");
+    if (!pathPanel) {
+      return;
+    }
+
+    handle.addEventListener("mousedown", function (event) {
+      event.preventDefault();
+      var list = pathPanel.querySelector(".placement-tree-db-path__list");
+      var startY = event.clientY;
+      var startHeight = pathPanel.offsetHeight;
+      var minHeight = 120;
+      var maxHeight = Math.max(220, Math.floor(window.innerHeight * 0.75));
+
+      function applyHeight(height) {
+        var nextHeight = Math.max(minHeight, Math.min(maxHeight, height));
+        pathPanel.style.maxHeight = nextHeight + "px";
+        pathPanel.style.height = nextHeight + "px";
+        if (list) {
+          var reservedHeight = handle.offsetHeight + 82;
+          list.style.maxHeight = Math.max(70, nextHeight - reservedHeight) + "px";
+        }
+      }
+
+      function onMouseMove(moveEvent) {
+        applyHeight(startHeight + (moveEvent.clientY - startY));
+      }
+
+      function onMouseUp() {
+        document.body.classList.remove("is-tree-path-resizing");
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
+      }
+
+      document.body.classList.add("is-tree-path-resizing");
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
     });
   });
 
