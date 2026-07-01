@@ -12,7 +12,7 @@ from .business_team_performance import (
 from .active_user_search import ActiveUserSearchExportView, ActiveUserSearchView
 from .basic_income_line_detail import BasicIncomeLineDetailView
 from .introducer_tree import IntroducerTreeExportView, IntroducerTreeView
-from .matching_bonus_detail import MatchingBonusDetailView, MatchingBonusTreeView
+from .matching_bonus_detail import MatchingBonusTreeView
 
 
 
@@ -126,7 +126,6 @@ urlpatterns = [
     path('s_drive_bonus/', views.S_DriveBonusView.as_view(), name = "s_drive_bonus"),
     path('s_basic_bonus/', views.S_BasicBonusView.as_view(), name = "s_basic_bonus"),
     path('s_matching_bonus/', views.S_MatchingBonusView.as_view(), name = "s_matching_bonus"),
-    path("matching_bonus_detail/", MatchingBonusDetailView.as_view(), name="matching_bonus_detail"),
     path("matching_bonus_tree/", MatchingBonusTreeView.as_view(), name="matching_bonus_tree"),
     path('s_month_title/', views.S_MonthTitleView.as_view(), name = "s_month_title"),
     path('s_title_bonus/', views.S_TitleBonusView.as_view(), name = "s_title_bonus"),
