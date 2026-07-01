@@ -268,46 +268,110 @@
         </div>
       </div>
 
-      <div class="card shadow-sm matching-tree-card" data-placement-tree-scope>
+      <div class="card shadow-sm matching-tree-card">
         <div class="card-body">
-          <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
-            <div>
-              <div class="fw-bold">マッチング・Tree</div>
-              <div class="small text-muted">
-                会員コードを起点に、配置関係（上位者Tree）を表示します。マッチング判定の確認用に利用してください。
-              </div>
-            </div>
-            {% if q_member_code and not tree_unavailable_reason %}
-              <div class="d-flex gap-2 flex-wrap align-items-center">
-                {% if tree_node_count %}
-                  <div class="text-muted small">表示ノード数：{{ tree_node_count }} 件</div>
-                {% endif %}
-                <div class="placement-tree-search">
-                  <input type="text"
-                         class="form-control form-control-sm"
-                         data-tree-search-input
-                         value="{{ tree_search|default:'' }}"
-                         placeholder="下位会員コード・会員名">
-                  <button type="button"
-                          class="btn btn-sm btn-outline-primary"
-                          data-tree-search-button>
-                    検索
-                  </button>
-                  <button type="button"
-                          class="btn btn-sm btn-outline-secondary"
-                          data-tree-path-button>
-                    経路表示
-                  </button>
-                  <span class="placement-tree-search__message text-muted" data-tree-search-message></span>
-                </div>
-                <button type="button" class="btn btn-sm btn-outline-secondary js-tree-collapse-all">全て閉じる</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary js-tree-expand-all">全て開く</button>
-                <button type="button" class="btn btn-sm btn-outline-primary js-tree-fullscreen">全画面表示</button>
-              </div>
-            {% endif %}
-          </div>
+          <ul class="nav nav-tabs mb-3">
+            <li class="nav-item">
+              <a class="nav-link {% if active_tree_type == 'placement' %}active{% endif %}"
+                 href="{% url 'connect:matching_bonus_tree' %}?{{ placement_tab_qs }}">
+                上位者Tree
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link {% if active_tree_type == 'introducer' %}active{% endif %}"
+                 href="{% url 'connect:matching_bonus_tree' %}?{{ introducer_tab_qs }}">
+                紹介者Tree
+              </a>
+            </li>
+          </ul>
 
-          {% include "com/_placement_tree_panel.html" with tree_panel_id="matchingTreePanel" tree_panel_title="マッチング・Tree" %}
+          <div class="tab-content">
+            <div class="tab-pane fade {% if active_tree_type == 'placement' %}show active{% endif %}"
+                 id="placementTreeTab"
+                 data-placement-tree-scope>
+              <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                <div>
+                  <div class="fw-bold">上位者Tree</div>
+                  <div class="small text-muted">
+                    会員コードを起点に、配置関係（上位者Tree）を表示します。
+                  </div>
+                </div>
+                {% if q_member_code and not placement_tree.tree_unavailable_reason %}
+                  <div class="d-flex gap-2 flex-wrap align-items-center">
+                    {% if placement_tree.tree_node_count %}
+                      <div class="text-muted small">表示ノード数：{{ placement_tree.tree_node_count }} 件</div>
+                    {% endif %}
+                    <div class="placement-tree-search">
+                      <input type="text"
+                             class="form-control form-control-sm"
+                             data-tree-search-input
+                             value="{{ placement_tree_search|default:'' }}"
+                             placeholder="下位会員コード・会員名">
+                      <button type="button"
+                              class="btn btn-sm btn-outline-primary"
+                              data-tree-search-button>
+                        検索
+                      </button>
+                      <button type="button"
+                              class="btn btn-sm btn-outline-secondary"
+                              data-tree-path-button>
+                        経路表示
+                      </button>
+                      <span class="placement-tree-search__message text-muted" data-tree-search-message></span>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary js-tree-collapse-all">全て閉じる</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary js-tree-expand-all">全て開く</button>
+                    <button type="button" class="btn btn-sm btn-outline-primary js-tree-fullscreen">全画面表示</button>
+                  </div>
+                {% endif %}
+              </div>
+
+              {% include "com/_placement_tree_panel.html" with tree_panel_id="placementTreePanel" tree_panel_title="上位者Tree" tree_search=placement_tree_search tree_unavailable_reason=placement_tree.tree_unavailable_reason tree_truncated=placement_tree.tree_truncated tree_node_count=placement_tree.tree_node_count tree_search_path_rows=placement_tree.tree_search_path_rows tree_search_target=placement_tree.tree_search_target tree_search_not_found=placement_tree.tree_search_not_found tree_ancestors=placement_tree.tree_ancestors tree_focus=placement_tree.tree_focus tree_children=placement_tree.tree_children tree_ancestor_title="上位者" tree_ancestor_badge_label="上位" direct_badge_label="紹介者" %}
+            </div>
+
+            <div class="tab-pane fade {% if active_tree_type == 'introducer' %}show active{% endif %}"
+                 id="introducerTreeTab"
+                 data-placement-tree-scope>
+              <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                <div>
+                  <div class="fw-bold">紹介者Tree</div>
+                  <div class="small text-muted">
+                    会員コードを起点に、紹介者関係を表示します。
+                  </div>
+                </div>
+                {% if q_member_code and not introducer_tree.tree_unavailable_reason %}
+                  <div class="d-flex gap-2 flex-wrap align-items-center">
+                    {% if introducer_tree.tree_node_count %}
+                      <div class="text-muted small">表示ノード数：{{ introducer_tree.tree_node_count }} 件</div>
+                    {% endif %}
+                    <div class="placement-tree-search">
+                      <input type="text"
+                             class="form-control form-control-sm"
+                             data-tree-search-input
+                             value="{{ introducer_tree_search|default:'' }}"
+                             placeholder="下位会員コード・会員名">
+                      <button type="button"
+                              class="btn btn-sm btn-outline-primary"
+                              data-tree-search-button>
+                        検索
+                      </button>
+                      <button type="button"
+                              class="btn btn-sm btn-outline-secondary"
+                              data-tree-path-button>
+                        経路表示
+                      </button>
+                      <span class="placement-tree-search__message text-muted" data-tree-search-message></span>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary js-tree-collapse-all">全て閉じる</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary js-tree-expand-all">全て開く</button>
+                    <button type="button" class="btn btn-sm btn-outline-primary js-tree-fullscreen">全画面表示</button>
+                  </div>
+                {% endif %}
+              </div>
+
+              {% include "com/_placement_tree_panel.html" with tree_panel_id="introducerTreePanel" tree_panel_title="紹介者Tree" tree_search=introducer_tree_search tree_unavailable_reason=introducer_tree.tree_unavailable_reason tree_truncated=introducer_tree.tree_truncated tree_node_count=introducer_tree.tree_node_count tree_search_path_rows=introducer_tree.tree_search_path_rows tree_search_target=introducer_tree.tree_search_target tree_search_not_found=introducer_tree.tree_search_not_found tree_ancestors=introducer_tree.tree_ancestors tree_focus=introducer_tree.tree_focus tree_children=introducer_tree.tree_children tree_ancestor_title="紹介上位者" tree_ancestor_badge_label="紹介上位" direct_badge_label="直紹介" %}
+            </div>
+          </div>
         </div>
       </div>
     </main>
@@ -317,9 +381,19 @@
 
 {% block script %}
 <div id="matchingTreeScriptConfig"
-     data-tree-panel-id="matchingTreePanel"
+     data-tree-panel-id="placementTreePanel"
      data-tree-root-param="q_member_code"
+     data-tree-type="placement"
+     data-tree-type-param="tree_type"
      data-tree-set-view="0"
      hidden></div>
 {% include "com/_placement_tree_scripts.html" with tree_script_config_id="matchingTreeScriptConfig" %}
+<div id="matchingIntroducerTreeScriptConfig"
+     data-tree-panel-id="introducerTreePanel"
+     data-tree-root-param="q_member_code"
+     data-tree-type="introducer"
+     data-tree-type-param="tree_type"
+     data-tree-set-view="0"
+     hidden></div>
+{% include "com/_placement_tree_scripts.html" with tree_script_config_id="matchingIntroducerTreeScriptConfig" %}
 {% endblock %}

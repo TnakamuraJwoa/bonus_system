@@ -8,6 +8,10 @@ from django.utils.timezone import make_aware
 from django.views import generic
 
 from connect.models import PeriodMaster
+from connect.introducer_tree_builder import (
+    build_introducer_tree_view,
+    fetch_introducer_tree_search_path,
+)
 from connect.placement_tree_builder import build_member_tree_view, fetch_tree_search_path
 from connect.sql.matching_bonus_detail_sql import MATCHING_BONUS_DETAIL_SQL
 
@@ -606,11 +610,69 @@ class MatchingBonusTreeView(generic.TemplateView):
         for row in rows or []:
             row["is_direct_introducer"] = row.get("jwoa_code") in direct_referral_codes
 
+    @staticmethod
+    def _empty_tree_context(unavailable_reason):
+        return {
+            "tree_ancestors": [],
+            "tree_focus": None,
+            "tree_children": [],
+            "tree_truncated": False,
+            "tree_unavailable_reason": unavailable_reason,
+            "tree_node_count": 0,
+            "tree_search_path_rows": [],
+            "tree_search_target": None,
+            "tree_search_not_found": False,
+        }
+
+    def _build_matching_tree_context(
+        self,
+        q_member_code,
+        tree_search,
+        active_tree_type,
+        direct_referral_codes,
+    ):
+        placement_tree = build_member_tree_view(q_member_code)
+        introducer_tree = build_introducer_tree_view(q_member_code)
+
+        for tree_context in (placement_tree, introducer_tree):
+            tree_context.setdefault("tree_search_path_rows", [])
+            tree_context.setdefault("tree_search_target", None)
+            tree_context.setdefault("tree_search_not_found", False)
+            self._apply_direct_introducer_badge(tree_context, direct_referral_codes)
+
+        active_tree_context = (
+            introducer_tree
+            if active_tree_type == "introducer"
+            else placement_tree
+        )
+        if tree_search:
+            if active_tree_type == "introducer":
+                tree_search_path_rows = fetch_introducer_tree_search_path(q_member_code, tree_search)
+            else:
+                tree_search_path_rows = fetch_tree_search_path(q_member_code, tree_search)
+
+            active_tree_context["tree_search_path_rows"] = tree_search_path_rows
+            active_tree_context["tree_search_target"] = (
+                next((row for row in tree_search_path_rows if row.get("is_target")), None)
+                if tree_search_path_rows
+                else None
+            )
+            active_tree_context["tree_search_not_found"] = not tree_search_path_rows
+            self._apply_direct_introducer_path_badge(
+                active_tree_context.get("tree_search_path_rows") or [],
+                direct_referral_codes,
+            )
+
+        return placement_tree, introducer_tree
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
         q_member_code = (self.request.GET.get("q_member_code") or "").strip()
         tree_search = (self.request.GET.get("tree_search") or "").strip()
+        active_tree_type = (self.request.GET.get("tree_type") or "placement").strip()
+        if active_tree_type not in ("placement", "introducer"):
+            active_tree_type = "placement"
 
         ctx.update({
             "object_list": self._get_period_choices(),
@@ -618,16 +680,12 @@ class MatchingBonusTreeView(generic.TemplateView):
             "selected_period": None,
             "q_member_code": q_member_code,
             "tree_search": tree_search,
+            "placement_tree_search": tree_search if active_tree_type == "placement" else "",
+            "introducer_tree_search": tree_search if active_tree_type == "introducer" else "",
+            "active_tree_type": active_tree_type,
             "period_error": "",
-            "tree_ancestors": [],
-            "tree_focus": None,
-            "tree_children": [],
-            "tree_truncated": False,
-            "tree_unavailable_reason": "会員コードを入力して「表示」を押してください。",
-            "tree_node_count": 0,
-            "tree_search_path_rows": [],
-            "tree_search_target": None,
-            "tree_search_not_found": False,
+            "placement_tree": self._empty_tree_context("会員コードを入力して「表示」を押してください。"),
+            "introducer_tree": self._empty_tree_context("会員コードを入力して「表示」を押してください。"),
             "show_tree_bonus_badges": False,
             "direct_referral_codes": set(),
         })
@@ -640,37 +698,55 @@ class MatchingBonusTreeView(generic.TemplateView):
                 ctx["period_error"] = "選択された期別が存在しません。"
 
         if q_member_code:
-            tree_context = build_member_tree_view(q_member_code)
-            ctx.update(tree_context)
             direct_referral_codes = self._fetch_direct_referral_codes(q_member_code)
             ctx["direct_referral_codes"] = direct_referral_codes
-            if tree_search:
-                tree_search_path_rows = fetch_tree_search_path(q_member_code, tree_search)
-                ctx["tree_search_path_rows"] = tree_search_path_rows
-                ctx["tree_search_target"] = (
-                    next((row for row in tree_search_path_rows if row.get("is_target")), None)
-                    if tree_search_path_rows
-                    else None
-                )
-                ctx["tree_search_not_found"] = not tree_search_path_rows
-
-            self._apply_direct_introducer_badge(ctx, direct_referral_codes)
-            self._apply_direct_introducer_path_badge(
-                ctx.get("tree_search_path_rows") or [],
+            placement_tree, introducer_tree = self._build_matching_tree_context(
+                q_member_code,
+                tree_search,
+                active_tree_type,
                 direct_referral_codes,
             )
+            ctx["placement_tree"] = placement_tree
+            ctx["introducer_tree"] = introducer_tree
 
             if selected_kibetu and ctx.get("selected_period") and not ctx.get("period_error"):
-                member_codes = self._collect_tree_codes(ctx)
-                member_codes.extend(self._collect_path_codes(ctx.get("tree_search_path_rows") or []))
+                member_codes = self._collect_tree_codes(placement_tree)
+                member_codes.extend(self._collect_tree_codes(introducer_tree))
+                member_codes.extend(self._collect_path_codes(
+                    placement_tree.get("tree_search_path_rows") or []
+                ))
+                member_codes.extend(self._collect_path_codes(
+                    introducer_tree.get("tree_search_path_rows") or []
+                ))
                 badge_map = self._fetch_tree_badge_map(selected_kibetu, member_codes)
-                self._apply_tree_badges(ctx, badge_map)
-                self._apply_path_badges(ctx.get("tree_search_path_rows") or [], badge_map)
+                self._apply_tree_badges(placement_tree, badge_map)
+                self._apply_tree_badges(introducer_tree, badge_map)
+                self._apply_path_badges(
+                    placement_tree.get("tree_search_path_rows") or [],
+                    badge_map,
+                )
+                self._apply_path_badges(
+                    introducer_tree.get("tree_search_path_rows") or [],
+                    badge_map,
+                )
                 ctx["show_tree_bonus_badges"] = True
 
         ctx["base_qs"] = self._build_base_qs({
             "kibetu": selected_kibetu,
             "q_member_code": q_member_code,
             "tree_search": tree_search,
+            "tree_type": active_tree_type,
+        })
+        ctx["placement_tab_qs"] = self._build_base_qs({
+            "kibetu": selected_kibetu,
+            "q_member_code": q_member_code,
+            "tree_search": tree_search if active_tree_type == "placement" else "",
+            "tree_type": "placement",
+        })
+        ctx["introducer_tab_qs"] = self._build_base_qs({
+            "kibetu": selected_kibetu,
+            "q_member_code": q_member_code,
+            "tree_search": tree_search if active_tree_type == "introducer" else "",
+            "tree_type": "introducer",
         })
         return ctx
