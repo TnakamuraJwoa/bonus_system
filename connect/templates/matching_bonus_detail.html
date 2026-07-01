@@ -1,0 +1,540 @@
+{% extends 'base.html' %}
+{% load humanize static custom_filters %}
+
+{% block head %}
+  <link href="{% static 'css/common.css' %}?v=53" rel="stylesheet">
+  <style>
+    .matching-detail-table {
+      min-width: 1450px;
+      white-space: nowrap;
+    }
+
+    .matching-detail-table th,
+    .matching-detail-table td {
+      padding-top: 0.28rem;
+      padding-bottom: 0.28rem;
+      line-height: 1.2;
+      vertical-align: middle;
+    }
+
+    .matching-detail-badge {
+      display: inline-block;
+      min-width: 4.5rem;
+    }
+
+    .matching-direct-referral-table {
+      min-width: 1100px;
+      white-space: nowrap;
+    }
+
+    .matching-introducer-summary-table {
+      min-width: 980px;
+      white-space: nowrap;
+    }
+
+    .matching-direct-referral-table th,
+    .matching-direct-referral-table td,
+    .matching-introducer-summary-table th,
+    .matching-introducer-summary-table td {
+      padding-top: 0.28rem;
+      padding-bottom: 0.28rem;
+      line-height: 1.2;
+      vertical-align: middle;
+    }
+
+    .matching-direct-referral-row--focus {
+      background: #fff7e6;
+    }
+
+    .matching-detail-card:fullscreen,
+    .matching-detail-card:-webkit-full-screen,
+    .matching-detail-card.is-matching-detail-pseudo-fullscreen,
+    .matching-direct-referral-card:fullscreen,
+    .matching-direct-referral-card:-webkit-full-screen,
+    .matching-direct-referral-card.is-matching-detail-pseudo-fullscreen {
+      background: #fff;
+      overflow: hidden;
+      padding: 1rem;
+      width: 100vw;
+      height: 100vh;
+      box-sizing: border-box;
+    }
+
+    .matching-detail-card.is-matching-detail-pseudo-fullscreen,
+    .matching-direct-referral-card.is-matching-detail-pseudo-fullscreen {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      margin: 0 !important;
+    }
+
+    .matching-detail-card:fullscreen > .card-body,
+    .matching-detail-card:-webkit-full-screen > .card-body,
+    .matching-detail-card.is-matching-detail-pseudo-fullscreen > .card-body,
+    .matching-direct-referral-card:fullscreen > .card-body,
+    .matching-direct-referral-card:-webkit-full-screen > .card-body,
+    .matching-direct-referral-card.is-matching-detail-pseudo-fullscreen > .card-body {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .matching-detail-card:fullscreen .table-responsive,
+    .matching-detail-card:-webkit-full-screen .table-responsive,
+    .matching-detail-card.is-matching-detail-pseudo-fullscreen .table-responsive,
+    .matching-direct-referral-card:fullscreen .table-responsive,
+    .matching-direct-referral-card:-webkit-full-screen .table-responsive,
+    .matching-direct-referral-card.is-matching-detail-pseudo-fullscreen .table-responsive {
+      flex: 1 1 0;
+      height: calc(100vh - 10rem);
+      max-height: calc(100vh - 10rem);
+      min-height: 0;
+      overflow: auto !important;
+      padding-bottom: 0.5rem;
+    }
+
+    .matching-detail-card:fullscreen .matching-detail-table,
+    .matching-detail-card:-webkit-full-screen .matching-detail-table,
+    .matching-detail-card.is-matching-detail-pseudo-fullscreen .matching-detail-table,
+    .matching-direct-referral-card:fullscreen .matching-direct-referral-table,
+    .matching-direct-referral-card:-webkit-full-screen .matching-direct-referral-table,
+    .matching-direct-referral-card.is-matching-detail-pseudo-fullscreen .matching-direct-referral-table {
+      width: max-content;
+      min-width: 100%;
+    }
+
+    body.is-matching-detail-pseudo-fullscreen-active {
+      overflow: hidden;
+    }
+  </style>
+{% endblock %}
+
+{% block contents %}
+<div class="container-fluid mt-3 app-page-viewport">
+  <div class="row g-1 h-100">
+    {% include "com/_sidebar_bonus_kensaku.html" with active_menu="matching_bonus_detail" %}
+
+    <main class="col-12 col-md-9 col-lg-10 app-page-main">
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <form method="get" class="bonus-search-form">
+            <div class="bonus-search-header">
+              <h5 class="page-title mb-0">【ボーナス検索 - マッチング・詳細】</h5>
+            </div>
+
+            <div class="bonus-search-filters">
+              <div>
+                {% bonus_calc_kibetu_input selected_kibetu period_type="weekly" %}
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">直紹介者コード</label>
+                <input type="text"
+                       name="q_introducer_code"
+                       class="form-control"
+                       value="{{ q_introducer_code|default:'' }}"
+                       placeholder="例：JP00000000">
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">直紹介者名</label>
+                <input type="text"
+                       name="q_introducer_name"
+                       class="form-control"
+                       value="{{ q_introducer_name|default:'' }}"
+                       placeholder="部分一致">
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">会員コード</label>
+                <input type="text"
+                       name="q_member_code"
+                       class="form-control"
+                       value="{{ q_member_code|default:'' }}"
+                       placeholder="例：JP00000000">
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">会員名</label>
+                <input type="text"
+                       name="q_member_name"
+                       class="form-control"
+                       value="{{ q_member_name|default:'' }}"
+                       placeholder="部分一致">
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">判定結果</label>
+                <select name="payable_result" class="form-select">
+                  <option value="" {% if not payable_result %}selected{% endif %}>全て</option>
+                  <option value="payable" {% if payable_result == "payable" %}selected{% endif %}>支払対象のみ</option>
+                  <option value="unpayable" {% if payable_result == "unpayable" %}selected{% endif %}>対象外のみ</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">対象外理由</label>
+                <select name="status_reason" class="form-select">
+                  <option value="" {% if not status_reason %}selected{% endif %}>全て</option>
+                  {% for reason in status_reason_choices %}
+                    <option value="{{ reason }}" {% if status_reason == reason %}selected{% endif %}>{{ reason }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">表示件数</label>
+                <select name="per_page" class="form-select">
+                  <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                  <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                  <option value="300" {% if per_page == 300 %}selected{% endif %}>300</option>
+                  <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+                </select>
+              </div>
+
+              <div class="bonus-search-actions">
+                <button type="submit" class="btn btn-primary">表示</button>
+                <a class="btn btn-outline-secondary" href="{% url 'connect:matching_bonus_detail' %}">リセット</a>
+              </div>
+            </div>
+          </form>
+
+          <div class="selection-indicator-group bonus-calc-selection-status mt-3">
+            {% bonus_calc_period_status empty_message="期別を選択してください" %}
+            {% if q_introducer_code %}
+              <span class="selection-indicator__badge badge badge-pill">直紹介者コード：{{ q_introducer_code }}</span>
+            {% endif %}
+            {% if q_introducer_name %}
+              <span class="selection-indicator__badge badge badge-pill">直紹介者名：{{ q_introducer_name }}</span>
+            {% endif %}
+            {% if q_member_code %}
+              <span class="selection-indicator__badge badge badge-pill">会員コード：{{ q_member_code }}</span>
+            {% endif %}
+            {% if q_member_name %}
+              <span class="selection-indicator__badge badge badge-pill">会員名：{{ q_member_name }}</span>
+            {% endif %}
+            {% if payable_result %}
+              <span class="selection-indicator__badge badge badge-pill">判定結果：{% if payable_result == "payable" %}支払対象{% else %}対象外{% endif %}</span>
+            {% endif %}
+            {% if status_reason %}
+              <span class="selection-indicator__badge badge badge-pill">理由：{{ status_reason }}</span>
+            {% endif %}
+          </div>
+
+          {% if period_error %}
+            <div class="alert alert-warning mt-3 mb-0">{{ period_error }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card shadow-sm flex-grow-1 matching-detail-card" data-matching-detail-fullscreen-card style="min-height: 0;">
+        <div class="card-body d-flex flex-column" style="min-height: 0; overflow: hidden;">
+          {% if rows %}
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+              <div>
+                <div class="fw-bold">一覧</div>
+                <div class="small text-muted">
+                  {{ display_from|intcomma }} - {{ display_to|intcomma }} / {{ total_count|intcomma }} 件
+                </div>
+              </div>
+              <button type="button"
+                      class="btn btn-outline-primary btn-sm"
+                      data-matching-detail-fullscreen>
+                全画面表示
+              </button>
+            </div>
+
+            <div class="table-responsive flex-grow-1" style="min-height: 0; overflow-x: auto; overflow-y: auto;">
+              <table class="table table-bordered table-sm align-middle mb-0 matching-detail-table">
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                  <tr>
+                    <th>期別</th>
+                    <th>判定</th>
+                    <th>理由</th>
+                    <th>会員コード</th>
+                    <th>会員名</th>
+                    <th class="text-end">ベーシック取得</th>
+                    <th class="text-end">ベーシック金額</th>
+                    <th>直紹介者コード</th>
+                    <th>直紹介者名</th>
+                    <th class="text-end">直紹介者取得</th>
+                    <th class="text-end">直紹介者ベーシック金額</th>
+                    <th class="text-end">直紹介アクティブ人数</th>
+                    <th class="text-end">配置階層</th>
+                    <th class="text-end">マッチング段数</th>
+                    <th class="text-end">支払可能段数</th>
+                    <th class="text-end">マッチング金額</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for r in rows %}
+                    <tr>
+                      <td>{{ r.kibetu }}</td>
+                      <td>
+                        {% if r.payable_flg %}
+                          <span class="badge badge-success matching-detail-badge">支払対象</span>
+                        {% else %}
+                          <span class="badge badge-secondary matching-detail-badge">対象外</span>
+                        {% endif %}
+                      </td>
+                      <td>{{ r.status_reason }}</td>
+                      <td class="font-weight-bold">{{ r.member_code }}</td>
+                      <td>{{ r.member_name|default:"-" }}</td>
+                      <td class="text-end">
+                        {% if r.basic_acquired_flg %}
+                          <span class="badge badge-primary">取得</span>
+                        {% else %}
+                          <span class="badge badge-light text-muted">未取得</span>
+                        {% endif %}
+                      </td>
+                      <td class="text-end">{{ r.basic_bonus_amount|default:0|floatformat:2|intcomma }}</td>
+                      <td class="font-weight-bold">{{ r.introducer_code|default:"-" }}</td>
+                      <td>{{ r.introducer_name|default:"-" }}</td>
+                      <td class="text-end">
+                        {% if r.introducer_basic_acquired_flg %}
+                          <span class="badge badge-primary">取得</span>
+                        {% else %}
+                          <span class="badge badge-light text-muted">未取得</span>
+                        {% endif %}
+                      </td>
+                      <td class="text-end">{{ r.introducer_basic_bonus_amount|default:0|floatformat:2|intcomma }}</td>
+                      <td class="text-end">{{ r.active_count|default:0 }}</td>
+                      <td class="text-end">{{ r.tree_level|default:"-" }}</td>
+                      <td class="text-end">{{ r.matching_level|default:"-" }}</td>
+                      <td class="text-end">{{ r.payable_level_limit|default:0 }}</td>
+                      <td class="text-end">{{ r.matching_bonus_amount|default:0|floatformat:2|intcomma }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            {% include "com/_pagination.html" %}
+          {% else %}
+            {% if selected_kibetu or q_member_code or q_member_name or q_introducer_code or q_introducer_name or payable_result or status_reason %}
+              <p class="mb-0">この条件のデータはありません。</p>
+            {% else %}
+              <p class="mb-0 text-muted">期別を選択して「表示」を押してください。</p>
+            {% endif %}
+          {% endif %}
+        </div>
+      </div>
+
+      {% if direct_referral_rows %}
+      <div class="card shadow-sm mt-3 matching-direct-referral-card" data-matching-detail-fullscreen-card>
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+            <div>
+              <div class="fw-bold">直紹介者の直下会員一覧</div>
+              <div class="small text-muted">
+                表示中の判定行に出ている直紹介者配下の会員です。オレンジ色の行は上の一覧で表示中の会員です。
+              </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <div class="text-muted small">{{ direct_referral_count|intcomma }} 件</div>
+              <button type="button"
+                      class="btn btn-outline-primary btn-sm"
+                      data-matching-detail-fullscreen>
+                全画面表示
+              </button>
+            </div>
+          </div>
+
+          {% if introducer_summary_rows %}
+          <div class="mb-3">
+            <div class="fw-bold small mb-1">直紹介者サマリー</div>
+            <div class="table-responsive" style="overflow-x: auto;">
+              <table class="table table-bordered table-sm align-middle mb-0 matching-introducer-summary-table">
+                <thead class="table-light">
+                  <tr>
+                    <th>直紹介者コード</th>
+                    <th>直紹介者名</th>
+                    <th class="text-end">直紹介者ベーシック取得</th>
+                    <th class="text-end">直紹介者ベーシック金額</th>
+                    <th class="text-end">直紹介者アクティブ</th>
+                    <th class="text-end">直紹介者前月購入BV</th>
+                    <th class="text-end">直下会員数</th>
+                    <th class="text-end">直下アクティブ人数</th>
+                    <th class="text-end">直下ベーシック取得人数</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for r in introducer_summary_rows %}
+                    <tr>
+                      <td class="font-weight-bold">{{ r.introducer_code }}</td>
+                      <td>{{ r.introducer_name|default:"-" }}</td>
+                      <td class="text-end">
+                        {% if r.introducer_basic_acquired_flg %}
+                          <span class="badge badge-primary">取得</span>
+                        {% else %}
+                          <span class="badge badge-light text-muted">未取得</span>
+                        {% endif %}
+                      </td>
+                      <td class="text-end">{{ r.introducer_basic_bonus_amount|default:0|floatformat:2|intcomma }}</td>
+                      <td class="text-end">
+                        {% if r.introducer_active_flg %}
+                          <span class="badge badge-success">アクティブ</span>
+                        {% else %}
+                          <span class="badge badge-light text-muted">非アクティブ</span>
+                        {% endif %}
+                      </td>
+                      <td class="text-end">{{ r.introducer_prev_month_bv|default:0|floatformat:2|intcomma }}</td>
+                      <td class="text-end">{{ r.direct_member_count|default:0|intcomma }}</td>
+                      <td class="text-end">{{ r.direct_active_count|default:0|intcomma }}</td>
+                      <td class="text-end">{{ r.direct_basic_acquired_count|default:0|intcomma }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          {% endif %}
+
+          <div class="table-responsive" style="overflow-x: auto;">
+            <table class="table table-bordered table-sm align-middle mb-0 matching-direct-referral-table">
+              <thead class="table-light">
+                <tr>
+                  <th>直紹介者コード</th>
+                  <th>直紹介者名</th>
+                  <th>区分</th>
+                  <th>直下会員コード</th>
+                  <th>直下会員名</th>
+                  <th class="text-end">ベーシック取得</th>
+                  <th class="text-end">ベーシック金額</th>
+                  <th class="text-end">アクティブ</th>
+                  <th class="text-end">前月購入BV</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for r in direct_referral_rows %}
+                  <tr class="{% if r.is_focus_member %}matching-direct-referral-row--focus{% endif %}">
+                    <td class="font-weight-bold">{{ r.introducer_code }}</td>
+                    <td>{{ r.introducer_name|default:"-" }}</td>
+                    <td>
+                      {% if r.is_focus_member %}
+                        <span class="badge badge-warning">表示中</span>
+                      {% else %}
+                        <span class="badge badge-light text-muted">同じ直下</span>
+                      {% endif %}
+                    </td>
+                    <td class="font-weight-bold">{{ r.member_code }}</td>
+                    <td>{{ r.member_name|default:"-" }}</td>
+                    <td class="text-end">
+                      {% if r.basic_acquired_flg %}
+                        <span class="badge badge-primary">取得</span>
+                      {% else %}
+                        <span class="badge badge-light text-muted">未取得</span>
+                      {% endif %}
+                    </td>
+                    <td class="text-end">{{ r.basic_bonus_amount|default:0|floatformat:2|intcomma }}</td>
+                    <td class="text-end">
+                      {% if r.active_flg %}
+                        <span class="badge badge-success">アクティブ</span>
+                      {% else %}
+                        <span class="badge badge-light text-muted">非アクティブ</span>
+                      {% endif %}
+                    </td>
+                    <td class="text-end">{{ r.prev_month_bv|default:0|floatformat:2|intcomma }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+    </main>
+  </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+(function () {
+  function fullscreenElement() {
+    return document.fullscreenElement || document.webkitFullscreenElement || null;
+  }
+
+  function requestFullscreen(element) {
+    if (element.requestFullscreen) {
+      return element.requestFullscreen();
+    }
+    if (element.webkitRequestFullscreen) {
+      element.webkitRequestFullscreen();
+      return Promise.resolve();
+    }
+    return Promise.reject();
+  }
+
+  function exitFullscreen() {
+    if (document.exitFullscreen) {
+      return document.exitFullscreen();
+    }
+    if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+      return Promise.resolve();
+    }
+    return Promise.reject();
+  }
+
+  function isPseudoFullscreen(card) {
+    return card && card.classList.contains("is-matching-detail-pseudo-fullscreen");
+  }
+
+  function syncButtonLabels() {
+    document.querySelectorAll("[data-matching-detail-fullscreen]").forEach(function (button) {
+      var card = button.closest("[data-matching-detail-fullscreen-card]");
+      var active = card && (fullscreenElement() === card || isPseudoFullscreen(card));
+      button.textContent = active ? "元に戻す" : "全画面表示";
+    });
+  }
+
+  function enterPseudoFullscreen(card) {
+    card.classList.add("is-matching-detail-pseudo-fullscreen");
+    document.body.classList.add("is-matching-detail-pseudo-fullscreen-active");
+    syncButtonLabels();
+  }
+
+  function exitPseudoFullscreen(card) {
+    card.classList.remove("is-matching-detail-pseudo-fullscreen");
+    document.body.classList.remove("is-matching-detail-pseudo-fullscreen-active");
+    syncButtonLabels();
+  }
+
+  document.querySelectorAll("[data-matching-detail-fullscreen]").forEach(function (button) {
+    var card = button.closest("[data-matching-detail-fullscreen-card]");
+    if (!card) {
+      return;
+    }
+
+    button.addEventListener("click", function () {
+      if (isPseudoFullscreen(card)) {
+        exitPseudoFullscreen(card);
+        return;
+      }
+
+      if (fullscreenElement() === card) {
+        exitFullscreen().then(syncButtonLabels).catch(syncButtonLabels);
+        return;
+      }
+
+      requestFullscreen(card).then(syncButtonLabels).catch(function () {
+        enterPseudoFullscreen(card);
+      });
+    });
+  });
+
+  document.addEventListener("keydown", function (event) {
+    var card = document.querySelector("[data-matching-detail-fullscreen-card]");
+    if (event.key === "Escape" && card && isPseudoFullscreen(card)) {
+      exitPseudoFullscreen(card);
+    }
+  });
+
+  document.addEventListener("fullscreenchange", syncButtonLabels);
+  document.addEventListener("webkitfullscreenchange", syncButtonLabels);
+})();
+</script>
+{% endblock %}

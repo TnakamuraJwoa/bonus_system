@@ -44,7 +44,7 @@
 <nav class="col-12 col-md-3 col-lg-2">
   <div class="card shadow-sm position-sticky" style="top: 1rem;">
 
-    {% if user_access|can_menu:"s_drive_bonus" or user_access|can_menu:"s_basic_bonus" or user_access|can_menu:"basic_income_line_detail" or user_access|can_menu:"s_matching_bonus" or user_access|can_menu:"s_month_title" %}
+    {% if user_access|can_menu:"s_drive_bonus" or user_access|can_menu:"s_basic_bonus" or user_access|can_menu:"basic_income_line_detail" or user_access|can_menu:"s_matching_bonus" or user_access|can_menu:"matching_bonus_detail" or user_access|can_menu:"s_month_title" %}
     <div class="card-body">
       <div class="fw-bold mb-2">■ 週ボーナス</div>
 
@@ -63,6 +63,7 @@
                           class="btn btn-link sidebar-submenu-toggle"
                           data-sidebar-submenu-toggle
                           data-target="basicBonusSubmenu"
+                          data-label="ベーシック・収入ライン詳細"
                           aria-expanded="{% if active_menu == 'basic_income_line_detail' %}true{% else %}false{% endif %}"
                           aria-label="{% if active_menu == 'basic_income_line_detail' %}収入ライン購入者詳細を折りたたむ{% else %}収入ライン購入者詳細を展開{% endif %}">
                     {% if active_menu == 'basic_income_line_detail' %}−{% else %}+{% endif %}
@@ -87,9 +88,38 @@
           {% endif %}
         {% endif %}
 
-        {% if user_access|can_menu:"s_matching_bonus" %}
-        <a class="list-group-item list-group-item-action {% if active_menu == 'matching_bonus' %}active{% endif %}"
-           href="{% url 'connect:s_matching_bonus' %}">マッチングボーナス</a>
+        {% if user_access|can_menu:"s_matching_bonus" or user_access|can_menu:"matching_bonus_detail" %}
+          {% if user_access|can_menu:"s_matching_bonus" %}
+            <div class="list-group-item sidebar-menu-parent p-0 {% if active_menu == 'matching_bonus' %}active{% endif %}">
+              <div class="d-flex align-items-center sidebar-menu-parent__row">
+                {% if user_access|can_menu:"matching_bonus_detail" %}
+                  <button type="button"
+                          class="btn btn-link sidebar-submenu-toggle"
+                          data-sidebar-submenu-toggle
+                          data-target="matchingBonusSubmenu"
+                          data-label="マッチング・詳細"
+                          aria-expanded="{% if active_menu == 'matching_bonus_detail' %}true{% else %}false{% endif %}"
+                          aria-label="{% if active_menu == 'matching_bonus_detail' %}マッチング・詳細を折りたたむ{% else %}マッチング・詳細を展開{% endif %}">
+                    {% if active_menu == 'matching_bonus_detail' %}−{% else %}+{% endif %}
+                  </button>
+                {% else %}
+                  <span class="sidebar-submenu-toggle-spacer"></span>
+                {% endif %}
+                <a class="flex-grow-1 text-decoration-none {% if active_menu == 'matching_bonus' %}text-white{% else %}text-body{% endif %} py-2 pr-3"
+                   href="{% url 'connect:s_matching_bonus' %}">マッチングボーナス</a>
+              </div>
+            </div>
+            {% if user_access|can_menu:"matching_bonus_detail" %}
+              <div id="matchingBonusSubmenu"
+                   class="sidebar-submenu {% if active_menu != 'matching_bonus_detail' %}is-collapsed{% endif %}">
+                <a class="list-group-item list-group-item-action sidebar-submenu-item {% if active_menu == 'matching_bonus_detail' %}active{% endif %}"
+                   href="{% url 'connect:matching_bonus_detail' %}">　マッチング・詳細</a>
+              </div>
+            {% endif %}
+          {% elif user_access|can_menu:"matching_bonus_detail" %}
+            <a class="list-group-item list-group-item-action {% if active_menu == 'matching_bonus_detail' %}active{% endif %}"
+               href="{% url 'connect:matching_bonus_detail' %}">　マッチング・詳細</a>
+          {% endif %}
         {% endif %}
       </div>
 
@@ -140,11 +170,12 @@
   window.__bonusKensakuSidebarInit = true;
 
   function setSubmenuToggleState(button, expanded) {
+    var label = button.getAttribute("data-label") || "子メニュー";
     button.textContent = expanded ? "−" : "+";
     button.setAttribute("aria-expanded", expanded ? "true" : "false");
     button.setAttribute(
       "aria-label",
-      expanded ? "収入ライン購入者詳細を折りたたむ" : "収入ライン購入者詳細を展開"
+      expanded ? label + "を折りたたむ" : label + "を展開"
     );
   }
 
