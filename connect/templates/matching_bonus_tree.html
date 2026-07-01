@@ -104,11 +104,14 @@
       border: 1px solid #fde68a;
       background: #fffbeb;
       border-radius: 8px;
-      padding: 0.65rem 0.75rem;
+      padding: 0.65rem 0.75rem 0;
       margin-bottom: 0.75rem;
       max-height: 11rem;
       overflow: hidden;
       flex: 0 0 auto;
+      display: flex;
+      flex-direction: column;
+      min-height: 8rem;
     }
 
     .placement-tree-db-path__list {
@@ -120,6 +123,40 @@
       max-height: 6.5rem;
       overflow: auto;
       padding: 0.15rem 0.2rem 0.25rem 0;
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+
+    .placement-tree-db-path__resize {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      margin: 0.45rem -0.75rem 0;
+      padding: 0.35rem 0.5rem;
+      border-top: 1px dashed #fbbf24;
+      background: #fef3c7;
+      color: #92400e;
+      cursor: ns-resize;
+      font-size: 0.78rem;
+      user-select: none;
+      flex: 0 0 auto;
+      position: sticky;
+      bottom: 0;
+      z-index: 1;
+    }
+
+    .placement-tree-db-path__resize::before {
+      content: "";
+      width: 2rem;
+      height: 0.25rem;
+      border-top: 1px solid #d97706;
+      border-bottom: 1px solid #d97706;
+    }
+
+    body.is-tree-path-resizing {
+      cursor: ns-resize;
+      user-select: none;
     }
 
     .placement-tree-panel.is-tree-pseudo-fullscreen .placement-tree-db-path {
@@ -255,6 +292,11 @@
                           class="btn btn-sm btn-outline-primary"
                           data-tree-search-button>
                     検索
+                  </button>
+                  <button type="button"
+                          class="btn btn-sm btn-outline-secondary"
+                          data-tree-path-button>
+                    経路表示
                   </button>
                   <span class="placement-tree-search__message text-muted" data-tree-search-message></span>
                 </div>

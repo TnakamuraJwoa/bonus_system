@@ -15,6 +15,11 @@
                 data-tree-search-button>
           検索
         </button>
+        <button type="button"
+                class="btn btn-sm btn-outline-secondary"
+                data-tree-path-button>
+          経路表示
+        </button>
         <span class="placement-tree-search__message text-muted" data-tree-search-message></span>
       </div>
       <button type="button" class="btn btn-sm btn-outline-secondary js-tree-collapse-all">全て閉じる</button>
@@ -37,9 +42,9 @@
            data-tree-db-search-target="{{ tree_search_target.jwoa_code|default:'' }}">
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
           <div>
-            <div class="fw-bold small">DB配下検索結果</div>
+            <div class="fw-bold small">経路表示</div>
             <div class="small text-muted">
-              「{{ tree_search }}」は表示中Treeの外にある可能性があるため、DB上の配下全体から経路を表示しています。
+              起点会員から「{{ tree_search }}」までの経路を一直線で表示しています。
             </div>
           </div>
           <div class="d-flex align-items-center gap-2">
@@ -67,7 +72,7 @@
               {% endif %}
               {% if node.show_tree_bonus_badges %}
                 {% if node.basic_acquired_flg %}
-                  <span class="badge badge-primary">ベーシック取得</span>
+                  <span class="badge badge-danger">ベーシック取得</span>
                 {% else %}
                   <span class="badge badge-light text-muted">ベーシック未取得</span>
                 {% endif %}
@@ -79,6 +84,9 @@
               {% endif %}
             </span>
           {% endfor %}
+        </div>
+        <div class="placement-tree-db-path__resize" data-tree-path-resize-handle>
+          ドラッグして広げる
         </div>
       </div>
     {% elif tree_search_not_found %}
@@ -115,7 +123,7 @@
                 {% endif %}
                 {% if node.show_tree_bonus_badges %}
                   {% if node.basic_acquired_flg %}
-                    <span class="badge badge-primary ml-1">ベーシック取得</span>
+                    <span class="badge badge-danger ml-1">ベーシック取得</span>
                   {% else %}
                     <span class="badge badge-light text-muted ml-1">ベーシック未取得</span>
                   {% endif %}
@@ -154,7 +162,7 @@
           {% endif %}
           {% if tree_focus.show_tree_bonus_badges %}
             {% if tree_focus.basic_acquired_flg %}
-              <span class="badge badge-primary ml-1">ベーシック取得</span>
+              <span class="badge badge-danger ml-1">ベーシック取得</span>
             {% else %}
               <span class="badge badge-light text-muted ml-1">ベーシック未取得</span>
             {% endif %}
