@@ -24,7 +24,25 @@
       border-radius: 0;
     }
 
+    .placement-tree-panel.is-tree-pseudo-fullscreen {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483000;
+      width: 100vw;
+      height: 100vh;
+      padding: 1rem;
+      background: #f8fafc;
+      border-radius: 0;
+      box-sizing: border-box;
+      margin: 0 !important;
+      transform: none !important;
+    }
+
     .placement-tree-panel:fullscreen .placement-tree-fullscreen-header {
+      display: flex;
+    }
+
+    .placement-tree-panel.is-tree-pseudo-fullscreen .placement-tree-fullscreen-header {
       display: flex;
     }
 
@@ -41,6 +59,15 @@
       position: sticky;
       top: 0;
       z-index: 2;
+    }
+
+    .placement-tree-fullscreen-header__actions {
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-end;
+      gap: 0.5rem;
+      margin-left: auto;
+      flex-wrap: wrap;
     }
 
     .placement-tree-node__row {
@@ -85,6 +112,63 @@
     .placement-tree-search__message {
       flex-basis: 100%;
       font-size: 0.8rem;
+    }
+
+    .placement-tree-db-path {
+      border: 1px solid #fde68a;
+      background: #fffbeb;
+      border-radius: 8px;
+      padding: 0.65rem 0.75rem;
+      margin-bottom: 0.75rem;
+      max-height: 11rem;
+      overflow: hidden;
+      flex: 0 0 auto;
+    }
+
+    .placement-tree-db-path__list {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.35rem;
+      margin-top: 0.45rem;
+      max-height: 6.5rem;
+      overflow: auto;
+      padding: 0.15rem 0.2rem 0.25rem 0;
+    }
+
+    .placement-tree-panel:fullscreen .placement-tree-db-path,
+    .placement-tree-panel:-webkit-full-screen .placement-tree-db-path,
+    .placement-tree-panel.is-tree-pseudo-fullscreen .placement-tree-db-path {
+      max-height: 9.5rem;
+    }
+
+    .placement-tree-panel:fullscreen .placement-tree-db-path__list,
+    .placement-tree-panel:-webkit-full-screen .placement-tree-db-path__list,
+    .placement-tree-panel.is-tree-pseudo-fullscreen .placement-tree-db-path__list {
+      max-height: 5.5rem;
+    }
+
+    .placement-tree-db-path__item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      border: 1px solid #dbeafe;
+      background: #eff6ff;
+      border-radius: 999px;
+      padding: 0.25rem 0.55rem;
+      font-size: 0.82rem;
+      white-space: nowrap;
+    }
+
+    .placement-tree-db-path__item--target {
+      border-color: #f59e0b;
+      background: #fef3c7;
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.16);
+    }
+
+    .placement-tree-db-path__arrow {
+      color: #94a3b8;
+      font-weight: 700;
     }
 
     .placement-tree-toggle {
@@ -153,6 +237,14 @@
 
     body.is-downline-fullscreen-active {
       overflow: hidden;
+    }
+
+    body.is-tree-pseudo-fullscreen-active {
+      overflow: hidden;
+    }
+
+    body.is-tree-pseudo-fullscreen-active #wrapper {
+      overflow: visible;
     }
 
     body.is-downline-fullscreen-active #wrapper {
@@ -339,6 +431,7 @@
                   <input type="text"
                          class="form-control form-control-sm"
                          data-tree-search-input
+                         value="{{ tree_search|default:'' }}"
                          placeholder="下位会員コード・会員名">
                   <button type="button"
                           class="btn btn-sm btn-outline-primary"
@@ -364,19 +457,22 @@
             <div class="placement-tree-panel" id="placementTreePanel">
               <div class="placement-tree-fullscreen-header">
                 <div class="font-weight-bold">上位者 Tree</div>
-                <div class="placement-tree-search">
-                  <input type="text"
-                         class="form-control form-control-sm"
-                         data-tree-search-input
-                         placeholder="下位会員コード・会員名">
-                  <button type="button"
-                          class="btn btn-sm btn-outline-primary"
-                          data-tree-search-button>
-                    検索
-                  </button>
-                  <span class="placement-tree-search__message text-muted" data-tree-search-message></span>
+                <div class="placement-tree-fullscreen-header__actions">
+                  <div class="placement-tree-search">
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           data-tree-search-input
+                           value="{{ tree_search|default:'' }}"
+                           placeholder="下位会員コード・会員名">
+                    <button type="button"
+                            class="btn btn-sm btn-outline-primary"
+                            data-tree-search-button>
+                      検索
+                    </button>
+                    <span class="placement-tree-search__message text-muted" data-tree-search-message></span>
+                  </div>
+                  <button type="button" class="btn btn-sm btn-outline-secondary js-tree-exit-fullscreen">全画面を閉じる</button>
                 </div>
-                <button type="button" class="btn btn-sm btn-outline-secondary js-tree-exit-fullscreen">全画面を閉じる</button>
               </div>
               {% if tree_unavailable_reason %}
                 <p class="mb-0 text-muted">{{ tree_unavailable_reason }}</p>
@@ -384,6 +480,47 @@
                 {% if tree_truncated %}
                   <div class="alert alert-warning py-2 small">
                     表示件数が上限（{{ tree_node_count }} 件）に達したため、一部のみ表示しています。
+                  </div>
+                {% endif %}
+
+                {% if tree_search_path_rows %}
+                  <div class="placement-tree-db-path"
+                       data-tree-db-search-panel
+                       data-tree-db-search-target="{{ tree_search_target.jwoa_code|default:'' }}">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                      <div>
+                        <div class="fw-bold small">DB配下検索結果</div>
+                        <div class="small text-muted">
+                          「{{ tree_search }}」は表示中Treeの外にある可能性があるため、DB上の配下全体から経路を表示しています。
+                        </div>
+                      </div>
+                      <div class="d-flex align-items-center gap-2">
+                        {% if tree_search_target %}
+                          <span class="badge badge-warning">対象: {{ tree_search_target.jwoa_code }}</span>
+                        {% endif %}
+                        <button type="button"
+                                class="btn btn-sm btn-outline-secondary"
+                                data-tree-db-search-close>
+                          閉じる
+                        </button>
+                      </div>
+                    </div>
+                    <div class="placement-tree-db-path__list">
+                      {% for node in tree_search_path_rows %}
+                        {% if not forloop.first %}
+                          <span class="placement-tree-db-path__arrow">›</span>
+                        {% endif %}
+                        <span class="placement-tree-db-path__item {% if node.is_target %}placement-tree-db-path__item--target{% endif %}">
+                          <span class="font-weight-bold">{{ node.jwoa_code }}</span>
+                          <span>{{ node.send_bv_name|default:"-" }}</span>
+                          <span class="badge {{ node.rank|rank_badge_class }}">{{ node.rank|rank_label }}</span>
+                        </span>
+                      {% endfor %}
+                    </div>
+                  </div>
+                {% elif tree_search_not_found %}
+                  <div class="alert alert-warning py-2 small">
+                    「{{ tree_search }}」に一致する下位会員は、DB上の配下全体にも見つかりませんでした。
                   </div>
                 {% endif %}
 
@@ -668,6 +805,32 @@
     });
   }
 
+  function fullscreenElement() {
+    return document.fullscreenElement || document.webkitFullscreenElement || null;
+  }
+
+  function hasTreeRootCode() {
+    return Boolean(new URLSearchParams(window.location.search).get("q_jwoa_code"));
+  }
+
+  function redirectToDbTreeSearch(keyword) {
+    var normalizedKeyword = (keyword || "").trim();
+    if (!normalizedKeyword || !hasTreeRootCode()) {
+      return false;
+    }
+
+    var url = new URL(window.location.href);
+    url.searchParams.set("view", "tree");
+    url.searchParams.set("tree_search", normalizedKeyword);
+    var panel = document.getElementById("placementTreePanel");
+    if (panel && panel.classList.contains("is-tree-pseudo-fullscreen")) {
+      url.searchParams.set("tree_fullscreen", "1");
+    }
+    url.searchParams.delete("page");
+    window.location.href = url.toString();
+    return true;
+  }
+
   function searchTreeNode(trigger) {
     var parts = getTreeSearchParts(trigger);
     var input = parts.input;
@@ -684,6 +847,14 @@
     syncTreeSearchInputs(keyword);
     var matchedNode = findTreeNode(keyword);
     if (!matchedNode) {
+      if (redirectToDbTreeSearch(keyword)) {
+        if (message) {
+          message.textContent = "表示中Treeにないため、DB上の配下全体を検索しています。";
+          message.classList.remove("text-danger");
+          message.classList.add("text-success");
+        }
+        return;
+      }
       if (message) {
         message.textContent = keyword.trim()
           ? "表示中のTreeに該当する下位会員が見つかりません。"
@@ -719,19 +890,83 @@
     });
   });
 
-  document.querySelectorAll(".js-tree-fullscreen").forEach(function (button) {
+  var dbSearchTarget = document.querySelector("[data-tree-db-search-target]");
+  if (dbSearchTarget) {
+    var targetCode = dbSearchTarget.getAttribute("data-tree-db-search-target");
+    var visibleTarget = targetCode ? findTreeNode(targetCode) : null;
+    if (visibleTarget) {
+      expandPathToNode(visibleTarget);
+      visibleTarget.classList.add("placement-tree-node--searched");
+      visibleTarget.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }
+
+  document.querySelectorAll("[data-tree-db-search-close]").forEach(function (button) {
     button.addEventListener("click", function () {
-      var panel = document.getElementById("placementTreePanel");
-      if (panel && panel.requestFullscreen) {
-        panel.requestFullscreen();
+      var panel = button.closest("[data-tree-db-search-panel]");
+      if (panel) {
+        panel.remove();
       }
+      document.querySelectorAll(".placement-tree-node--searched").forEach(function (node) {
+        node.classList.remove("placement-tree-node--searched");
+      });
+      syncTreeSearchInputs("");
+
+      var url = new URL(window.location.href);
+      url.searchParams.delete("tree_search");
+      window.history.replaceState({}, "", url.toString());
     });
   });
 
+  function enterTreePseudoFullscreen(panel) {
+    if (!panel) {
+      return;
+    }
+    if (!panel.__treeFullscreenPlaceholder && panel.parentNode) {
+      panel.__treeFullscreenPlaceholder = document.createComment("placement tree fullscreen placeholder");
+      panel.parentNode.insertBefore(panel.__treeFullscreenPlaceholder, panel);
+      document.body.appendChild(panel);
+    }
+    panel.classList.add("is-tree-pseudo-fullscreen");
+    document.body.classList.add("is-tree-pseudo-fullscreen-active");
+  }
+
+  function exitTreePseudoFullscreen(panel) {
+    if (!panel) {
+      return;
+    }
+    panel.classList.remove("is-tree-pseudo-fullscreen");
+    document.body.classList.remove("is-tree-pseudo-fullscreen-active");
+    if (panel.__treeFullscreenPlaceholder && panel.__treeFullscreenPlaceholder.parentNode) {
+      panel.__treeFullscreenPlaceholder.parentNode.insertBefore(panel, panel.__treeFullscreenPlaceholder);
+      panel.__treeFullscreenPlaceholder.remove();
+      panel.__treeFullscreenPlaceholder = null;
+    }
+  }
+
+  document.querySelectorAll(".js-tree-fullscreen").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var panel = document.getElementById("placementTreePanel");
+      enterTreePseudoFullscreen(panel);
+    });
+  });
+
+  var shouldRestoreTreeFullscreen = new URLSearchParams(window.location.search).get("tree_fullscreen") === "1";
+  if (shouldRestoreTreeFullscreen) {
+    var restorePanel = document.getElementById("placementTreePanel");
+    if (restorePanel) {
+      enterTreePseudoFullscreen(restorePanel);
+      var url = new URL(window.location.href);
+      url.searchParams.delete("tree_fullscreen");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }
+
   document.querySelectorAll(".js-tree-exit-fullscreen").forEach(function (button) {
     button.addEventListener("click", function () {
-      if (document.fullscreenElement && document.exitFullscreen) {
-        document.exitFullscreen();
+      var panel = document.getElementById("placementTreePanel");
+      if (panel && panel.classList.contains("is-tree-pseudo-fullscreen")) {
+        exitTreePseudoFullscreen(panel);
       }
     });
   });

@@ -5668,6 +5668,95 @@ LIMIT %s OFFSET %s
             cols = [col[0] for col in cursor.description]
             return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
+    def _fetch_tree_search_path(self, q_jwoa_code: str, tree_search: str):
+        root_code = (q_jwoa_code or "").strip()
+        keyword = (tree_search or "").strip()
+        if not root_code or not keyword:
+            return []
+
+        max_search_depth = 100
+        code_prefix = f"{keyword}%"
+        name_like = f"%{keyword}%"
+        sql = """
+WITH RECURSIVE scope AS (
+    SELECT
+        c.id,
+        c.placement_code,
+        c.placement_name,
+        c.placement_rank,
+        c.jwoa_code,
+        c.send_bv_name,
+        c.`rank`,
+        c.tree_level,
+        c.created_at,
+        0 AS rel_level,
+        CAST(c.jwoa_code AS CHAR(20000)) AS path_codes
+    FROM bonus_db.C_users_placement_tree_cache c
+    WHERE c.jwoa_code = %s
+
+    UNION ALL
+
+    SELECT
+        c.id,
+        c.placement_code,
+        c.placement_name,
+        c.placement_rank,
+        c.jwoa_code,
+        c.send_bv_name,
+        c.`rank`,
+        c.tree_level,
+        c.created_at,
+        scope.rel_level + 1 AS rel_level,
+        CONCAT(scope.path_codes, ',', c.jwoa_code) AS path_codes
+    FROM bonus_db.C_users_placement_tree_cache c
+    INNER JOIN scope
+        ON c.placement_code = scope.jwoa_code
+    WHERE scope.rel_level < %s
+      AND FIND_IN_SET(c.jwoa_code, scope.path_codes) = 0
+),
+target AS (
+    SELECT *
+    FROM scope
+    WHERE rel_level > 0
+      AND (
+          jwoa_code LIKE %s
+          OR send_bv_name LIKE %s
+      )
+    ORDER BY
+        CASE
+            WHEN jwoa_code = %s THEN 0
+            WHEN jwoa_code LIKE %s THEN 1
+            ELSE 2
+        END,
+        rel_level,
+        jwoa_code
+    LIMIT 1
+)
+SELECT
+    s.id,
+    s.placement_code,
+    s.placement_name,
+    s.placement_rank,
+    s.jwoa_code,
+    s.send_bv_name,
+    s.`rank`,
+    s.tree_level,
+    s.created_at,
+    s.rel_level,
+    FIND_IN_SET(s.jwoa_code, target.path_codes) - 1 AS path_index,
+    CASE WHEN s.jwoa_code = target.jwoa_code THEN 1 ELSE 0 END AS is_target
+FROM scope s
+INNER JOIN target
+    ON FIND_IN_SET(s.jwoa_code, target.path_codes) > 0
+ORDER BY path_index
+        """
+        params = [root_code, max_search_depth, code_prefix, name_like, keyword, code_prefix]
+        with connections["rds"].cursor() as cursor:
+            logger.info("上位者Tree 下位会員DB検索SQLを実行します。")
+            cursor.execute(sql, params)
+            cols = [col[0] for col in cursor.description]
+            return [dict(zip(cols, row)) for row in cursor.fetchall()]
+
     def _rebuild_cache(self) -> int:
         delete_sql = "DELETE FROM bonus_db.C_users_placement_tree_cache"
 
@@ -5742,6 +5831,7 @@ LIMIT %s OFFSET %s
         q_placement_code = (self.request.GET.get("q_placement_code") or "").strip()
         q_placement_rank = (self.request.GET.get("q_placement_rank") or "").strip()
         q_rank = (self.request.GET.get("q_rank") or "").strip()
+        tree_search = (self.request.GET.get("tree_search") or "").strip()
         view_mode = (self.request.GET.get("view") or "list").strip()
         if view_mode not in ("list", "tree", "downline"):
             view_mode = "list"
@@ -5812,6 +5902,8 @@ LIMIT %s OFFSET %s
             base_params["q_placement_rank"] = q_placement_rank
         if q_rank:
             base_params["q_rank"] = q_rank
+        if tree_search:
+            base_params["tree_search"] = tree_search
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
         if downline_fullscreen:
@@ -5822,6 +5914,7 @@ LIMIT %s OFFSET %s
         ctx["q_placement_code"] = q_placement_code
         ctx["q_placement_rank"] = q_placement_rank
         ctx["q_rank"] = q_rank
+        ctx["tree_search"] = tree_search
 
         ctx["view_mode"] = view_mode
         ctx["downline_fullscreen"] = downline_fullscreen
@@ -5846,6 +5939,20 @@ LIMIT %s OFFSET %s
 
         tree_context = build_member_tree_view(q_jwoa_code)
         ctx.update(tree_context)
+        tree_search_path_rows = (
+            self._fetch_tree_search_path(q_jwoa_code, tree_search)
+            if view_mode == "tree" and q_jwoa_code and tree_search
+            else []
+        )
+        ctx["tree_search_path_rows"] = tree_search_path_rows
+        ctx["tree_search_target"] = (
+            next((row for row in tree_search_path_rows if row.get("is_target")), None)
+            if tree_search_path_rows
+            else None
+        )
+        ctx["tree_search_not_found"] = bool(
+            view_mode == "tree" and q_jwoa_code and tree_search and not tree_search_path_rows
+        )
         ctx["downline_unavailable_reason"] = (
             "会員コードを入力して検索してください。"
             if view_mode == "downline" and not q_jwoa_code
