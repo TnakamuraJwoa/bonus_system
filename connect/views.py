@@ -36,7 +36,7 @@ from .business_search_registration import (
     fetch_registration_history_rows,
 )
 
-from connect.placement_tree_builder import build_member_tree_view
+from connect.placement_tree_builder import build_member_tree_view, fetch_tree_search_path
 from connect.sql.week_bonus_sql import WEEK_BONUS_SQL
 from connect.sql.month_bonus_sql import MONTH_BONUS_SQL
 from connect.sql.month_title_sql import MONTH_TITLE_SQL
@@ -5669,93 +5669,7 @@ LIMIT %s OFFSET %s
             return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
     def _fetch_tree_search_path(self, q_jwoa_code: str, tree_search: str):
-        root_code = (q_jwoa_code or "").strip()
-        keyword = (tree_search or "").strip()
-        if not root_code or not keyword:
-            return []
-
-        max_search_depth = 100
-        code_prefix = f"{keyword}%"
-        name_like = f"%{keyword}%"
-        sql = """
-WITH RECURSIVE scope AS (
-    SELECT
-        c.id,
-        c.placement_code,
-        c.placement_name,
-        c.placement_rank,
-        c.jwoa_code,
-        c.send_bv_name,
-        c.`rank`,
-        c.tree_level,
-        c.created_at,
-        0 AS rel_level,
-        CAST(c.jwoa_code AS CHAR(20000)) AS path_codes
-    FROM bonus_db.C_users_placement_tree_cache c
-    WHERE c.jwoa_code = %s
-
-    UNION ALL
-
-    SELECT
-        c.id,
-        c.placement_code,
-        c.placement_name,
-        c.placement_rank,
-        c.jwoa_code,
-        c.send_bv_name,
-        c.`rank`,
-        c.tree_level,
-        c.created_at,
-        scope.rel_level + 1 AS rel_level,
-        CONCAT(scope.path_codes, ',', c.jwoa_code) AS path_codes
-    FROM bonus_db.C_users_placement_tree_cache c
-    INNER JOIN scope
-        ON c.placement_code = scope.jwoa_code
-    WHERE scope.rel_level < %s
-      AND FIND_IN_SET(c.jwoa_code, scope.path_codes) = 0
-),
-target AS (
-    SELECT *
-    FROM scope
-    WHERE rel_level > 0
-      AND (
-          jwoa_code LIKE %s
-          OR send_bv_name LIKE %s
-      )
-    ORDER BY
-        CASE
-            WHEN jwoa_code = %s THEN 0
-            WHEN jwoa_code LIKE %s THEN 1
-            ELSE 2
-        END,
-        rel_level,
-        jwoa_code
-    LIMIT 1
-)
-SELECT
-    s.id,
-    s.placement_code,
-    s.placement_name,
-    s.placement_rank,
-    s.jwoa_code,
-    s.send_bv_name,
-    s.`rank`,
-    s.tree_level,
-    s.created_at,
-    s.rel_level,
-    FIND_IN_SET(s.jwoa_code, target.path_codes) - 1 AS path_index,
-    CASE WHEN s.jwoa_code = target.jwoa_code THEN 1 ELSE 0 END AS is_target
-FROM scope s
-INNER JOIN target
-    ON FIND_IN_SET(s.jwoa_code, target.path_codes) > 0
-ORDER BY path_index
-        """
-        params = [root_code, max_search_depth, code_prefix, name_like, keyword, code_prefix]
-        with connections["rds"].cursor() as cursor:
-            logger.info("上位者Tree 下位会員DB検索SQLを実行します。")
-            cursor.execute(sql, params)
-            cols = [col[0] for col in cursor.description]
-            return [dict(zip(cols, row)) for row in cursor.fetchall()]
+        return fetch_tree_search_path(q_jwoa_code, tree_search)
 
     def _rebuild_cache(self) -> int:
         delete_sql = "DELETE FROM bonus_db.C_users_placement_tree_cache"

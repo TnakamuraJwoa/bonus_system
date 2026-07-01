@@ -80,6 +80,12 @@ MENU_FEATURES = (
         "bonus_search",
         ("matching_bonus_detail",),
     ),
+    MenuFeature(
+        "matching_bonus_tree",
+        "マッチング・Tree",
+        "bonus_search",
+        ("matching_bonus_tree",),
+    ),
     MenuFeature("s_month_title", "月タイトル（検索）", "bonus_search", ("s_month_title",)),
     MenuFeature("s_title_bonus", "タイトルボーナス（検索）", "bonus_search", ("s_title_bonus",)),
     MenuFeature(

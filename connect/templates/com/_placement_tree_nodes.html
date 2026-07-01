@@ -20,6 +20,21 @@
       <span class="font-weight-bold">{{ node.jwoa_code }}</span>
       <span class="text-muted mx-1">{{ node.send_bv_name|default:"-" }}</span>
       <span class="badge {{ node.rank|rank_badge_class }}">{{ node.rank|rank_label }}</span>
+      {% if node.is_direct_introducer %}
+        <span class="badge badge-warning ml-1">紹介者</span>
+      {% endif %}
+      {% if node.show_tree_bonus_badges %}
+        {% if node.basic_acquired_flg %}
+          <span class="badge badge-primary ml-1">ベーシック取得</span>
+        {% else %}
+          <span class="badge badge-light text-muted ml-1">ベーシック未取得</span>
+        {% endif %}
+        {% if node.prev_active_flg %}
+          <span class="badge badge-success ml-1">{{ node.prev_active_label }}(アクティブ)</span>
+        {% else %}
+          <span class="badge badge-light text-muted ml-1">{{ node.prev_active_label }}(非アクティブ)</span>
+        {% endif %}
+      {% endif %}
     </div>
     {% if node.children %}
       <div class="placement-tree-children is-collapsed">

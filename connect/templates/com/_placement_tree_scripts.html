@@ -1,0 +1,297 @@
+<script>
+(function () {
+  var configEl = document.getElementById("{{ tree_script_config_id }}");
+  if (!configEl) {
+    return;
+  }
+
+  var panelId = configEl.getAttribute("data-tree-panel-id") || "";
+  var rootParam = configEl.getAttribute("data-tree-root-param") || "q_jwoa_code";
+  var setViewTree = configEl.getAttribute("data-tree-set-view") === "1";
+  var panel = document.getElementById(panelId);
+  if (!panel) {
+    return;
+  }
+
+  var scopeRoot = panel.closest("[data-placement-tree-scope]") || document;
+
+  function setToggleState(button, collapsed) {
+    var targetLabel = button.dataset.toggleLabel || "下位";
+    button.textContent = collapsed ? "▶" : "▼";
+    button.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    button.setAttribute("aria-label", collapsed ? targetLabel + "を展開" : targetLabel + "を折りたたむ");
+  }
+
+  function toggleNode(button) {
+    var node = button.closest(".placement-tree-node");
+    if (!node) return;
+
+    var children = node.querySelector(":scope > .placement-tree-children");
+    if (!children) return;
+
+    var collapsed = children.classList.toggle("is-collapsed");
+    setToggleState(button, collapsed);
+  }
+
+  panel.querySelectorAll(".placement-tree-toggle").forEach(function (button) {
+    button.addEventListener("click", function () {
+      toggleNode(button);
+    });
+  });
+
+  function collapseAllTreeNodes() {
+    panel.querySelectorAll(".placement-tree-children").forEach(function (children) {
+      children.classList.add("is-collapsed");
+    });
+    panel.querySelectorAll(".placement-tree-toggle").forEach(function (toggle) {
+      setToggleState(toggle, true);
+    });
+  }
+
+  function expandAllTreeNodes() {
+    panel.querySelectorAll(".placement-tree-children").forEach(function (children) {
+      children.classList.remove("is-collapsed");
+    });
+    panel.querySelectorAll(".placement-tree-toggle").forEach(function (toggle) {
+      setToggleState(toggle, false);
+    });
+  }
+
+  scopeRoot.querySelectorAll(".js-tree-collapse-all").forEach(function (button) {
+    button.addEventListener("click", collapseAllTreeNodes);
+  });
+
+  panel.querySelectorAll(".js-tree-collapse-all").forEach(function (button) {
+    button.addEventListener("click", collapseAllTreeNodes);
+  });
+
+  scopeRoot.querySelectorAll(".js-tree-expand-all").forEach(function (button) {
+    button.addEventListener("click", expandAllTreeNodes);
+  });
+
+  panel.querySelectorAll(".js-tree-expand-all").forEach(function (button) {
+    button.addEventListener("click", expandAllTreeNodes);
+  });
+
+  function normalizeTreeSearchText(text) {
+    return (text || "").toString().trim().toLowerCase();
+  }
+
+  function openTreeChildren(children) {
+    if (!children) {
+      return;
+    }
+    children.classList.remove("is-collapsed");
+    var parentNode = children.closest(".placement-tree-node");
+    if (!parentNode) {
+      return;
+    }
+    var toggle = parentNode.querySelector(":scope > .placement-tree-node__row .placement-tree-toggle");
+    if (toggle) {
+      setToggleState(toggle, false);
+    }
+  }
+
+  function expandPathToNode(node) {
+    var parent = node.parentElement;
+    while (parent) {
+      if (parent.classList && parent.classList.contains("placement-tree-children")) {
+        openTreeChildren(parent);
+      }
+      parent = parent.parentElement;
+    }
+  }
+
+  function findTreeNode(keyword) {
+    var normalizedKeyword = normalizeTreeSearchText(keyword);
+    if (!normalizedKeyword) {
+      return null;
+    }
+    var nodes = Array.prototype.slice.call(panel.querySelectorAll("[data-tree-node]"));
+    return nodes.find(function (node) {
+      var code = normalizeTreeSearchText(node.getAttribute("data-member-code"));
+      var name = normalizeTreeSearchText(node.getAttribute("data-member-name"));
+      return code.indexOf(normalizedKeyword) !== -1 || name.indexOf(normalizedKeyword) !== -1;
+    }) || null;
+  }
+
+  function getTreeSearchParts(trigger) {
+    var searchRoot = trigger ? trigger.closest(".placement-tree-search") : null;
+    return {
+      input: searchRoot
+        ? searchRoot.querySelector("[data-tree-search-input]")
+        : scopeRoot.querySelector("[data-tree-search-input]"),
+      message: searchRoot
+        ? searchRoot.querySelector("[data-tree-search-message]")
+        : scopeRoot.querySelector("[data-tree-search-message]")
+    };
+  }
+
+  function syncTreeSearchInputs(keyword) {
+    scopeRoot.querySelectorAll("[data-tree-search-input]").forEach(function (input) {
+      input.value = keyword;
+    });
+  }
+
+  function hasTreeRootCode() {
+    return Boolean(new URLSearchParams(window.location.search).get(rootParam));
+  }
+
+  function redirectToDbTreeSearch(keyword) {
+    var normalizedKeyword = (keyword || "").trim();
+    if (!normalizedKeyword || !hasTreeRootCode()) {
+      return false;
+    }
+
+    var url = new URL(window.location.href);
+    if (setViewTree) {
+      url.searchParams.set("view", "tree");
+    }
+    url.searchParams.set("tree_search", normalizedKeyword);
+    if (panel.classList.contains("is-tree-pseudo-fullscreen")) {
+      url.searchParams.set("tree_fullscreen", "1");
+    }
+    url.searchParams.delete("page");
+    window.location.href = url.toString();
+    return true;
+  }
+
+  function searchTreeNode(trigger) {
+    var parts = getTreeSearchParts(trigger);
+    var input = parts.input;
+    var message = parts.message;
+    if (!input) {
+      return;
+    }
+
+    panel.querySelectorAll(".placement-tree-node--searched").forEach(function (node) {
+      node.classList.remove("placement-tree-node--searched");
+    });
+
+    var keyword = input.value || "";
+    syncTreeSearchInputs(keyword);
+    var matchedNode = findTreeNode(keyword);
+    if (!matchedNode) {
+      if (redirectToDbTreeSearch(keyword)) {
+        if (message) {
+          message.textContent = "表示中Treeにないため、DB上の配下全体を検索しています。";
+          message.classList.remove("text-danger");
+          message.classList.add("text-success");
+        }
+        return;
+      }
+      if (message) {
+        message.textContent = keyword.trim()
+          ? "表示中のTreeに該当する下位会員が見つかりません。"
+          : "検索する会員コードまたは会員名を入力してください。";
+        message.classList.remove("text-success");
+        message.classList.add("text-danger");
+      }
+      return;
+    }
+
+    expandPathToNode(matchedNode);
+    matchedNode.classList.add("placement-tree-node--searched");
+    matchedNode.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (message) {
+      message.textContent = "該当する下位会員へ移動しました。";
+      message.classList.remove("text-danger");
+      message.classList.add("text-success");
+    }
+  }
+
+  scopeRoot.querySelectorAll("[data-tree-search-button]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      searchTreeNode(button);
+    });
+  });
+
+  scopeRoot.querySelectorAll("[data-tree-search-input]").forEach(function (input) {
+    input.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        searchTreeNode(input);
+      }
+    });
+  });
+
+  var dbSearchTarget = panel.querySelector("[data-tree-db-search-target]");
+  if (dbSearchTarget) {
+    var targetCode = dbSearchTarget.getAttribute("data-tree-db-search-target");
+    var visibleTarget = targetCode ? findTreeNode(targetCode) : null;
+    if (visibleTarget) {
+      expandPathToNode(visibleTarget);
+      visibleTarget.classList.add("placement-tree-node--searched");
+      visibleTarget.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }
+
+  panel.querySelectorAll("[data-tree-db-search-close]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var searchPanel = button.closest("[data-tree-db-search-panel]");
+      if (searchPanel) {
+        searchPanel.remove();
+      }
+      panel.querySelectorAll(".placement-tree-node--searched").forEach(function (node) {
+        node.classList.remove("placement-tree-node--searched");
+      });
+      syncTreeSearchInputs("");
+
+      var url = new URL(window.location.href);
+      url.searchParams.delete("tree_search");
+      window.history.replaceState({}, "", url.toString());
+    });
+  });
+
+  function enterTreePseudoFullscreen(targetPanel) {
+    if (!targetPanel) {
+      return;
+    }
+    if (!targetPanel.__treeFullscreenPlaceholder && targetPanel.parentNode) {
+      targetPanel.__treeFullscreenPlaceholder = document.createComment("placement tree fullscreen placeholder");
+      targetPanel.parentNode.insertBefore(targetPanel.__treeFullscreenPlaceholder, targetPanel);
+      document.body.appendChild(targetPanel);
+    }
+    targetPanel.classList.add("is-tree-pseudo-fullscreen");
+    document.body.classList.add("is-tree-pseudo-fullscreen-active");
+  }
+
+  function exitTreePseudoFullscreen(targetPanel) {
+    if (!targetPanel) {
+      return;
+    }
+    targetPanel.classList.remove("is-tree-pseudo-fullscreen");
+    document.body.classList.remove("is-tree-pseudo-fullscreen-active");
+    if (targetPanel.__treeFullscreenPlaceholder && targetPanel.__treeFullscreenPlaceholder.parentNode) {
+      targetPanel.__treeFullscreenPlaceholder.parentNode.insertBefore(
+        targetPanel,
+        targetPanel.__treeFullscreenPlaceholder
+      );
+      targetPanel.__treeFullscreenPlaceholder.remove();
+      targetPanel.__treeFullscreenPlaceholder = null;
+    }
+  }
+
+  scopeRoot.querySelectorAll(".js-tree-fullscreen").forEach(function (button) {
+    button.addEventListener("click", function () {
+      enterTreePseudoFullscreen(panel);
+    });
+  });
+
+  var shouldRestoreTreeFullscreen = new URLSearchParams(window.location.search).get("tree_fullscreen") === "1";
+  if (shouldRestoreTreeFullscreen) {
+    enterTreePseudoFullscreen(panel);
+    var url = new URL(window.location.href);
+    url.searchParams.delete("tree_fullscreen");
+    window.history.replaceState({}, "", url.toString());
+  }
+
+  panel.querySelectorAll(".js-tree-exit-fullscreen").forEach(function (button) {
+    button.addEventListener("click", function () {
+      if (panel.classList.contains("is-tree-pseudo-fullscreen")) {
+        exitTreePseudoFullscreen(panel);
+      }
+    });
+  });
+})();
+</script>
