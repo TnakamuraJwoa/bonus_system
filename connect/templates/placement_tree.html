@@ -24,7 +24,25 @@
       border-radius: 0;
     }
 
+    .placement-tree-panel.is-tree-pseudo-fullscreen {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483000;
+      width: 100vw;
+      height: 100vh;
+      padding: 1rem;
+      background: #f8fafc;
+      border-radius: 0;
+      box-sizing: border-box;
+      margin: 0 !important;
+      transform: none !important;
+    }
+
     .placement-tree-panel:fullscreen .placement-tree-fullscreen-header {
+      display: flex;
+    }
+
+    .placement-tree-panel.is-tree-pseudo-fullscreen .placement-tree-fullscreen-header {
       display: flex;
     }
 
@@ -32,6 +50,8 @@
       display: none;
       justify-content: space-between;
       align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
       margin-bottom: 0.75rem;
       padding-bottom: 0.5rem;
       border-bottom: 1px solid #e5e7eb;
@@ -39,6 +59,15 @@
       position: sticky;
       top: 0;
       z-index: 2;
+    }
+
+    .placement-tree-fullscreen-header__actions {
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-end;
+      gap: 0.5rem;
+      margin-left: auto;
+      flex-wrap: wrap;
     }
 
     .placement-tree-node__row {
@@ -63,6 +92,85 @@
       border-left: 3px solid #94a3b8;
     }
 
+    .placement-tree-node--searched > .placement-tree-node__row {
+      background: #fef3c7;
+      border: 1px solid #f59e0b;
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.18);
+    }
+
+    .placement-tree-search {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+    }
+
+    .placement-tree-search input {
+      width: 220px;
+    }
+
+    .placement-tree-search__message {
+      flex-basis: 100%;
+      font-size: 0.8rem;
+    }
+
+    .placement-tree-db-path {
+      border: 1px solid #fde68a;
+      background: #fffbeb;
+      border-radius: 8px;
+      padding: 0.65rem 0.75rem;
+      margin-bottom: 0.75rem;
+      max-height: 11rem;
+      overflow: hidden;
+      flex: 0 0 auto;
+    }
+
+    .placement-tree-db-path__list {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.35rem;
+      margin-top: 0.45rem;
+      max-height: 6.5rem;
+      overflow: auto;
+      padding: 0.15rem 0.2rem 0.25rem 0;
+    }
+
+    .placement-tree-panel:fullscreen .placement-tree-db-path,
+    .placement-tree-panel:-webkit-full-screen .placement-tree-db-path,
+    .placement-tree-panel.is-tree-pseudo-fullscreen .placement-tree-db-path {
+      max-height: 9.5rem;
+    }
+
+    .placement-tree-panel:fullscreen .placement-tree-db-path__list,
+    .placement-tree-panel:-webkit-full-screen .placement-tree-db-path__list,
+    .placement-tree-panel.is-tree-pseudo-fullscreen .placement-tree-db-path__list {
+      max-height: 5.5rem;
+    }
+
+    .placement-tree-db-path__item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      border: 1px solid #dbeafe;
+      background: #eff6ff;
+      border-radius: 999px;
+      padding: 0.25rem 0.55rem;
+      font-size: 0.82rem;
+      white-space: nowrap;
+    }
+
+    .placement-tree-db-path__item--target {
+      border-color: #f59e0b;
+      background: #fef3c7;
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.16);
+    }
+
+    .placement-tree-db-path__arrow {
+      color: #94a3b8;
+      font-weight: 700;
+    }
+
     .placement-tree-toggle {
       width: 1.2rem;
       text-align: center;
@@ -82,6 +190,65 @@
 
     .placement-tree-children.is-collapsed {
       display: none;
+    }
+
+    .placement-downline-card.is-downline-fullscreen {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      width: 100vw;
+      height: 100vh;
+      margin: 0 !important;
+      border-radius: 0;
+      background: #fff;
+      padding: 1rem;
+      box-sizing: border-box;
+      transform: none !important;
+    }
+
+    .placement-downline-card.is-downline-fullscreen > .card-body {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .placement-downline-card.is-downline-fullscreen .table-responsive {
+      flex: 1 1 0;
+      height: calc(100vh - 12rem);
+      max-height: calc(100vh - 12rem);
+      width: 100%;
+      max-width: 100%;
+      min-height: 0;
+      overflow: auto !important;
+      padding-bottom: 0.5rem;
+      overscroll-behavior: contain;
+    }
+
+    .placement-downline-card.is-downline-fullscreen table {
+      width: max-content;
+      min-width: 100%;
+    }
+
+    .placement-downline-card.is-downline-fullscreen .pagination-wrap {
+      flex: 0 0 auto;
+    }
+
+    body.is-downline-fullscreen-active {
+      overflow: hidden;
+    }
+
+    body.is-tree-pseudo-fullscreen-active {
+      overflow: hidden;
+    }
+
+    body.is-tree-pseudo-fullscreen-active #wrapper {
+      overflow: visible;
+    }
+
+    body.is-downline-fullscreen-active #wrapper {
+      overflow: visible;
     }
   </style>
 {% endblock %}
@@ -117,8 +284,8 @@
 
           <div class="bonus-calc-form">
             <form method="get" id="placementTreeSearchForm" class="mb-0">
-              {% if view_mode == "tree" %}
-                <input type="hidden" name="view" value="tree">
+              {% if view_mode != "list" %}
+                <input type="hidden" name="view" value="{{ view_mode }}">
               {% endif %}
               <div class="d-flex align-items-end flex-wrap">
                 <div class="mr-2 mb-2">
@@ -233,7 +400,11 @@
         </div>
       </div>
 
-      <div class="card shadow-sm flex-grow-1" style="min-height: 0;">
+      <div class="card shadow-sm flex-grow-1 {% if view_mode == 'downline' %}placement-downline-card{% endif %}{% if downline_fullscreen %} is-downline-fullscreen{% endif %}"
+           data-downline-card
+           data-total-count="{{ total_count|default:0 }}"
+           data-per-page="{{ per_page|default:200 }}"
+           style="min-height: 0;">
         <div class="card-body d-flex flex-column" style="min-height: 0; overflow: hidden;">
 
           <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
@@ -246,16 +417,39 @@
                  href="{% url 'connect:placement_tree' %}?{{ tree_tab_query }}">
                 Tree
               </a>
+              <a class="btn btn-sm {% if view_mode == 'downline' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+                 href="{% url 'connect:placement_tree' %}?{{ downline_tab_query }}">
+                下位一覧
+              </a>
             </div>
             {% if view_mode == "tree" and tree_node_count %}
               <div class="text-muted small">表示ノード数：{{ tree_node_count }} 件</div>
             {% endif %}
             {% if view_mode == "tree" and not tree_unavailable_reason %}
               <div class="d-flex gap-2 flex-wrap">
+                <div class="placement-tree-search">
+                  <input type="text"
+                         class="form-control form-control-sm"
+                         data-tree-search-input
+                         value="{{ tree_search|default:'' }}"
+                         placeholder="下位会員コード・会員名">
+                  <button type="button"
+                          class="btn btn-sm btn-outline-primary"
+                          data-tree-search-button>
+                    検索
+                  </button>
+                  <span class="placement-tree-search__message text-muted" data-tree-search-message></span>
+                </div>
                 <button type="button" class="btn btn-sm btn-outline-secondary js-tree-collapse-all">全て閉じる</button>
                 <button type="button" class="btn btn-sm btn-outline-secondary js-tree-expand-all">全て開く</button>
                 <button type="button" class="btn btn-sm btn-outline-primary js-tree-fullscreen">全画面表示</button>
               </div>
+            {% endif %}
+            {% if view_mode == "downline" and rows %}
+              <a class="btn btn-sm btn-outline-primary"
+                 href="{% url 'connect:placement_tree' %}?{% if downline_fullscreen %}{{ downline_exit_fullscreen_query }}{% else %}{{ downline_fullscreen_query }}{% endif %}">
+                {% if downline_fullscreen %}元に戻す{% else %}全画面表示{% endif %}
+              </a>
             {% endif %}
           </div>
 
@@ -263,7 +457,22 @@
             <div class="placement-tree-panel" id="placementTreePanel">
               <div class="placement-tree-fullscreen-header">
                 <div class="font-weight-bold">上位者 Tree</div>
-                <button type="button" class="btn btn-sm btn-outline-secondary js-tree-exit-fullscreen">全画面を閉じる</button>
+                <div class="placement-tree-fullscreen-header__actions">
+                  <div class="placement-tree-search">
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           data-tree-search-input
+                           value="{{ tree_search|default:'' }}"
+                           placeholder="下位会員コード・会員名">
+                    <button type="button"
+                            class="btn btn-sm btn-outline-primary"
+                            data-tree-search-button>
+                      検索
+                    </button>
+                    <span class="placement-tree-search__message text-muted" data-tree-search-message></span>
+                  </div>
+                  <button type="button" class="btn btn-sm btn-outline-secondary js-tree-exit-fullscreen">全画面を閉じる</button>
+                </div>
               </div>
               {% if tree_unavailable_reason %}
                 <p class="mb-0 text-muted">{{ tree_unavailable_reason }}</p>
@@ -274,17 +483,76 @@
                   </div>
                 {% endif %}
 
-                {% for node in tree_ancestors %}
-                  <div class="placement-tree-node placement-tree-node--ancestor" style="padding-left: {{ forloop.counter0 }}rem;">
-                    <div class="placement-tree-node__row">
-                      <span class="placement-tree-toggle-spacer mr-1"></span>
-                      <span class="font-weight-bold">{{ node.jwoa_code }}</span>
-                      <span class="text-muted mx-1">{{ node.send_bv_name|default:"-" }}</span>
-                      <span class="badge {{ node.rank|rank_badge_class }}">{{ node.rank|rank_label }}</span>
-                      <span class="badge badge-secondary ml-1">上位</span>
+                {% if tree_search_path_rows %}
+                  <div class="placement-tree-db-path"
+                       data-tree-db-search-panel
+                       data-tree-db-search-target="{{ tree_search_target.jwoa_code|default:'' }}">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                      <div>
+                        <div class="fw-bold small">DB配下検索結果</div>
+                        <div class="small text-muted">
+                          「{{ tree_search }}」は表示中Treeの外にある可能性があるため、DB上の配下全体から経路を表示しています。
+                        </div>
+                      </div>
+                      <div class="d-flex align-items-center gap-2">
+                        {% if tree_search_target %}
+                          <span class="badge badge-warning">対象: {{ tree_search_target.jwoa_code }}</span>
+                        {% endif %}
+                        <button type="button"
+                                class="btn btn-sm btn-outline-secondary"
+                                data-tree-db-search-close>
+                          閉じる
+                        </button>
+                      </div>
+                    </div>
+                    <div class="placement-tree-db-path__list">
+                      {% for node in tree_search_path_rows %}
+                        {% if not forloop.first %}
+                          <span class="placement-tree-db-path__arrow">›</span>
+                        {% endif %}
+                        <span class="placement-tree-db-path__item {% if node.is_target %}placement-tree-db-path__item--target{% endif %}">
+                          <span class="font-weight-bold">{{ node.jwoa_code }}</span>
+                          <span>{{ node.send_bv_name|default:"-" }}</span>
+                          <span class="badge {{ node.rank|rank_badge_class }}">{{ node.rank|rank_label }}</span>
+                        </span>
+                      {% endfor %}
                     </div>
                   </div>
-                {% endfor %}
+                {% elif tree_search_not_found %}
+                  <div class="alert alert-warning py-2 small">
+                    「{{ tree_search }}」に一致する下位会員は、DB上の配下全体にも見つかりませんでした。
+                  </div>
+                {% endif %}
+
+                {% if tree_ancestors %}
+                  <div class="placement-tree-node placement-tree-node--ancestor-group">
+                    <div class="placement-tree-node__row">
+                      <button type="button"
+                              class="btn btn-sm btn-link placement-tree-toggle p-0 mr-1"
+                              data-toggle-label="上位者"
+                              aria-expanded="false"
+                              aria-label="上位者を展開">
+                        ▶
+                      </button>
+                      <span class="font-weight-bold">上位者</span>
+                      <span class="text-muted mx-1">{{ tree_ancestors|length }}件</span>
+                      <span class="badge badge-secondary ml-1">閉じています</span>
+                    </div>
+                    <div class="placement-tree-children is-collapsed">
+                      {% for node in tree_ancestors %}
+                        <div class="placement-tree-node placement-tree-node--ancestor" style="padding-left: {{ forloop.counter0 }}rem;">
+                          <div class="placement-tree-node__row">
+                            <span class="placement-tree-toggle-spacer mr-1"></span>
+                            <span class="font-weight-bold">{{ node.jwoa_code }}</span>
+                            <span class="text-muted mx-1">{{ node.send_bv_name|default:"-" }}</span>
+                            <span class="badge {{ node.rank|rank_badge_class }}">{{ node.rank|rank_label }}</span>
+                            <span class="badge badge-secondary ml-1">上位</span>
+                          </div>
+                        </div>
+                      {% endfor %}
+                    </div>
+                  </div>
+                {% endif %}
 
                 {% if tree_focus %}
                   <div class="placement-tree-node placement-tree-node--focus" style="padding-left: 0;">
@@ -317,6 +585,48 @@
                 {% endif %}
               {% endif %}
             </div>
+
+          {% elif view_mode == "downline" %}
+            {% if downline_unavailable_reason %}
+              <p class="mb-0 text-muted">{{ downline_unavailable_reason }}</p>
+            {% elif rows %}
+              {% include "com/_list_summary.html" with list_title="下位一覧" %}
+
+              <div class="table-responsive flex-grow-1" style="min-height: 0; overflow-x: auto; overflow-y: auto;">
+                <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
+                  <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                    <tr>
+                      <th class="text-end">階層</th>
+                      <th>上位者コード</th>
+                      <th>上位者名</th>
+                      <th class="text-end">上位者ランク</th>
+                      <th>会員コード</th>
+                      <th>会員名</th>
+                      <th class="text-end">ランク</th>
+                      <th>作成日時</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for r in rows %}
+                      <tr>
+                        <td class="text-end">{{ r.rel_level }}</td>
+                        <td class="font-weight-bold">{{ r.placement_code }}</td>
+                        <td>{{ r.placement_name|default:"-" }}</td>
+                        <td class="text-end">{{ r.placement_rank|rank_label }}</td>
+                        <td class="font-weight-bold">{{ r.jwoa_code }}</td>
+                        <td>{{ r.send_bv_name|default:"-" }}</td>
+                        <td class="text-end">{{ r.rank|rank_label }}</td>
+                        <td>{{ r.created_at }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+
+              {% include "com/_pagination.html" %}
+            {% else %}
+              <p class="mb-0 text-muted">下位会員のデータがありません。</p>
+            {% endif %}
 
           {% elif rows %}
             {% include "com/_list_summary.html" %}
@@ -379,10 +689,21 @@
 {% block script %}
 <script>
 (function () {
+  var downlineCard = document.querySelector("[data-downline-card].is-downline-fullscreen");
+  if (downlineCard) {
+    var placeholder = document.createComment("placement downline fullscreen placeholder");
+    downlineCard.parentNode.insertBefore(placeholder, downlineCard);
+    document.body.appendChild(downlineCard);
+    document.body.classList.add("is-downline-fullscreen-active");
+  }
+})();
+
+(function () {
   function setToggleState(button, collapsed) {
+    var targetLabel = button.dataset.toggleLabel || "下位";
     button.textContent = collapsed ? "▶" : "▼";
     button.setAttribute("aria-expanded", collapsed ? "false" : "true");
-    button.setAttribute("aria-label", collapsed ? "下位を展開" : "下位を折りたたむ");
+    button.setAttribute("aria-label", collapsed ? targetLabel + "を展開" : targetLabel + "を折りたたむ");
   }
 
   function toggleNode(button) {
@@ -424,19 +745,228 @@
     });
   });
 
-  document.querySelectorAll(".js-tree-fullscreen").forEach(function (button) {
+  function normalizeTreeSearchText(text) {
+    return (text || "").toString().trim().toLowerCase();
+  }
+
+  function openTreeChildren(children) {
+    if (!children) {
+      return;
+    }
+    children.classList.remove("is-collapsed");
+    var parentNode = children.closest(".placement-tree-node");
+    if (!parentNode) {
+      return;
+    }
+    var toggle = parentNode.querySelector(":scope > .placement-tree-node__row .placement-tree-toggle");
+    if (toggle) {
+      setToggleState(toggle, false);
+    }
+  }
+
+  function expandPathToNode(node) {
+    var parent = node.parentElement;
+    while (parent) {
+      if (parent.classList && parent.classList.contains("placement-tree-children")) {
+        openTreeChildren(parent);
+      }
+      parent = parent.parentElement;
+    }
+  }
+
+  function findTreeNode(keyword) {
+    var normalizedKeyword = normalizeTreeSearchText(keyword);
+    if (!normalizedKeyword) {
+      return null;
+    }
+    var nodes = Array.prototype.slice.call(document.querySelectorAll("[data-tree-node]"));
+    return nodes.find(function (node) {
+      var code = normalizeTreeSearchText(node.getAttribute("data-member-code"));
+      var name = normalizeTreeSearchText(node.getAttribute("data-member-name"));
+      return code.indexOf(normalizedKeyword) !== -1 || name.indexOf(normalizedKeyword) !== -1;
+    }) || null;
+  }
+
+  function getTreeSearchParts(trigger) {
+    var searchRoot = trigger ? trigger.closest(".placement-tree-search") : null;
+    return {
+      input: searchRoot
+        ? searchRoot.querySelector("[data-tree-search-input]")
+        : document.querySelector("[data-tree-search-input]"),
+      message: searchRoot
+        ? searchRoot.querySelector("[data-tree-search-message]")
+        : document.querySelector("[data-tree-search-message]")
+    };
+  }
+
+  function syncTreeSearchInputs(keyword) {
+    document.querySelectorAll("[data-tree-search-input]").forEach(function (input) {
+      input.value = keyword;
+    });
+  }
+
+  function fullscreenElement() {
+    return document.fullscreenElement || document.webkitFullscreenElement || null;
+  }
+
+  function hasTreeRootCode() {
+    return Boolean(new URLSearchParams(window.location.search).get("q_jwoa_code"));
+  }
+
+  function redirectToDbTreeSearch(keyword) {
+    var normalizedKeyword = (keyword || "").trim();
+    if (!normalizedKeyword || !hasTreeRootCode()) {
+      return false;
+    }
+
+    var url = new URL(window.location.href);
+    url.searchParams.set("view", "tree");
+    url.searchParams.set("tree_search", normalizedKeyword);
+    var panel = document.getElementById("placementTreePanel");
+    if (panel && panel.classList.contains("is-tree-pseudo-fullscreen")) {
+      url.searchParams.set("tree_fullscreen", "1");
+    }
+    url.searchParams.delete("page");
+    window.location.href = url.toString();
+    return true;
+  }
+
+  function searchTreeNode(trigger) {
+    var parts = getTreeSearchParts(trigger);
+    var input = parts.input;
+    var message = parts.message;
+    if (!input) {
+      return;
+    }
+
+    document.querySelectorAll(".placement-tree-node--searched").forEach(function (node) {
+      node.classList.remove("placement-tree-node--searched");
+    });
+
+    var keyword = input.value || "";
+    syncTreeSearchInputs(keyword);
+    var matchedNode = findTreeNode(keyword);
+    if (!matchedNode) {
+      if (redirectToDbTreeSearch(keyword)) {
+        if (message) {
+          message.textContent = "表示中Treeにないため、DB上の配下全体を検索しています。";
+          message.classList.remove("text-danger");
+          message.classList.add("text-success");
+        }
+        return;
+      }
+      if (message) {
+        message.textContent = keyword.trim()
+          ? "表示中のTreeに該当する下位会員が見つかりません。"
+          : "検索する会員コードまたは会員名を入力してください。";
+        message.classList.remove("text-success");
+        message.classList.add("text-danger");
+      }
+      return;
+    }
+
+    expandPathToNode(matchedNode);
+    matchedNode.classList.add("placement-tree-node--searched");
+    matchedNode.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (message) {
+      message.textContent = "該当する下位会員へ移動しました。";
+      message.classList.remove("text-danger");
+      message.classList.add("text-success");
+    }
+  }
+
+  document.querySelectorAll("[data-tree-search-button]").forEach(function (button) {
     button.addEventListener("click", function () {
-      var panel = document.getElementById("placementTreePanel");
-      if (panel && panel.requestFullscreen) {
-        panel.requestFullscreen();
+      searchTreeNode(button);
+    });
+  });
+
+  document.querySelectorAll("[data-tree-search-input]").forEach(function (input) {
+    input.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        searchTreeNode(input);
       }
     });
   });
 
+  var dbSearchTarget = document.querySelector("[data-tree-db-search-target]");
+  if (dbSearchTarget) {
+    var targetCode = dbSearchTarget.getAttribute("data-tree-db-search-target");
+    var visibleTarget = targetCode ? findTreeNode(targetCode) : null;
+    if (visibleTarget) {
+      expandPathToNode(visibleTarget);
+      visibleTarget.classList.add("placement-tree-node--searched");
+      visibleTarget.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }
+
+  document.querySelectorAll("[data-tree-db-search-close]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var panel = button.closest("[data-tree-db-search-panel]");
+      if (panel) {
+        panel.remove();
+      }
+      document.querySelectorAll(".placement-tree-node--searched").forEach(function (node) {
+        node.classList.remove("placement-tree-node--searched");
+      });
+      syncTreeSearchInputs("");
+
+      var url = new URL(window.location.href);
+      url.searchParams.delete("tree_search");
+      window.history.replaceState({}, "", url.toString());
+    });
+  });
+
+  function enterTreePseudoFullscreen(panel) {
+    if (!panel) {
+      return;
+    }
+    if (!panel.__treeFullscreenPlaceholder && panel.parentNode) {
+      panel.__treeFullscreenPlaceholder = document.createComment("placement tree fullscreen placeholder");
+      panel.parentNode.insertBefore(panel.__treeFullscreenPlaceholder, panel);
+      document.body.appendChild(panel);
+    }
+    panel.classList.add("is-tree-pseudo-fullscreen");
+    document.body.classList.add("is-tree-pseudo-fullscreen-active");
+  }
+
+  function exitTreePseudoFullscreen(panel) {
+    if (!panel) {
+      return;
+    }
+    panel.classList.remove("is-tree-pseudo-fullscreen");
+    document.body.classList.remove("is-tree-pseudo-fullscreen-active");
+    if (panel.__treeFullscreenPlaceholder && panel.__treeFullscreenPlaceholder.parentNode) {
+      panel.__treeFullscreenPlaceholder.parentNode.insertBefore(panel, panel.__treeFullscreenPlaceholder);
+      panel.__treeFullscreenPlaceholder.remove();
+      panel.__treeFullscreenPlaceholder = null;
+    }
+  }
+
+  document.querySelectorAll(".js-tree-fullscreen").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var panel = document.getElementById("placementTreePanel");
+      enterTreePseudoFullscreen(panel);
+    });
+  });
+
+  var shouldRestoreTreeFullscreen = new URLSearchParams(window.location.search).get("tree_fullscreen") === "1";
+  if (shouldRestoreTreeFullscreen) {
+    var restorePanel = document.getElementById("placementTreePanel");
+    if (restorePanel) {
+      enterTreePseudoFullscreen(restorePanel);
+      var url = new URL(window.location.href);
+      url.searchParams.delete("tree_fullscreen");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }
+
   document.querySelectorAll(".js-tree-exit-fullscreen").forEach(function (button) {
     button.addEventListener("click", function () {
-      if (document.fullscreenElement && document.exitFullscreen) {
-        document.exitFullscreen();
+      var panel = document.getElementById("placementTreePanel");
+      if (panel && panel.classList.contains("is-tree-pseudo-fullscreen")) {
+        exitTreePseudoFullscreen(panel);
       }
     });
   });

@@ -36,7 +36,7 @@ from .business_search_registration import (
     fetch_registration_history_rows,
 )
 
-from connect.placement_tree_builder import build_member_tree_view
+from connect.placement_tree_builder import build_member_tree_view, fetch_tree_search_path
 from connect.sql.week_bonus_sql import WEEK_BONUS_SQL
 from connect.sql.month_bonus_sql import MONTH_BONUS_SQL
 from connect.sql.month_title_sql import MONTH_TITLE_SQL
@@ -3131,7 +3131,7 @@ class BasicBonusView(generic.ListView):
 
         with connections["rds"].cursor() as cursor:
             cursor.execute(BASIC_BONUS_SQL, params)
-            logger.info(f"Executed SQL: {cursor._executed}")
+#             logger.info(f"Executed SQL: {cursor._executed}")
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
 
@@ -5507,6 +5507,170 @@ LIMIT %s OFFSET %s
             cols = [col[0] for col in cursor.description]
             return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
+    def _build_downline_where(
+        self,
+        q_name: str,
+        q_placement_code: str,
+        q_placement_rank: str,
+        q_rank: str,
+    ):
+        where = []
+        params = []
+
+        if q_name:
+            where.append("d.send_bv_name LIKE %s")
+            params.append(f"%{q_name}%")
+
+        if q_placement_code:
+            where.append("d.placement_code LIKE %s")
+            params.append(f"{q_placement_code}%")
+
+        if q_placement_rank:
+            where.append("d.placement_rank = %s")
+            params.append(q_placement_rank)
+
+        if q_rank:
+            where.append("d.`rank` = %s")
+            params.append(q_rank)
+
+        where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+        return where_sql, params
+
+    def _fetch_downline_total_count(
+        self,
+        q_jwoa_code: str,
+        q_name: str,
+        q_placement_code: str,
+        q_placement_rank: str,
+        q_rank: str,
+    ) -> int:
+        if not q_jwoa_code:
+            return 0
+
+        where_sql, params = self._build_downline_where(
+            q_name,
+            q_placement_code,
+            q_placement_rank,
+            q_rank,
+        )
+        sql = f"""
+WITH RECURSIVE downline AS (
+    SELECT
+        c.id,
+        c.placement_code,
+        c.placement_name,
+        c.placement_rank,
+        c.jwoa_code,
+        c.send_bv_name,
+        c.`rank`,
+        c.tree_level,
+        c.created_at,
+        1 AS rel_level
+    FROM bonus_db.C_users_placement_tree_cache c
+    WHERE c.placement_code = %s
+
+    UNION ALL
+
+    SELECT
+        c.id,
+        c.placement_code,
+        c.placement_name,
+        c.placement_rank,
+        c.jwoa_code,
+        c.send_bv_name,
+        c.`rank`,
+        c.tree_level,
+        c.created_at,
+        d.rel_level + 1 AS rel_level
+    FROM bonus_db.C_users_placement_tree_cache c
+    INNER JOIN downline d
+        ON c.placement_code = d.jwoa_code
+)
+SELECT COUNT(*)
+FROM downline d
+{where_sql}
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, [q_jwoa_code] + params)
+            row = cursor.fetchone()
+        return int(row[0]) if row else 0
+
+    def _fetch_downline_rows(
+        self,
+        q_jwoa_code: str,
+        q_name: str,
+        q_placement_code: str,
+        q_placement_rank: str,
+        q_rank: str,
+        limit: int,
+        offset: int = 0,
+    ):
+        if not q_jwoa_code:
+            return []
+
+        where_sql, params = self._build_downline_where(
+            q_name,
+            q_placement_code,
+            q_placement_rank,
+            q_rank,
+        )
+        sql = f"""
+WITH RECURSIVE downline AS (
+    SELECT
+        c.id,
+        c.placement_code,
+        c.placement_name,
+        c.placement_rank,
+        c.jwoa_code,
+        c.send_bv_name,
+        c.`rank`,
+        c.tree_level,
+        c.created_at,
+        1 AS rel_level
+    FROM bonus_db.C_users_placement_tree_cache c
+    WHERE c.placement_code = %s
+
+    UNION ALL
+
+    SELECT
+        c.id,
+        c.placement_code,
+        c.placement_name,
+        c.placement_rank,
+        c.jwoa_code,
+        c.send_bv_name,
+        c.`rank`,
+        c.tree_level,
+        c.created_at,
+        d.rel_level + 1 AS rel_level
+    FROM bonus_db.C_users_placement_tree_cache c
+    INNER JOIN downline d
+        ON c.placement_code = d.jwoa_code
+)
+SELECT
+    d.id,
+    d.placement_code,
+    d.placement_name,
+    d.placement_rank,
+    d.jwoa_code,
+    d.send_bv_name,
+    d.`rank`,
+    d.tree_level,
+    d.rel_level,
+    d.created_at
+FROM downline d
+{where_sql}
+ORDER BY d.rel_level, d.placement_code, d.jwoa_code
+LIMIT %s OFFSET %s
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, [q_jwoa_code] + params + [limit, offset])
+            cols = [col[0] for col in cursor.description]
+            return [dict(zip(cols, row)) for row in cursor.fetchall()]
+
+    def _fetch_tree_search_path(self, q_jwoa_code: str, tree_search: str):
+        return fetch_tree_search_path(q_jwoa_code, tree_search)
+
     def _rebuild_cache(self) -> int:
         delete_sql = "DELETE FROM bonus_db.C_users_placement_tree_cache"
 
@@ -5581,33 +5745,65 @@ LIMIT %s OFFSET %s
         q_placement_code = (self.request.GET.get("q_placement_code") or "").strip()
         q_placement_rank = (self.request.GET.get("q_placement_rank") or "").strip()
         q_rank = (self.request.GET.get("q_rank") or "").strip()
+        tree_search = (self.request.GET.get("tree_search") or "").strip()
+        view_mode = (self.request.GET.get("view") or "list").strip()
+        if view_mode not in ("list", "tree", "downline"):
+            view_mode = "list"
+        downline_fullscreen = (
+            view_mode == "downline"
+            and self.request.GET.get("downline_fullscreen") == "1"
+        )
 
         try:
             per_page = int(self.request.GET.get("per_page") or str(self.DEFAULT_PER_PAGE))
         except ValueError:
             per_page = self.DEFAULT_PER_PAGE
-        per_page = max(1, min(per_page, self.MAX_PER_PAGE))
+        if downline_fullscreen:
+            per_page = 5000
+        else:
+            per_page = max(1, min(per_page, self.MAX_PER_PAGE))
 
-        total_count = self._fetch_total_count(
-            q_jwoa_code,
-            q_name,
-            q_placement_code,
-            q_placement_rank,
-            q_rank,
-        )
+        if view_mode == "downline":
+            total_count = self._fetch_downline_total_count(
+                q_jwoa_code,
+                q_name,
+                q_placement_code,
+                q_placement_rank,
+                q_rank,
+            )
+        else:
+            total_count = self._fetch_total_count(
+                q_jwoa_code,
+                q_name,
+                q_placement_code,
+                q_placement_rank,
+                q_rank,
+            )
         total_pages = max(1, math.ceil(total_count / per_page)) if total_count > 0 else 1
         page = self.get_page_number(total_pages)
+        fetch_limit = per_page
         offset = (page - 1) * per_page
 
-        rows = self._fetch_rows(
-            q_jwoa_code=q_jwoa_code,
-            q_name=q_name,
-            q_placement_code=q_placement_code,
-            q_placement_rank=q_placement_rank,
-            q_rank=q_rank,
-            limit=per_page,
-            offset=offset,
-        )
+        if view_mode == "downline":
+            rows = self._fetch_downline_rows(
+                q_jwoa_code=q_jwoa_code,
+                q_name=q_name,
+                q_placement_code=q_placement_code,
+                q_placement_rank=q_placement_rank,
+                q_rank=q_rank,
+                limit=fetch_limit,
+                offset=offset,
+            )
+        else:
+            rows = self._fetch_rows(
+                q_jwoa_code=q_jwoa_code,
+                q_name=q_name,
+                q_placement_code=q_placement_code,
+                q_placement_rank=q_placement_rank,
+                q_rank=q_rank,
+                limit=per_page,
+                offset=offset,
+            )
 
         base_params = {}
         if q_jwoa_code:
@@ -5620,28 +5816,62 @@ LIMIT %s OFFSET %s
             base_params["q_placement_rank"] = q_placement_rank
         if q_rank:
             base_params["q_rank"] = q_rank
+        if tree_search:
+            base_params["tree_search"] = tree_search
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
+        if downline_fullscreen:
+            base_params["downline_fullscreen"] = "1"
 
         ctx["q_jwoa_code"] = q_jwoa_code
         ctx["q_name"] = q_name
         ctx["q_placement_code"] = q_placement_code
         ctx["q_placement_rank"] = q_placement_rank
         ctx["q_rank"] = q_rank
+        ctx["tree_search"] = tree_search
 
-        view_mode = (self.request.GET.get("view") or "list").strip()
-        if view_mode not in ("list", "tree"):
-            view_mode = "list"
         ctx["view_mode"] = view_mode
+        ctx["downline_fullscreen"] = downline_fullscreen
 
         tab_params = dict(base_params)
+        tab_params.pop("downline_fullscreen", None)
+        if downline_fullscreen:
+            tab_params.pop("per_page", None)
         ctx["list_tab_query"] = urlencode(tab_params) if tab_params else ""
         tree_tab_params = dict(tab_params)
         tree_tab_params["view"] = "tree"
         ctx["tree_tab_query"] = urlencode(tree_tab_params)
+        downline_tab_params = dict(tab_params)
+        downline_tab_params["view"] = "downline"
+        ctx["downline_tab_query"] = urlencode(downline_tab_params)
+        downline_fullscreen_params = dict(tab_params)
+        downline_fullscreen_params["view"] = "downline"
+        downline_fullscreen_params["downline_fullscreen"] = "1"
+        downline_fullscreen_params["per_page"] = 5000
+        ctx["downline_fullscreen_query"] = urlencode(downline_fullscreen_params)
+        ctx["downline_exit_fullscreen_query"] = urlencode(downline_tab_params)
 
         tree_context = build_member_tree_view(q_jwoa_code)
         ctx.update(tree_context)
+        tree_search_path_rows = (
+            self._fetch_tree_search_path(q_jwoa_code, tree_search)
+            if view_mode == "tree" and q_jwoa_code and tree_search
+            else []
+        )
+        ctx["tree_search_path_rows"] = tree_search_path_rows
+        ctx["tree_search_target"] = (
+            next((row for row in tree_search_path_rows if row.get("is_target")), None)
+            if tree_search_path_rows
+            else None
+        )
+        ctx["tree_search_not_found"] = bool(
+            view_mode == "tree" and q_jwoa_code and tree_search and not tree_search_path_rows
+        )
+        ctx["downline_unavailable_reason"] = (
+            "会員コードを入力して検索してください。"
+            if view_mode == "downline" and not q_jwoa_code
+            else None
+        )
 
         return self.set_page_context(
             ctx=ctx,
@@ -7776,6 +8006,42 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
 
         return where_sql, params
 
+    @staticmethod
+    def _has_active_period(active_year, active_month, active_start_date, active_end_date):
+        return bool(active_year and active_month and active_start_date and active_end_date)
+
+    @staticmethod
+    def _apply_active_result_filter(where_sql, q_active_result):
+        if q_active_result == "active":
+            condition = "(IFNULL(au.active_status, 0) = 1 OR IFNULL(pb.prev_month_bv, 0) >= 50)"
+        elif q_active_result == "inactive":
+            condition = "(IFNULL(au.active_status, 0) <> 1 AND IFNULL(pb.prev_month_bv, 0) < 50)"
+        else:
+            return where_sql
+
+        if where_sql:
+            return f"{where_sql} AND {condition}"
+        return f"WHERE {condition}"
+
+    @staticmethod
+    def _build_active_join_sql():
+        return """
+            LEFT JOIN bonus_db.active_users au
+              ON au.jwoa_code = u.jmoa_code
+             AND au.year = %s
+             AND au.month = %s
+            LEFT JOIN (
+                SELECT
+                    jwoa_code,
+                    SUM(IFNULL(bv, 0)) AS prev_month_bv
+                FROM bonus_db.purchase_info_list
+                WHERE bonus_payment_date >= %s
+                  AND bonus_payment_date < %s
+                GROUP BY jwoa_code
+            ) pb
+              ON pb.jwoa_code = u.jmoa_code
+            """
+
     def _fetch_total_count(
         self,
         q_jpid: str = "",
@@ -7785,6 +8051,11 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         q_placement: str = "",
         q_status: str = "",
         q_rank: str = "",
+        active_year=None,
+        active_month=None,
+        active_start_date=None,
+        active_end_date=None,
+        q_active_result: str = "",
     ) -> int:
 
         where_sql, params = self._build_where(
@@ -7796,15 +8067,35 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             q_status=q_status,
             q_rank=q_rank,
         )
+        active_params = []
+        active_join_sql = ""
+        if (
+            q_active_result in ("active", "inactive")
+            and self._has_active_period(
+                active_year,
+                active_month,
+                active_start_date,
+                active_end_date,
+            )
+        ):
+            active_join_sql = self._build_active_join_sql()
+            active_params = [
+                active_year,
+                active_month,
+                active_start_date,
+                active_end_date,
+            ]
+            where_sql = self._apply_active_result_filter(where_sql, q_active_result)
 
         sql = f"""
-            SELECT COUNT(*)
+            SELECT COUNT(DISTINCT u.id)
             FROM nexus_production.users u
+            {active_join_sql}
             {where_sql}
         """
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, params)
+            cursor.execute(sql, active_params + params)
             row = cursor.fetchone()
 
         return int(row[0]) if row else 0
@@ -7818,6 +8109,11 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         q_placement: str = "",
         q_status: str = "",
         q_rank: str = "",
+        active_year=None,
+        active_month=None,
+        active_start_date=None,
+        active_end_date=None,
+        q_active_result: str = "",
         limit: int = 200,
         offset: int = 0,
     ):
@@ -7831,6 +8127,35 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             q_status=q_status,
             q_rank=q_rank,
         )
+
+        active_params = []
+        if self._has_active_period(
+            active_year,
+            active_month,
+            active_start_date,
+            active_end_date,
+        ):
+            active_select_sql = """
+                CASE
+                    WHEN au.active_status = 1 OR IFNULL(pb.prev_month_bv, 0) >= 50 THEN 1
+                    ELSE 0
+                END AS prev_month_active_status,
+                IFNULL(pb.prev_month_bv, 0) AS prev_month_bv
+            """
+            active_join_sql = self._build_active_join_sql()
+            active_params = [
+                active_year,
+                active_month,
+                active_start_date,
+                active_end_date,
+            ]
+            where_sql = self._apply_active_result_filter(where_sql, q_active_result)
+        else:
+            active_select_sql = """
+                NULL AS prev_month_active_status,
+                NULL AS prev_month_bv
+            """
+            active_join_sql = ""
 
         sql = f"""
             SELECT
@@ -7849,19 +8174,43 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
                 u.company,
                 u.last_purchase_at,
                 u.created_at,
-                u.updated_at
+                u.updated_at,
+                {active_select_sql}
             FROM nexus_production.users u
+            {active_join_sql}
             {where_sql}
             ORDER BY u.status_code, u.jmoa_code
             LIMIT %s OFFSET %s
         """
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, params + [limit, offset])
+            cursor.execute(sql, active_params + params + [limit, offset])
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
 
         return rows
+
+    def _resolve_active_period(self, q_active_kibetu):
+        if not q_active_kibetu:
+            return None, None, None, None, None
+
+        period = (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu=q_active_kibetu)
+            .first()
+        )
+        if not period:
+            return None, None, None, None, None
+
+        selected_month_start = date(period.year, period.month, 1)
+        selected_month_end = selected_month_start + relativedelta(months=1)
+        return (
+            period,
+            selected_month_start.year,
+            selected_month_start.month,
+            selected_month_start,
+            selected_month_end,
+        )
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -7873,6 +8222,17 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         q_placement = (self.request.GET.get("q_placement") or "").strip()
         q_status = (self.request.GET.get("q_status") or "").strip()
         q_rank = (self.request.GET.get("q_rank") or "").strip()
+        q_active_kibetu = (self.request.GET.get("q_active_kibetu") or "").strip()
+        q_active_result = (self.request.GET.get("q_active_result") or "").strip()
+        if not q_active_kibetu or q_active_result not in ("active", "inactive"):
+            q_active_result = ""
+        (
+            selected_active_period,
+            active_year,
+            active_month,
+            active_start_date,
+            active_end_date,
+        ) = self._resolve_active_period(q_active_kibetu)
 
         per_page = self.get_per_page()
 
@@ -7884,6 +8244,11 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             q_placement=q_placement,
             q_status=q_status,
             q_rank=q_rank,
+            active_year=active_year,
+            active_month=active_month,
+            active_start_date=active_start_date,
+            active_end_date=active_end_date,
+            q_active_result=q_active_result,
         )
 
         total_pages = max(1, math.ceil(total_count / per_page))
@@ -7898,6 +8263,11 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             q_placement=q_placement,
             q_status=q_status,
             q_rank=q_rank,
+            active_year=active_year,
+            active_month=active_month,
+            active_start_date=active_start_date,
+            active_end_date=active_end_date,
+            q_active_result=q_active_result,
             limit=per_page,
             offset=offset,
         )
@@ -7909,6 +8279,15 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         ctx["q_placement"] = q_placement
         ctx["q_status"] = q_status
         ctx["q_rank"] = q_rank
+        ctx["q_active_kibetu"] = q_active_kibetu
+        ctx["q_active_result"] = q_active_result
+        ctx["selected_active_period"] = selected_active_period
+        ctx["active_year"] = active_year
+        ctx["active_month"] = active_month
+        ctx["monthly_period_choices"] = (
+            MonthlyPeriod.objects.using("rds")
+            .order_by("-kibetu")
+        )
 
         base_params = {}
 
@@ -7932,6 +8311,12 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
 
         if q_rank:
             base_params["q_rank"] = q_rank
+
+        if q_active_kibetu:
+            base_params["q_active_kibetu"] = q_active_kibetu
+
+        if q_active_result:
+            base_params["q_active_result"] = q_active_result
 
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
@@ -7975,6 +8360,34 @@ class UsersExportView(UsersView):
     def _company_label(self, value):
         return "法人" if value == 1 else "-"
 
+    def _active_status_label(self, row, q_active_kibetu):
+        if not q_active_kibetu:
+            return "-"
+        if row.get("prev_month_active_status") == 1:
+            return "アクティブ"
+        return "非アクティブ"
+
+    def _row_to_excel(self, row, q_active_kibetu):
+        return [
+            row.get("id"),
+            row.get("group_code"),
+            row.get("jmoa_code"),
+            row.get("send_bv_name"),
+            row.get("name_kana") or "-",
+            row.get("introducer_code"),
+            row.get("placement_code"),
+            self._active_status_label(row, q_active_kibetu),
+            self._rank_label(row.get("rank")),
+            self._status_label(row.get("status_code")),
+            self._activated_label(row.get("activated")),
+            self._company_label(row.get("company")),
+            row.get("interim_at"),
+            row.get("activated_at"),
+            row.get("last_purchase_at"),
+            row.get("created_at"),
+            row.get("updated_at"),
+        ]
+
     def get(self, request, *args, **kwargs):
         q_jpid = (request.GET.get("q_jpid") or "").strip()
         q_name = (request.GET.get("q_name") or "").strip()
@@ -7983,38 +8396,17 @@ class UsersExportView(UsersView):
         q_placement = (request.GET.get("q_placement") or "").strip()
         q_status = (request.GET.get("q_status") or "").strip()
         q_rank = (request.GET.get("q_rank") or "").strip()
-
-        where_sql, params = self._build_where(
-            q_jpid=q_jpid,
-            q_name=q_name,
-            q_name_kana=q_name_kana,
-            q_introducer=q_introducer,
-            q_placement=q_placement,
-            q_status=q_status,
-            q_rank=q_rank,
-        )
-
-        sql = f"""
-            SELECT
-                u.id,
-                u.group_code,
-                u.jmoa_code,
-                u.send_bv_name,
-                u.introducer_code,
-                u.placement_code,
-                u.rank,
-                u.status_code,
-                u.activated,
-                u.interim_at,
-                u.activated_at,
-                u.company,
-                u.last_purchase_at,
-                u.created_at,
-                u.updated_at
-            FROM nexus_production.users u
-            {where_sql}
-            ORDER BY u.status_code, u.jmoa_code
-        """
+        q_active_kibetu = (request.GET.get("q_active_kibetu") or "").strip()
+        q_active_result = (request.GET.get("q_active_result") or "").strip()
+        if not q_active_kibetu or q_active_result not in ("active", "inactive"):
+            q_active_result = ""
+        (
+            _selected_active_period,
+            active_year,
+            active_month,
+            active_start_date,
+            active_end_date,
+        ) = self._resolve_active_period(q_active_kibetu)
 
         wb = openpyxl.Workbook(write_only=True)
         ws = wb.create_sheet("会員一覧")
@@ -8023,8 +8415,10 @@ class UsersExportView(UsersView):
             "グループID",
             "会員ID",
             "会員名",
+            "氏名(カナ)",
             "上位者ID",
             "紹介者ID",
+            "アクティブ確認",
             "ランク",
             "ステータス",
             "本登録FLG",
@@ -8036,30 +8430,31 @@ class UsersExportView(UsersView):
             "更新日時",
         ])
 
-        with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, params)
-            while True:
-                rows = cursor.fetchmany(self.EXPORT_FETCH_SIZE)
-                if not rows:
-                    break
-                for row in rows:
-                    ws.append([
-                        row[0],
-                        row[1],
-                        row[2],
-                        row[3],
-                        row[4],
-                        row[5],
-                        self._rank_label(row[6]),
-                        self._status_label(row[7]),
-                        self._activated_label(row[8]),
-                        self._company_label(row[11]),
-                        row[9],
-                        row[10],
-                        row[12],
-                        row[13],
-                        row[14],
-                    ])
+        offset = 0
+        while True:
+            rows = self._fetch_rows(
+                q_jpid=q_jpid,
+                q_name=q_name,
+                q_name_kana=q_name_kana,
+                q_introducer=q_introducer,
+                q_placement=q_placement,
+                q_status=q_status,
+                q_rank=q_rank,
+                active_year=active_year,
+                active_month=active_month,
+                active_start_date=active_start_date,
+                active_end_date=active_end_date,
+                q_active_result=q_active_result,
+                limit=self.EXPORT_FETCH_SIZE,
+                offset=offset,
+            )
+            if not rows:
+                break
+            for row in rows:
+                ws.append(self._row_to_excel(row, q_active_kibetu))
+            if len(rows) < self.EXPORT_FETCH_SIZE:
+                break
+            offset += self.EXPORT_FETCH_SIZE
 
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -8845,13 +9240,129 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
 class OrdersDistributionBvUpdateView(OrdersDistributionBvView):
     template_name = "orders_distribution_bv_update.html"
 
+    def _build_where(
+        self,
+        q_order_code="",
+        q_user_id="",
+        q_jwoa_code="",
+        q_created_from="",
+        q_created_to="",
+    ):
+        where = []
+        params = []
+
+        if q_order_code:
+            where.append("a.order_code LIKE %s")
+            params.append(f"%{q_order_code}%")
+
+        if q_jwoa_code:
+            where.append("a.jwoa_code LIKE %s")
+            params.append(f"%{q_jwoa_code}%")
+
+        if q_created_from:
+            where.append("a.created_at >= %s")
+            params.append(q_created_from)
+
+        if q_created_to:
+            where.append("a.created_at < DATE_ADD(%s, INTERVAL 1 DAY)")
+            params.append(q_created_to)
+
+        where_sql = "WHERE " + " AND ".join(where) if where else ""
+
+        return where_sql, params
+
+    def _fetch_total_count(self, **filters):
+        where_sql, params = self._build_where(**filters)
+
+        sql = f"""
+            SELECT COUNT(*)
+            FROM bonus_db.purchase_info_list AS a
+            {where_sql}
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            row = cursor.fetchone()
+
+        return int(row[0]) if row else 0
+
+    def _fetch_rows(self, limit=200, offset=0, **filters):
+        where_sql, params = self._build_where(**filters)
+
+        sql = f"""
+            SELECT
+                a.id,
+                a.order_code,
+                a.jwoa_code,
+                a.send_bv_name,
+                a.total_bv,
+                a.bv,
+                a.created_at,
+                a.updated_at
+            FROM bonus_db.purchase_info_list AS a
+            {where_sql}
+            ORDER BY a.id DESC
+            LIMIT %s OFFSET %s
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params + [limit, offset])
+            cols = [c[0] for c in cursor.description]
+            rows = [
+                dict(zip(cols, r))
+                for r in cursor.fetchall()
+            ]
+
+        return rows
+
+    def get_context_data(self, **kwargs):
+        ctx = super(OrdersDistributionBvView, self).get_context_data(**kwargs)
+
+        filters = {
+            "q_order_code": (self.request.GET.get("q_order_code") or "").strip(),
+            "q_jwoa_code": (self.request.GET.get("q_jwoa_code") or "").strip(),
+            "q_created_from": (self.request.GET.get("q_created_from") or "").strip(),
+            "q_created_to": (self.request.GET.get("q_created_to") or "").strip(),
+        }
+
+        per_page = self.get_per_page()
+        total_count = self._fetch_total_count(**filters)
+        total_pages = max(1, math.ceil(total_count / per_page))
+        page = self.get_page_number(total_pages)
+        offset = (page - 1) * per_page
+
+        rows = self._fetch_rows(
+            limit=per_page,
+            offset=offset,
+            **filters,
+        )
+
+        ctx.update(filters)
+        base_params = {
+            k: v for k, v in filters.items()
+            if v
+        }
+
+        if per_page != self.DEFAULT_PER_PAGE:
+            base_params["per_page"] = per_page
+
+        return self.set_page_context(
+            ctx=ctx,
+            rows=rows,
+            per_page=per_page,
+            total_count=total_count,
+            total_pages=total_pages,
+            page=page,
+            base_params=base_params,
+        )
+
     def post(self, request, *args, **kwargs):
         user_access = get_user_access(request.user)
         if not user_access.can_menu("orders_distribution_bv_update") or not user_access.can_update:
             return HttpResponse("権限がありません。", status=403)
 
         row_id = (request.POST.get("id") or "").strip()
-        distribution_bv = (request.POST.get("distribution_bv") or "").strip()
+        bv = (request.POST.get("bv") or "").strip()
         next_query = (request.POST.get("next_query") or "").strip()
         redirect_url = reverse("connect:orders_distribution_bv_update")
         if next_query:
@@ -8864,13 +9375,13 @@ class OrdersDistributionBvUpdateView(OrdersDistributionBvView):
             return redirect(redirect_url)
 
         try:
-            distribution_bv_int = int(distribution_bv)
+            bv_int = int(bv)
         except ValueError:
-            messages.error(request, "振分BVは整数で入力してください。")
+            messages.error(request, "BVは整数で入力してください。")
             return redirect(redirect_url)
 
-        if distribution_bv_int < 0:
-            messages.error(request, "振分BVは0以上で入力してください。")
+        if bv_int < 0:
+            messages.error(request, "BVは0以上で入力してください。")
             return redirect(redirect_url)
 
         before_row = fetch_one_dict(
@@ -8879,11 +9390,13 @@ class OrdersDistributionBvUpdateView(OrdersDistributionBvView):
                 SELECT
                     id,
                     order_code,
-                    user_id,
                     jwoa_code,
-                    distribution_bv,
-                    usage_fee
-                FROM bonus_db.orders_distribution_bv
+                    send_bv_name,
+                    total_bv,
+                    bv,
+                    created_at,
+                    updated_at
+                FROM bonus_db.purchase_info_list
                 WHERE id = %s
             """,
             [row_id_int],
@@ -8893,43 +9406,45 @@ class OrdersDistributionBvUpdateView(OrdersDistributionBvView):
             return redirect(redirect_url)
 
         sql = """
-            UPDATE bonus_db.orders_distribution_bv
-            SET distribution_bv = %s
+            UPDATE bonus_db.purchase_info_list
+            SET
+                bv = %s,
+                updated_at = CURRENT_TIMESTAMP
             WHERE id = %s
         """
 
         try:
             with connections["rds"].cursor() as cursor:
                 logger.info(
-                    "BV振分変更画面から振分BV更新SQLを実行します。id=%s distribution_bv=%s",
+                    "BV振分変更画面からpurchase_info_listのBV更新SQLを実行します。id=%s bv=%s",
                     row_id_int,
-                    distribution_bv_int,
+                    bv_int,
                 )
-                cursor.execute(sql, [distribution_bv_int, row_id_int])
+                cursor.execute(sql, [bv_int, row_id_int])
                 updated_count = cursor.rowcount
 
             if updated_count:
                 after_row = dict(before_row)
-                after_row["distribution_bv"] = distribution_bv_int
+                after_row["bv"] = bv_int
                 record_change_audit(
                     request,
                     screen_name="BV振分変更",
                     action_type="update",
-                    target_table="orders_distribution_bv",
+                    target_table="purchase_info_list",
                     target_pk=row_id_int,
                     summary=(
                         f"注文番号 {before_row.get('order_code')} / "
-                        f"JWOA会員ID {before_row.get('jwoa_code')} の振分BVを更新"
+                        f"JWOA会員ID {before_row.get('jwoa_code')} のBVを更新"
                     ),
                     before_values=before_row,
                     after_values=after_row,
                 )
-                messages.success(request, "振分BVを更新しました。")
+                messages.success(request, "BVを更新しました。")
             else:
-                messages.info(request, "振分BVは変更されていません。")
+                messages.info(request, "BVは変更されていません。")
         except Exception as e:
-            logger.exception("BV振分変更画面の振分BV更新エラー")
-            messages.error(request, f"振分BVの更新中にエラーが発生しました: {e}")
+            logger.exception("BV振分変更画面のBV更新エラー")
+            messages.error(request, f"BVの更新中にエラーが発生しました: {e}")
 
         return redirect(redirect_url)
 

@@ -155,8 +155,12 @@ class BasicIncomeLineDetailView(generic.TemplateView):
                 line_rank,
                 line_role_label,
                 line_total_bv,
+                capped_line_total_bv,
+                income_line_cap,
+                line_over_cap_bv,
                 income_line_bv,
                 basic_line_bv,
+                income_line_over_cap_bv,
                 next_carry_over_bv,
                 detail_type,
                 detail_type_label
@@ -196,8 +200,12 @@ class BasicIncomeLineDetailView(generic.TemplateView):
                 line_rank,
                 line_role_label,
                 line_total_bv,
+                capped_line_total_bv,
+                income_line_cap,
+                line_over_cap_bv,
                 income_line_bv,
                 basic_line_bv,
+                income_line_over_cap_bv,
                 next_carry_over_bv,
                 detail_type,
                 detail_type_label
@@ -348,6 +356,7 @@ class BasicIncomeLineDetailView(generic.TemplateView):
                     "placement_rank": row.get("placement_rank") or 0,
                     "income_line_bv": row.get("income_line_bv") or 0,
                     "basic_line_bv": row.get("basic_line_bv") or 0,
+                    "income_line_over_cap_bv": row.get("income_line_over_cap_bv") or 0,
                     "next_carry_over_bv": row.get("next_carry_over_bv") or 0,
                     "prev_carry_over_bv": 0,
                 },
@@ -427,6 +436,7 @@ class BasicIncomeLineDetailView(generic.TemplateView):
                     ),
                     "income_line_bv": row.get("income_line_bv") or 0,
                     "basic_line_bv": row.get("basic_line_bv") or 0,
+                    "income_line_over_cap_bv": row.get("income_line_over_cap_bv") or 0,
                     "next_carry_over_bv": row.get("next_carry_over_bv") or 0,
                     "lines": {},
                 },
@@ -449,6 +459,9 @@ class BasicIncomeLineDetailView(generic.TemplateView):
                     "line_rank": row.get("line_rank") or 0,
                     "line_role_label": row.get("line_role_label") or "収入ライン",
                     "line_total_bv": row.get("line_total_bv") or 0,
+                    "capped_line_total_bv": row.get("capped_line_total_bv") or 0,
+                    "income_line_cap": row.get("income_line_cap") or 0,
+                    "line_over_cap_bv": row.get("line_over_cap_bv") or 0,
                     "carry_over_rows": [],
                     "purchase_rows": [],
                 },
@@ -498,6 +511,10 @@ class BasicIncomeLineDetailView(generic.TemplateView):
             "line_role": (self.request.GET.get("line_role") or "").strip(),
         }
         view_mode = "tree" if self.request.GET.get("view_mode") == "tree" else "list"
+        list_all = (
+            self.request.GET.get("list_all") == "1"
+            and view_mode == "list"
+        )
         per_page = self._get_per_page()
         kibetu_choice_mode = self.request.GET.get("kibetu_choice_mode") or "recent"
         active_filter_badges = self._build_filter_badges(
@@ -514,6 +531,7 @@ class BasicIncomeLineDetailView(generic.TemplateView):
             "selected_kibetu": selected_kibetu,
             "selected_period": None,
             "view_mode": view_mode,
+            "list_all": list_all,
             "return_qs": (self.request.GET.get("return_qs") or "").strip(),
             "rows": [],
             "show_tree": False,
@@ -545,10 +563,21 @@ class BasicIncomeLineDetailView(generic.TemplateView):
         ctx["selected_period"] = period
         base_params = self._build_period_params(selected_kibetu, period)
         total_count = self._count_rows(base_params, filters)
-        total_pages = max(1, math.ceil(total_count / per_page))
-        page = self._get_page(total_pages)
-        offset = (page - 1) * per_page
-        rows = self._fetch_rows(base_params, filters, per_page, offset) if total_count else []
+        if list_all:
+            page = 1
+            fetch_limit = 1000000
+            offset = 0
+            total_pages = 1
+        else:
+            total_pages = max(1, math.ceil(total_count / per_page))
+            page = self._get_page(total_pages)
+            fetch_limit = per_page
+            offset = (page - 1) * per_page
+        rows = (
+            self._fetch_rows(base_params, filters, fetch_limit, offset)
+            if total_count
+            else []
+        )
         show_tree = view_mode == "tree" and bool(filters["q_placement_code"] and total_count)
         tree_rows = self._fetch_tree_rows(base_params, filters) if show_tree else []
         member_purchase_map = self._fetch_member_purchase_map(base_params, tree_rows) if tree_rows else {}
@@ -569,6 +598,8 @@ class BasicIncomeLineDetailView(generic.TemplateView):
         }
         if per_page != self.DEFAULT_PER_PAGE:
             base_qs_params["per_page"] = per_page
+        if list_all:
+            base_qs_params["list_all"] = "1"
 
         ctx.update({
             "rows": rows,
@@ -576,8 +607,14 @@ class BasicIncomeLineDetailView(generic.TemplateView):
             "tree_groups": self._build_tree_groups(tree_rows, member_purchase_map) if tree_rows else [],
             "placement_summaries": placement_summaries,
             "total_count": total_count,
-            "display_from": (page - 1) * per_page + 1 if total_count else 0,
-            "display_to": min(page * per_page, total_count) if total_count else 0,
+            "display_from": (
+                1 if list_all and total_count
+                else ((page - 1) * per_page + 1 if total_count else 0)
+            ),
+            "display_to": (
+                total_count if list_all and total_count
+                else (min(page * per_page, total_count) if total_count else 0)
+            ),
             "per_page": per_page,
             "page": page,
             "total_pages": total_pages,

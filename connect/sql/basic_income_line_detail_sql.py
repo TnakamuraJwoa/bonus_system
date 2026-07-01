@@ -253,12 +253,48 @@ line_flg AS (
     FROM line_sum AS a
 ),
 
+line_flg_with_cap AS (
+    SELECT
+        lf.*,
+        CASE
+            WHEN IFNULL(ur.new_rank, 0) = 1 THEN 5000
+            ELSE 125000
+        END AS income_line_cap,
+        CASE
+            WHEN lf.line_rank BETWEEN 2 AND 5 THEN
+                LEAST(
+                    IFNULL(lf.line_total_bv, 0),
+                    CASE
+                        WHEN IFNULL(ur.new_rank, 0) = 1 THEN 5000
+                        ELSE 125000
+                    END
+                )
+            ELSE IFNULL(lf.line_total_bv, 0)
+        END AS capped_line_total_bv,
+        CASE
+            WHEN lf.line_rank BETWEEN 2 AND 5 THEN
+                GREATEST(
+                    IFNULL(lf.line_total_bv, 0) -
+                    CASE
+                        WHEN IFNULL(ur.new_rank, 0) = 1 THEN 5000
+                        ELSE 125000
+                    END,
+                    0
+                )
+            ELSE 0
+        END AS line_over_cap_bv
+    FROM line_flg AS lf
+    LEFT JOIN bonus_db.users_target_rank AS ur
+      ON lf.placement_code = ur.jmoa_code
+),
+
 line_role_summary AS (
     SELECT
         placement_code,
         SUM(CASE WHEN line_rank = 1 THEN line_total_bv ELSE 0 END) AS basic_line_bv,
-        SUM(CASE WHEN line_rank BETWEEN 2 AND 5 THEN line_total_bv ELSE 0 END) AS income_line_bv
-    FROM line_flg
+        SUM(CASE WHEN line_rank BETWEEN 2 AND 5 THEN capped_line_total_bv ELSE 0 END) AS income_line_bv,
+        SUM(CASE WHEN line_rank BETWEEN 2 AND 5 THEN line_over_cap_bv ELSE 0 END) AS income_line_over_cap_bv
+    FROM line_flg_with_cap
     GROUP BY placement_code
 ),
 
@@ -267,6 +303,7 @@ line_diff AS (
         placement_code,
         IFNULL(basic_line_bv, 0) AS basic_line_bv,
         IFNULL(income_line_bv, 0) AS income_line_bv,
+        IFNULL(income_line_over_cap_bv, 0) AS income_line_over_cap_bv,
         GREATEST(IFNULL(basic_line_bv, 0) - IFNULL(income_line_bv, 0), 0) AS next_carry_over_bv
     FROM line_role_summary
 ),
@@ -290,14 +327,18 @@ income_line_detail AS (
             ELSE '収入ライン'
         END AS line_role_label,
         lf.line_total_bv,
+        lf.capped_line_total_bv,
+        lf.income_line_cap,
+        lf.line_over_cap_bv,
         ld.income_line_bv,
         ld.basic_line_bv,
+        ld.income_line_over_cap_bv,
         ld.next_carry_over_bv,
         d.detail_type,
         d.detail_type_label,
         d.detail_sort
     FROM income_detail_source AS d
-    JOIN line_flg AS lf
+    JOIN line_flg_with_cap AS lf
       ON d.placement_code = lf.placement_code
      AND d.line_code = lf.line_code
      AND lf.line_rank BETWEEN 1 AND 5

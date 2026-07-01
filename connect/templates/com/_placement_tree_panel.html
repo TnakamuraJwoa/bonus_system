@@ -1,0 +1,180 @@
+{% load custom_filters %}
+
+<div class="placement-tree-panel" id="{{ tree_panel_id }}">
+  <div class="placement-tree-fullscreen-header">
+    <div class="font-weight-bold">{{ tree_panel_title }}</div>
+    <div class="placement-tree-fullscreen-header__actions">
+      <div class="placement-tree-search">
+        <input type="text"
+               class="form-control form-control-sm"
+               data-tree-search-input
+               value="{{ tree_search|default:'' }}"
+               placeholder="下位会員コード・会員名">
+        <button type="button"
+                class="btn btn-sm btn-outline-primary"
+                data-tree-search-button>
+          検索
+        </button>
+        <span class="placement-tree-search__message text-muted" data-tree-search-message></span>
+      </div>
+      <button type="button" class="btn btn-sm btn-outline-secondary js-tree-collapse-all">全て閉じる</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary js-tree-expand-all">全て開く</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary js-tree-exit-fullscreen">全画面を閉じる</button>
+    </div>
+  </div>
+  {% if tree_unavailable_reason %}
+    <p class="mb-0 text-muted">{{ tree_unavailable_reason }}</p>
+  {% else %}
+    {% if tree_truncated %}
+      <div class="alert alert-warning py-2 small">
+        表示件数が上限（{{ tree_node_count }} 件）に達したため、一部のみ表示しています。
+      </div>
+    {% endif %}
+
+    {% if tree_search_path_rows %}
+      <div class="placement-tree-db-path"
+           data-tree-db-search-panel
+           data-tree-db-search-target="{{ tree_search_target.jwoa_code|default:'' }}">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div>
+            <div class="fw-bold small">DB配下検索結果</div>
+            <div class="small text-muted">
+              「{{ tree_search }}」は表示中Treeの外にある可能性があるため、DB上の配下全体から経路を表示しています。
+            </div>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            {% if tree_search_target %}
+              <span class="badge badge-warning">対象: {{ tree_search_target.jwoa_code }}</span>
+            {% endif %}
+            <button type="button"
+                    class="btn btn-sm btn-outline-secondary"
+                    data-tree-db-search-close>
+              閉じる
+            </button>
+          </div>
+        </div>
+        <div class="placement-tree-db-path__list">
+          {% for node in tree_search_path_rows %}
+            {% if not forloop.first %}
+              <span class="placement-tree-db-path__arrow">›</span>
+            {% endif %}
+            <span class="placement-tree-db-path__item {% if node.is_target %}placement-tree-db-path__item--target{% endif %}">
+              <span class="font-weight-bold">{{ node.jwoa_code }}</span>
+              <span>{{ node.send_bv_name|default:"-" }}</span>
+              <span class="badge {{ node.rank|rank_badge_class }}">{{ node.rank|rank_label }}</span>
+              {% if node.is_direct_introducer %}
+                <span class="badge badge-warning">紹介者</span>
+              {% endif %}
+              {% if node.show_tree_bonus_badges %}
+                {% if node.basic_acquired_flg %}
+                  <span class="badge badge-primary">ベーシック取得</span>
+                {% else %}
+                  <span class="badge badge-light text-muted">ベーシック未取得</span>
+                {% endif %}
+                {% if node.prev_active_flg %}
+                  <span class="badge badge-success">{{ node.prev_active_label }}(アクティブ)</span>
+                {% else %}
+                  <span class="badge badge-light text-muted">{{ node.prev_active_label }}(非アクティブ)</span>
+                {% endif %}
+              {% endif %}
+            </span>
+          {% endfor %}
+        </div>
+      </div>
+    {% elif tree_search_not_found %}
+      <div class="alert alert-warning py-2 small">
+        「{{ tree_search }}」に一致する下位会員は、DB上の配下全体にも見つかりませんでした。
+      </div>
+    {% endif %}
+
+    {% if tree_ancestors %}
+      <div class="placement-tree-node placement-tree-node--ancestor-group">
+        <div class="placement-tree-node__row">
+          <button type="button"
+                  class="btn btn-sm btn-link placement-tree-toggle p-0 mr-1"
+                  data-toggle-label="上位者"
+                  aria-expanded="false"
+                  aria-label="上位者を展開">
+            ▶
+          </button>
+          <span class="font-weight-bold">上位者</span>
+          <span class="text-muted mx-1">{{ tree_ancestors|length }}件</span>
+          <span class="badge badge-secondary ml-1">閉じています</span>
+        </div>
+        <div class="placement-tree-children is-collapsed">
+          {% for node in tree_ancestors %}
+            <div class="placement-tree-node placement-tree-node--ancestor" style="padding-left: {{ forloop.counter0 }}rem;">
+              <div class="placement-tree-node__row">
+                <span class="placement-tree-toggle-spacer mr-1"></span>
+                <span class="font-weight-bold">{{ node.jwoa_code }}</span>
+                <span class="text-muted mx-1">{{ node.send_bv_name|default:"-" }}</span>
+                <span class="badge {{ node.rank|rank_badge_class }}">{{ node.rank|rank_label }}</span>
+                <span class="badge badge-secondary ml-1">上位</span>
+                {% if node.is_direct_introducer %}
+                  <span class="badge badge-warning ml-1">紹介者</span>
+                {% endif %}
+                {% if node.show_tree_bonus_badges %}
+                  {% if node.basic_acquired_flg %}
+                    <span class="badge badge-primary ml-1">ベーシック取得</span>
+                  {% else %}
+                    <span class="badge badge-light text-muted ml-1">ベーシック未取得</span>
+                  {% endif %}
+                  {% if node.prev_active_flg %}
+                    <span class="badge badge-success ml-1">{{ node.prev_active_label }}(アクティブ)</span>
+                  {% else %}
+                    <span class="badge badge-light text-muted ml-1">{{ node.prev_active_label }}(非アクティブ)</span>
+                  {% endif %}
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
+    {% if tree_focus %}
+      <div class="placement-tree-node placement-tree-node--focus" style="padding-left: 0;">
+        <div class="placement-tree-node__row">
+          {% if tree_children %}
+            <button type="button"
+                    class="btn btn-sm btn-link placement-tree-toggle p-0 mr-1"
+                    aria-expanded="false"
+                    aria-label="下位を展開">
+              ▶
+            </button>
+          {% else %}
+            <span class="placement-tree-toggle-spacer mr-1"></span>
+          {% endif %}
+          <span class="font-weight-bold">{{ tree_focus.jwoa_code }}</span>
+          <span class="text-muted mx-1">{{ tree_focus.send_bv_name|default:"-" }}</span>
+          <span class="badge {{ tree_focus.rank|rank_badge_class }}">{{ tree_focus.rank|rank_label }}</span>
+          <span class="badge badge-primary ml-1">起点</span>
+          {% if tree_focus.is_direct_introducer %}
+            <span class="badge badge-warning ml-1">紹介者</span>
+          {% endif %}
+          {% if tree_focus.show_tree_bonus_badges %}
+            {% if tree_focus.basic_acquired_flg %}
+              <span class="badge badge-primary ml-1">ベーシック取得</span>
+            {% else %}
+              <span class="badge badge-light text-muted ml-1">ベーシック未取得</span>
+            {% endif %}
+            {% if tree_focus.prev_active_flg %}
+              <span class="badge badge-success ml-1">{{ tree_focus.prev_active_label }}(アクティブ)</span>
+            {% else %}
+              <span class="badge badge-light text-muted ml-1">{{ tree_focus.prev_active_label }}(非アクティブ)</span>
+            {% endif %}
+          {% endif %}
+        </div>
+        {% if tree_children %}
+          <div class="placement-tree-children is-collapsed">
+            {% include "com/_placement_tree_nodes.html" with nodes=tree_children indent=1 %}
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    {% if not tree_focus and not tree_ancestors %}
+      <p class="mb-0 text-muted">表示するTreeデータがありません。</p>
+    {% endif %}
+  {% endif %}
+</div>

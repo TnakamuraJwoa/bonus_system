@@ -121,7 +121,8 @@
     .income-line-tree-card:fullscreen .income-line-fullscreen-only,
     .income-line-tree-card:-webkit-full-screen .income-line-fullscreen-only,
     .income-line-list-card:fullscreen .income-line-fullscreen-only,
-    .income-line-list-card:-webkit-full-screen .income-line-fullscreen-only {
+    .income-line-list-card:-webkit-full-screen .income-line-fullscreen-only,
+    .income-line-list-card.is-income-line-pseudo-fullscreen .income-line-fullscreen-only {
       display: block;
     }
 
@@ -155,7 +156,8 @@
     }
 
     .income-line-list-card:fullscreen .list-summary__title,
-    .income-line-list-card:-webkit-full-screen .list-summary__title {
+    .income-line-list-card:-webkit-full-screen .list-summary__title,
+    .income-line-list-card.is-income-line-pseudo-fullscreen .list-summary__title {
       display: flex;
     }
 
@@ -396,18 +398,29 @@
     .income-line-tree-card:fullscreen,
     .income-line-tree-card:-webkit-full-screen,
     .income-line-list-card:fullscreen,
-    .income-line-list-card:-webkit-full-screen {
+    .income-line-list-card:-webkit-full-screen,
+    .income-line-list-card.is-income-line-pseudo-fullscreen {
       background: #fff;
       overflow: hidden;
       padding: 1rem;
       width: 100vw;
       height: 100vh;
+      box-sizing: border-box;
+    }
+
+    .income-line-list-card.is-income-line-pseudo-fullscreen {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      margin: 0 !important;
+      border-radius: 0;
     }
 
     .income-line-tree-card:fullscreen > .card-body,
     .income-line-tree-card:-webkit-full-screen > .card-body,
     .income-line-list-card:fullscreen > .card-body,
-    .income-line-list-card:-webkit-full-screen > .card-body {
+    .income-line-list-card:-webkit-full-screen > .card-body,
+    .income-line-list-card.is-income-line-pseudo-fullscreen > .card-body {
       display: flex;
       flex-direction: column;
       height: 100%;
@@ -431,11 +444,24 @@
     }
 
     .income-line-list-card:fullscreen .table-responsive,
-    .income-line-list-card:-webkit-full-screen .table-responsive {
-      flex: 1 1 auto;
+    .income-line-list-card:-webkit-full-screen .table-responsive,
+    .income-line-list-card.is-income-line-pseudo-fullscreen .table-responsive {
+      flex: 1 1 0;
+      height: calc(100vh - 9rem);
+      max-height: calc(100vh - 9rem);
       min-height: 0;
       overflow: auto !important;
       padding-bottom: 0.5rem;
+    }
+
+    .income-line-list-card:fullscreen .pagination-wrap,
+    .income-line-list-card:-webkit-full-screen .pagination-wrap,
+    .income-line-list-card.is-income-line-pseudo-fullscreen .pagination-wrap {
+      display: none;
+    }
+
+    body.is-income-line-pseudo-fullscreen-active {
+      overflow: hidden;
     }
   </style>
 {% endblock %}
@@ -451,7 +477,7 @@
           <form method="get" class="bonus-search-form">
             <input type="hidden" name="view_mode" value="list">
             <div class="income-line-search-header">
-              <h5 class="page-title mb-0">【ボーナス検索 - 収入ライン購入者詳細】</h5>
+              <h5 class="page-title mb-0">【ボーナス検索 - ベーシック・収入ライン詳細】</h5>
 
               {% if q_placement_code or show_tree or view_mode == "tree" %}
                 <div class="income-line-view-mode">
@@ -657,6 +683,11 @@
                             <span class="badge {% if line.line_rank == 1 %}badge-secondary{% else %}badge-info{% endif %}">
                               ライン合計BV {{ line.line_total_bv|default:0|intcomma }}
                             </span>
+                            {% if line.line_over_cap_bv %}
+                              <span class="badge badge-danger">
+                                上限適用 {{ line.income_line_cap|default:0|intcomma }} / 超過 {{ line.line_over_cap_bv|default:0|intcomma }}
+                              </span>
+                            {% endif %}
                             <button type="button"
                                     class="btn btn-outline-secondary btn-sm"
                                     data-income-line-toggle>
@@ -689,7 +720,7 @@
                               {% endif %}
                               {% for node in purchase.path_nodes %}
                                 <div class="income-line-tree__path-node{% if not node.is_line_root and not node.is_purchaser %} income-line-tree__path-node--intermediate{% endif %}"
-                                     style="margin-left: {{ node.indent_px }}px;">
+                                     data-indent-px="{{ node.indent_px }}">
                                   <div class="income-line-tree__path-name">
                                     {% if node.is_line_root %}
                                       <span class="badge badge-info">ライン</span>
@@ -739,7 +770,7 @@
       </div>
       {% endif %}
 
-      <div class="card shadow-sm flex-grow-1 income-line-list-card" id="incomeLineList" data-income-line-fullscreen-card style="min-height: 0;">
+      <div class="card shadow-sm flex-grow-1 income-line-list-card" id="incomeLineList" data-income-line-fullscreen-card data-total-count="{{ total_count|default:0 }}" data-per-page="{{ per_page|default:100 }}" style="min-height: 0;">
         <div class="card-body d-flex flex-column" style="min-height: 0; overflow: hidden;">
           {% if rows %}
             <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3 income-line-list-card__header">
@@ -793,6 +824,7 @@
                     <th class="text-center">前回繰り越しBV</th>
                     <th class="text-center">明細BV</th>
                     <th class="text-center">収入ライン合計BV</th>
+                    <th class="text-center">ライン上限超過</th>
                     <th class="text-center">基本ライン合計BV</th>
                     <th class="text-center">今回繰り越し予定BV</th>
                   </tr>
@@ -833,6 +865,13 @@
                       <td class="fw-bold text-primary text-end">{{ r.carry_over_bv|default:0|intcomma }}</td>
                       <td class="text-end">{{ r.calc_bv|default:0|intcomma }}</td>
                       <td class="fw-bold text-end">{{ r.income_line_bv|default:0|intcomma }}</td>
+                      <td class="text-end">
+                        {% if r.line_over_cap_bv %}
+                          <span class="badge badge-danger">{{ r.line_over_cap_bv|default:0|intcomma }}</span>
+                        {% else %}
+                          -
+                        {% endif %}
+                      </td>
                       <td class="text-end">{{ r.basic_line_bv|default:0|intcomma }}</td>
                       <td class="fw-bold text-danger text-end">{{ r.next_carry_over_bv|default:0|intcomma }}</td>
                     </tr>
@@ -841,7 +880,9 @@
               </table>
             </div>
 
-            {% include "com/_pagination.html" %}
+            {% if not list_all %}
+              {% include "com/_pagination.html" %}
+            {% endif %}
           {% else %}
             {% if selected_kibetu %}
               <p class="mb-0">この条件のデータはありません。</p>
@@ -858,6 +899,13 @@
 
 {% block script %}
 <script>
+(function () {
+  document.querySelectorAll("[data-indent-px]").forEach(function (element) {
+    var indentPx = parseInt(element.getAttribute("data-indent-px") || "0", 10);
+    element.style.marginLeft = indentPx + "px";
+  });
+})();
+
 (function () {
   var viewModeTree = document.getElementById("viewModeTree");
   if (!viewModeTree) {
@@ -930,11 +978,61 @@
     return Promise.resolve();
   }
 
+  function buildListAllUrl(enableListAll) {
+    var url = new URL(window.location.href);
+    if (enableListAll) {
+      url.searchParams.set("list_all", "1");
+      url.searchParams.delete("autofullscreen");
+      url.searchParams.delete("page");
+    } else {
+      url.searchParams.delete("list_all");
+      url.searchParams.delete("autofullscreen");
+      url.searchParams.delete("page");
+    }
+    return url.toString();
+  }
+
+  function shouldLoadAllRows(card) {
+    var totalCount = parseInt(card.getAttribute("data-total-count") || "0", 10);
+    var perPage = parseInt(card.getAttribute("data-per-page") || "0", 10);
+    var params = new URLSearchParams(window.location.search);
+    return params.get("list_all") !== "1" && totalCount > perPage;
+  }
+
+  function isPseudoFullscreen(card) {
+    return card && card.classList.contains("is-income-line-pseudo-fullscreen");
+  }
+
+  function enterPseudoFullscreen(card) {
+    if (!card) {
+      return;
+    }
+    card.classList.add("is-income-line-pseudo-fullscreen");
+    document.body.classList.add("is-income-line-pseudo-fullscreen-active");
+    syncButtonLabels();
+  }
+
+  function exitListAllMode() {
+    window.location.href = buildListAllUrl(false);
+  }
+
   function syncButtonLabels() {
     document.querySelectorAll("[data-income-line-tree-fullscreen], [data-income-line-fullscreen]").forEach(function (button) {
       var card = button.closest("[data-income-line-tree-card], [data-income-line-fullscreen-card]");
-      button.textContent = card && fullscreenElement() === card ? "元に戻す" : "全画面表示";
+      button.textContent = card && (fullscreenElement() === card || isPseudoFullscreen(card)) ? "元に戻す" : "全画面表示";
     });
+  }
+
+  function handleListAllExit() {
+    var listCard = document.querySelector("[data-income-line-fullscreen-card]");
+    if (!listCard) {
+      return;
+    }
+    if (!fullscreenElement() &&
+        !isPseudoFullscreen(listCard) &&
+        new URLSearchParams(window.location.search).get("list_all") === "1") {
+      exitListAllMode();
+    }
   }
 
   document.querySelectorAll("[data-income-line-tree-fullscreen], [data-income-line-fullscreen]").forEach(function (button) {
@@ -944,8 +1042,19 @@
     }
 
     button.addEventListener("click", function () {
-      if (fullscreenElement() === card) {
-        exitFullscreen().then(syncButtonLabels).catch(syncButtonLabels);
+      if (isPseudoFullscreen(card)) {
+        exitListAllMode();
+      } else if (fullscreenElement() === card) {
+        exitFullscreen().then(function () {
+          if (card.hasAttribute("data-income-line-fullscreen-card") &&
+              new URLSearchParams(window.location.search).get("list_all") === "1") {
+            exitListAllMode();
+            return;
+          }
+          syncButtonLabels();
+        }).catch(syncButtonLabels);
+      } else if (card.hasAttribute("data-income-line-fullscreen-card") && shouldLoadAllRows(card)) {
+        window.location.href = buildListAllUrl(true);
       } else {
         requestFullscreen(card).then(syncButtonLabels).catch(function () {
           alert("このブラウザでは全画面表示を開始できませんでした。");
@@ -955,8 +1064,26 @@
     });
   });
 
-  document.addEventListener("fullscreenchange", syncButtonLabels);
-  document.addEventListener("webkitfullscreenchange", syncButtonLabels);
+  var listCard = document.querySelector("[data-income-line-fullscreen-card]");
+  if (listCard && new URLSearchParams(window.location.search).get("list_all") === "1") {
+    enterPseudoFullscreen(listCard);
+  }
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && listCard && isPseudoFullscreen(listCard)) {
+      exitListAllMode();
+    }
+  }
+  );
+
+  document.addEventListener("fullscreenchange", function () {
+    syncButtonLabels();
+    handleListAllExit();
+  });
+  document.addEventListener("webkitfullscreenchange", function () {
+    syncButtonLabels();
+    handleListAllExit();
+  });
 })();
 
 (function () {

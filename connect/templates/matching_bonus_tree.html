@@ -1,0 +1,283 @@
+{% extends 'base.html' %}
+{% load static custom_filters %}
+
+{% block head %}
+  <link href="{% static 'css/common.css' %}?v=53" rel="stylesheet">
+  <style>
+    .placement-tree-panel {
+      flex: 1 1 auto;
+      min-height: 360px;
+      overflow: auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 0.75rem;
+      background: #fafafa;
+    }
+
+    .placement-tree-panel.is-tree-pseudo-fullscreen {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483000;
+      width: 100vw;
+      height: 100vh;
+      padding: 1rem;
+      background: #f8fafc;
+      border-radius: 0;
+      box-sizing: border-box;
+      margin: 0 !important;
+      transform: none !important;
+    }
+
+    .placement-tree-panel.is-tree-pseudo-fullscreen .placement-tree-fullscreen-header {
+      display: flex;
+    }
+
+    .placement-tree-fullscreen-header {
+      display: none;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid #e5e7eb;
+      background: #f8fafc;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    .placement-tree-fullscreen-header__actions {
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-end;
+      gap: 0.5rem;
+      margin-left: auto;
+      flex-wrap: wrap;
+    }
+
+    .placement-tree-node__row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.15rem;
+      padding: 0.2rem 0.35rem;
+      border-radius: 6px;
+    }
+
+    .placement-tree-node__row:hover {
+      background: #f1f5f9;
+    }
+
+    .placement-tree-node--focus > .placement-tree-node__row {
+      background: #dbeafe;
+      border: 1px solid #93c5fd;
+    }
+
+    .placement-tree-node--ancestor > .placement-tree-node__row {
+      border-left: 3px solid #94a3b8;
+    }
+
+    .placement-tree-node--searched > .placement-tree-node__row {
+      background: #fef3c7;
+      border: 1px solid #f59e0b;
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.18);
+    }
+
+    .placement-tree-search {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+    }
+
+    .placement-tree-search input {
+      width: 220px;
+    }
+
+    .placement-tree-search__message {
+      flex-basis: 100%;
+      font-size: 0.8rem;
+    }
+
+    .placement-tree-db-path {
+      border: 1px solid #fde68a;
+      background: #fffbeb;
+      border-radius: 8px;
+      padding: 0.65rem 0.75rem;
+      margin-bottom: 0.75rem;
+      max-height: 11rem;
+      overflow: hidden;
+      flex: 0 0 auto;
+    }
+
+    .placement-tree-db-path__list {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.35rem;
+      margin-top: 0.45rem;
+      max-height: 6.5rem;
+      overflow: auto;
+      padding: 0.15rem 0.2rem 0.25rem 0;
+    }
+
+    .placement-tree-panel.is-tree-pseudo-fullscreen .placement-tree-db-path {
+      max-height: 9.5rem;
+    }
+
+    .placement-tree-panel.is-tree-pseudo-fullscreen .placement-tree-db-path__list {
+      max-height: 5.5rem;
+    }
+
+    .placement-tree-db-path__item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      border: 1px solid #dbeafe;
+      background: #eff6ff;
+      border-radius: 999px;
+      padding: 0.25rem 0.55rem;
+      font-size: 0.82rem;
+      white-space: nowrap;
+    }
+
+    .placement-tree-db-path__item--target {
+      border-color: #f59e0b;
+      background: #fef3c7;
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.16);
+    }
+
+    .placement-tree-db-path__arrow {
+      color: #94a3b8;
+      font-weight: 700;
+    }
+
+    .placement-tree-toggle {
+      width: 1.2rem;
+      text-align: center;
+      line-height: 1;
+      color: #475569;
+    }
+
+    .placement-tree-toggle-spacer {
+      display: inline-block;
+      width: 1.2rem;
+    }
+
+    .placement-tree-children {
+      border-left: 1px dashed #cbd5e1;
+      margin-left: 0.55rem;
+    }
+
+    .placement-tree-children.is-collapsed {
+      display: none;
+    }
+
+    body.is-tree-pseudo-fullscreen-active {
+      overflow: hidden;
+    }
+
+    body.is-tree-pseudo-fullscreen-active #wrapper {
+      overflow: visible;
+    }
+  </style>
+{% endblock %}
+
+{% block contents %}
+<div class="container-fluid mt-3 app-page-viewport">
+  <div class="row g-1 h-100">
+    {% include "com/_sidebar_bonus_kensaku.html" with active_menu="matching_bonus_tree" %}
+
+    <main class="col-12 col-md-9 col-lg-10 app-page-main">
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <form method="get" class="bonus-search-form">
+            <div class="bonus-search-header">
+              <h5 class="page-title mb-0">【ボーナス検索 - マッチング・Tree】</h5>
+            </div>
+
+            <div class="bonus-search-filters">
+              <div>
+                {% bonus_calc_kibetu_input selected_kibetu period_type="weekly" required=False %}
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">会員コード</label>
+                <input type="text"
+                       name="q_member_code"
+                       class="form-control"
+                       value="{{ q_member_code|default:'' }}"
+                       placeholder="例：JP00000000">
+              </div>
+
+              <div class="bonus-search-actions">
+                <button type="submit" class="btn btn-primary">表示</button>
+                <a class="btn btn-outline-secondary" href="{% url 'connect:matching_bonus_tree' %}">リセット</a>
+              </div>
+            </div>
+          </form>
+
+          <div class="selection-indicator-group bonus-calc-selection-status mt-3">
+            {% bonus_calc_period_status empty_message="期別：指定なし" %}
+            {% if q_member_code %}
+              <span class="selection-indicator__badge badge badge-pill">会員コード：{{ q_member_code }}</span>
+            {% endif %}
+          </div>
+
+          {% if period_error %}
+            <div class="alert alert-warning mt-3 mb-0">{{ period_error }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card shadow-sm matching-tree-card" data-placement-tree-scope>
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+            <div>
+              <div class="fw-bold">マッチング・Tree</div>
+              <div class="small text-muted">
+                会員コードを起点に、配置関係（上位者Tree）を表示します。マッチング判定の確認用に利用してください。
+              </div>
+            </div>
+            {% if q_member_code and not tree_unavailable_reason %}
+              <div class="d-flex gap-2 flex-wrap align-items-center">
+                {% if tree_node_count %}
+                  <div class="text-muted small">表示ノード数：{{ tree_node_count }} 件</div>
+                {% endif %}
+                <div class="placement-tree-search">
+                  <input type="text"
+                         class="form-control form-control-sm"
+                         data-tree-search-input
+                         value="{{ tree_search|default:'' }}"
+                         placeholder="下位会員コード・会員名">
+                  <button type="button"
+                          class="btn btn-sm btn-outline-primary"
+                          data-tree-search-button>
+                    検索
+                  </button>
+                  <span class="placement-tree-search__message text-muted" data-tree-search-message></span>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-secondary js-tree-collapse-all">全て閉じる</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary js-tree-expand-all">全て開く</button>
+                <button type="button" class="btn btn-sm btn-outline-primary js-tree-fullscreen">全画面表示</button>
+              </div>
+            {% endif %}
+          </div>
+
+          {% include "com/_placement_tree_panel.html" with tree_panel_id="matchingTreePanel" tree_panel_title="マッチング・Tree" %}
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<div id="matchingTreeScriptConfig"
+     data-tree-panel-id="matchingTreePanel"
+     data-tree-root-param="q_member_code"
+     data-tree-set-view="0"
+     hidden></div>
+{% include "com/_placement_tree_scripts.html" with tree_script_config_id="matchingTreeScriptConfig" %}
+{% endblock %}

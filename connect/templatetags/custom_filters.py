@@ -40,6 +40,8 @@ INDIVIDUAL_BONUS_URL_PAIRS = {
     "s_basic_bonus": ("basic_bonus", "s_basic_bonus"),
     "matching_bonus": ("matching_bonus", "s_matching_bonus"),
     "s_matching_bonus": ("matching_bonus", "s_matching_bonus"),
+    "matching_bonus_detail": ("matching_bonus", "s_matching_bonus"),
+    "matching_bonus_tree": ("matching_bonus", "s_matching_bonus"),
     "month_title": ("month_title", "s_month_title"),
     "s_month_title": ("month_title", "s_month_title"),
     "title_bonus": ("title_bonus", "s_title_bonus"),
@@ -295,7 +297,7 @@ def _build_kibetu_period_choices(request, period_type, created_kibetu_set=None, 
 
 
 @register.inclusion_tag("com/_bonus_calc_kibetu_input.html", takes_context=True)
-def bonus_calc_kibetu_input(context, selected_kibetu="", period_type="weekly"):
+def bonus_calc_kibetu_input(context, selected_kibetu="", period_type="weekly", required=True):
     request = context.get("request")
     history_target_url_name = str(context.get("history_target_url_name") or "")
     history_target_url_name = history_target_url_name.split(":")[-1]
@@ -324,6 +326,7 @@ def bonus_calc_kibetu_input(context, selected_kibetu="", period_type="weekly"):
     return {
         "selected_kibetu": selected_kibetu or "",
         "datalist_id": datalist_id,
+        "required": required,
         **period_context,
     }
 

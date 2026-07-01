@@ -2,7 +2,7 @@ MATCHING_BONUS_SQL = """
 WITH RECURSIVE
 
 -- group_by(購入者リスト)
--- 前月の購入情報
+-- 前月の購入情報50BV以上購入
 sum_prev_purchasers_list AS (
 SELECT
     p.jwoa_code,
@@ -15,6 +15,7 @@ HAVING SUM(IFNULL(p.bv, 0)) >= 50
 ),
 
 -- アクティブuser
+-- 前月50BV or active_status = 1
 active_users as (
 select jwoa_code
 from bonus_db.active_users

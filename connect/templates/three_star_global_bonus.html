@@ -37,12 +37,14 @@
               {% if user_access.can_execute and selected_period and rows %}
               <form method="post"
                     class="mb-0"
-                    data-confirm="表示中の3スターダイヤグローバル配当結果を登録しますか？すでに登録済みの場合は上書き更新されます。">
+                    data-confirm="表示中の3スターダイヤグローバル配当結果を登録しますか？すでに登録済みの場合は上書き更新されます。"
+                    data-loading-message="登録中..."
+                    data-loading-target="#bonusCalcRegisterOverlay">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="three_star_global_bonus">
                 <input type="hidden" name="kibetu" value="{{ selected_kibetu }}">
 
-                <button type="submit" class="btn btn-warning">
+                <button type="submit" class="btn btn-warning" data-loading-button>
                   この期別の結果を登録
                 </button>
               </form>
@@ -124,4 +126,5 @@
 </div>
 {% include "com/_bonus_histry_month_modal.html" with modal_id="threeStarGlobalBonusHistoryModal" %}
 {% include "com/_bonus_calc_progress_overlay.html" with form_id="threeStarGlobalBonusSearchForm" overlay_id="threeStarGlobalBonusProgressOverlay" progress_bar_id="threeStarGlobalBonusProgressBar" progress_text_id="threeStarGlobalBonusProgressText" %}
+{% include "com/_bonus_calc_register_overlay.html" %}
 {% endblock %}

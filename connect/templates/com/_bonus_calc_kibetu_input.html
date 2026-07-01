@@ -24,7 +24,7 @@
            placeholder="期別を入力または選択"
            autocomplete="off"
            aria-expanded="false"
-           required>
+           {% if required %}required{% endif %}>
     <button type="button"
             class="bonus-calc-kibetu-toggle"
             aria-label="期別候補を開く"

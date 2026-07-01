@@ -1,6 +1,9 @@
 {% load humanize %}
 <div class="income-line-tree__summary text-end">
   <span class="badge badge-primary">収入ライン合計BV {{ summary.income_line_bv|default:0|intcomma }}</span>
+  {% if summary.income_line_over_cap_bv %}
+    <span class="badge badge-danger">収入ライン上限超過 {{ summary.income_line_over_cap_bv|default:0|intcomma }}</span>
+  {% endif %}
   <span class="badge badge-secondary">基本ライン合計BV {{ summary.basic_line_bv|default:0|intcomma }}</span>
   <span class="badge badge-warning">前回繰り越しBV {{ summary.prev_carry_over_bv|default:0|intcomma }}</span>
   <span class="badge badge-danger">今回繰り越し予定BV {{ summary.next_carry_over_bv|default:0|intcomma }}</span>

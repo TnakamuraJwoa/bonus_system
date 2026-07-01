@@ -87,7 +87,7 @@
               <form method="post"
                     class="business-performance-delete-form mb-0"
                     data-carry-over-delete-form
-                    data-confirm="入力中または選択中の期別の繰り越しBVを削除します。よろしいですか？">
+                    data-confirm="選択中の期別の繰り越しBVを削除します。よろしいですか？">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="q_kibetu" value="{{ q_kibetu|default:'' }}">

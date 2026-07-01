@@ -39,12 +39,14 @@
               {% if user_access.can_execute and selected_period and rows %}
               <form method="post"
                     class="mb-0"
-                    data-confirm="表示中の再購入オーバーボーナス結果を登録しますか？">
+                    data-confirm="表示中の再購入オーバーボーナス結果を登録しますか？"
+                    data-loading-message="登録中..."
+                    data-loading-target="#bonusCalcRegisterOverlay">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="repurchase_over_bonus">
                 <input type="hidden" name="kibetu" value="{{ selected_kibetu }}">
 
-                <button type="submit" class="btn btn-warning">
+                <button type="submit" class="btn btn-warning" data-loading-button>
                   この期別の結果を登録
                 </button>
               </form>
@@ -141,4 +143,5 @@
 </div>
 {% include "com/_bonus_histry_month_modal.html" with modal_id="repurchaseOverBonusHistoryModal" %}
 {% include "com/_bonus_calc_progress_overlay.html" with form_id="repurchaseOverBonusSearchForm" overlay_id="repurchaseOverBonusProgressOverlay" progress_bar_id="repurchaseOverBonusProgressBar" progress_text_id="repurchaseOverBonusProgressText" %}
+{% include "com/_bonus_calc_register_overlay.html" %}
 {% endblock %}

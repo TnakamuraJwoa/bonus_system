@@ -122,6 +122,15 @@
               {% endif %}
               <div class="d-flex align-items-end flex-wrap">
                 <div class="mr-2 mb-2">
+                  <label class="form-label mb-0 small text-muted">紹介者コード</label>
+                  <input type="text"
+                         name="q_introducer_code"
+                         class="form-control"
+                         value="{{ q_introducer_code|default:'' }}"
+                         placeholder="例: JP00000001">
+                </div>
+
+                <div class="mr-2 mb-2">
                   <label class="form-label mb-0 small text-muted">会員コード</label>
                   <input type="text"
                          name="q_jwoa_code"
@@ -137,15 +146,6 @@
                          class="form-control"
                          value="{{ q_name|default:'' }}"
                          placeholder="例: 山田">
-                </div>
-
-                <div class="mr-2 mb-2">
-                  <label class="form-label mb-0 small text-muted">紹介者コード</label>
-                  <input type="text"
-                         name="q_introducer_code"
-                         class="form-control"
-                         value="{{ q_introducer_code|default:'' }}"
-                         placeholder="例: JP00000001">
                 </div>
 
                 <div class="mr-2 mb-2" style="width: 150px;">
@@ -187,14 +187,14 @@
             <div class="bonus-calc-selection-status">
               {% if q_jwoa_code or q_name or q_introducer_code or q_introducer_rank or q_rank %}
                 <span class="text-muted small">絞り込み中：</span>
+                {% if q_introducer_code %}
+                  <span class="badge badge-dark">紹介者コード={{ q_introducer_code }}</span>
+                {% endif %}
                 {% if q_jwoa_code %}
                   <span class="badge badge-info">会員コード={{ q_jwoa_code }}</span>
                 {% endif %}
                 {% if q_name %}
                   <span class="badge badge-secondary">会員名={{ q_name }}</span>
-                {% endif %}
-                {% if q_introducer_code %}
-                  <span class="badge badge-dark">紹介者コード={{ q_introducer_code }}</span>
                 {% endif %}
                 {% if q_introducer_rank %}
                   <span class="badge badge-primary">紹介者ランク={{ q_introducer_rank|rank_label }}</span>
