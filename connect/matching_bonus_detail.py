@@ -274,9 +274,9 @@ class MatchingBonusTreeView(generic.TemplateView):
         selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
         q_member_code = (self.request.GET.get("q_member_code") or "").strip()
         tree_search = (self.request.GET.get("tree_search") or "").strip()
-        active_tree_type = (self.request.GET.get("tree_type") or "placement").strip()
+        active_tree_type = (self.request.GET.get("tree_type") or "introducer").strip()
         if active_tree_type not in ("placement", "introducer"):
-            active_tree_type = "placement"
+            active_tree_type = "introducer"
 
         ctx.update({
             "object_list": self._get_period_choices(),
