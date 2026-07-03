@@ -117,15 +117,27 @@
         </div>
       </div>
 
-      <div class="card shadow-sm flex-grow-1" style="min-height: 0;">
+      <div class="card shadow-sm flex-grow-1" data-bonus-search-fullscreen-card style="min-height: 0;">
         <div class="card-body d-flex flex-column" style="min-height: 0; overflow: hidden;">
 
           {% if rows %}
 
             <div class="d-flex justify-content-between align-items-center mb-2">
               <div class="fw-bold">一覧</div>
-              <div class="text-end">
-                <strong>件数：{{ rows|length }} 件</strong>
+              <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+                <div class="text-end">
+                  <strong>件数：{{ rows|length }} 件</strong>
+                </div>
+                <button type="button"
+                        class="btn btn-sm btn-outline-primary bonus-search-fullscreen-enter"
+                        data-bonus-search-fullscreen-enter>
+                  全画面表示
+                </button>
+                <button type="button"
+                        class="btn btn-sm btn-outline-secondary bonus-search-fullscreen-exit"
+                        data-bonus-search-fullscreen-exit>
+                  全画面を閉じる
+                </button>
               </div>
             </div>
 
@@ -184,4 +196,5 @@
     </main>
   </div>
 </div>
+{% include "com/_bonus_search_fullscreen_assets.html" %}
 {% endblock %}

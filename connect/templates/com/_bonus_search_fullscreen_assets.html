@@ -1,0 +1,111 @@
+<style>
+  .bonus-search-fullscreen-card.is-bonus-search-fullscreen {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483000;
+    width: 100vw;
+    height: 100vh;
+    margin: 0 !important;
+    border-radius: 0;
+    box-sizing: border-box;
+  }
+
+  .bonus-search-fullscreen-card.is-bonus-search-fullscreen > .card-body {
+    height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+    padding: 1rem;
+  }
+
+  .bonus-search-fullscreen-card.is-bonus-search-fullscreen .table-responsive {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .bonus-search-fullscreen-card.is-bonus-search-fullscreen table {
+    margin-bottom: 0;
+  }
+
+  .bonus-search-fullscreen-exit {
+    display: none;
+  }
+
+  .bonus-search-fullscreen-card.is-bonus-search-fullscreen .bonus-search-fullscreen-enter {
+    display: none;
+  }
+
+  .bonus-search-fullscreen-card.is-bonus-search-fullscreen .bonus-search-fullscreen-exit {
+    display: inline-block;
+  }
+
+  body.is-bonus-search-fullscreen-active {
+    overflow: hidden;
+  }
+
+  body.is-bonus-search-fullscreen-active #wrapper {
+    overflow: visible;
+  }
+</style>
+
+<script>
+(function () {
+  function enterFullscreen(card) {
+    if (!card || card.classList.contains("is-bonus-search-fullscreen")) {
+      return;
+    }
+    if (!card.__bonusSearchFullscreenPlaceholder && card.parentNode) {
+      card.__bonusSearchFullscreenPlaceholder = document.createComment("bonus search fullscreen placeholder");
+      card.parentNode.insertBefore(card.__bonusSearchFullscreenPlaceholder, card);
+      document.body.appendChild(card);
+    }
+    card.classList.add("is-bonus-search-fullscreen");
+    document.body.classList.add("is-bonus-search-fullscreen-active");
+  }
+
+  function exitFullscreen(card) {
+    if (!card) {
+      return;
+    }
+    card.classList.remove("is-bonus-search-fullscreen");
+    if (card.__bonusSearchFullscreenPlaceholder && card.__bonusSearchFullscreenPlaceholder.parentNode) {
+      card.__bonusSearchFullscreenPlaceholder.parentNode.insertBefore(
+        card,
+        card.__bonusSearchFullscreenPlaceholder
+      );
+      card.__bonusSearchFullscreenPlaceholder.remove();
+      card.__bonusSearchFullscreenPlaceholder = null;
+    }
+    if (!document.querySelector(".bonus-search-fullscreen-card.is-bonus-search-fullscreen")) {
+      document.body.classList.remove("is-bonus-search-fullscreen-active");
+    }
+  }
+
+  document.querySelectorAll("[data-bonus-search-fullscreen-card]").forEach(function (card) {
+    if (card.__bonusSearchFullscreenInitialized) {
+      return;
+    }
+    card.__bonusSearchFullscreenInitialized = true;
+    card.classList.add("bonus-search-fullscreen-card");
+
+    card.querySelectorAll("[data-bonus-search-fullscreen-enter]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        enterFullscreen(card);
+      });
+    });
+
+    card.querySelectorAll("[data-bonus-search-fullscreen-exit]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        exitFullscreen(card);
+      });
+    });
+  });
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Escape") {
+      return;
+    }
+    document.querySelectorAll(".bonus-search-fullscreen-card.is-bonus-search-fullscreen").forEach(exitFullscreen);
+  });
+})();
+</script>
