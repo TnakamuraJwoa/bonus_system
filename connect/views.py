@@ -6525,11 +6525,13 @@ class S_MatchingBonusView(generic.ListView):
 
         introducer_code = self.request.GET.get("introducer_code", "").strip()
         introducer_name = self.request.GET.get("introducer_name", "").strip()
+        matching_level = self.request.GET.get("matching_level", "").strip()
 
-        if not selected_kibetu_list and not introducer_code and not introducer_name:
+        if not selected_kibetu_list and not introducer_code and not introducer_name and not matching_level:
             ctx.update({
                 "introducer_code": introducer_code,
                 "introducer_name": introducer_name,
+                "matching_level": matching_level,
             })
             return ctx
 
@@ -6571,6 +6573,14 @@ class S_MatchingBonusView(generic.ListView):
             },
         )
         ctx.update(filter_values)
+
+        if matching_level:
+            sql += """
+                AND level = %s
+            """
+            params.append(matching_level)
+        ctx["matching_level"] = matching_level
+
         sql += "\n            ORDER BY " + sort_ctx["order_sql"]
 
         with connections["rds"].cursor() as cursor:
