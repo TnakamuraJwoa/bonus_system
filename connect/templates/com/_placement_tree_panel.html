@@ -76,8 +76,11 @@
                 {% else %}
                   <span class="badge badge-light text-muted">ベーシック未取得</span>
                 {% endif %}
+                {% if node.prev_month_repurchase_flg %}
+                  <span class="badge badge-info">前月再購入</span>
+                {% endif %}
                 {% if node.prev_active_flg %}
-                  <span class="badge badge-success">{{ node.prev_active_label }}(アクティブ)</span>
+                  <span class="badge badge-success">{{ node.prev_active_label }}(アクティブ設定)</span>
                 {% else %}
                   <span class="badge badge-light text-muted">{{ node.prev_active_label }}(非アクティブ)</span>
                 {% endif %}
@@ -127,8 +130,11 @@
                   {% else %}
                     <span class="badge badge-light text-muted ml-1">ベーシック未取得</span>
                   {% endif %}
+                  {% if node.prev_month_repurchase_flg %}
+                    <span class="badge badge-info ml-1">前月再購入</span>
+                  {% endif %}
                   {% if node.prev_active_flg %}
-                    <span class="badge badge-success ml-1">{{ node.prev_active_label }}(アクティブ)</span>
+                    <span class="badge badge-success ml-1">{{ node.prev_active_label }}(アクティブ設定)</span>
                   {% else %}
                     <span class="badge badge-light text-muted ml-1">{{ node.prev_active_label }}(非アクティブ)</span>
                   {% endif %}
@@ -166,8 +172,11 @@
             {% else %}
               <span class="badge badge-light text-muted ml-1">ベーシック未取得</span>
             {% endif %}
+            {% if tree_focus.prev_month_repurchase_flg %}
+              <span class="badge badge-info ml-1">前月再購入</span>
+            {% endif %}
             {% if tree_focus.prev_active_flg %}
-              <span class="badge badge-success ml-1">{{ tree_focus.prev_active_label }}(アクティブ)</span>
+              <span class="badge badge-success ml-1">{{ tree_focus.prev_active_label }}(アクティブ設定)</span>
             {% else %}
               <span class="badge badge-light text-muted ml-1">{{ tree_focus.prev_active_label }}(非アクティブ)</span>
             {% endif %}
