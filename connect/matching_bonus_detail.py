@@ -86,6 +86,7 @@ class MatchingBonusTreeView(generic.TemplateView):
                 "basic_bonus_amount": 0,
                 "basic_acquired_flg": False,
                 "prev_month_bv": 0,
+                "prev_month_repurchase_flg": False,
                 "prev_active_flg": False,
                 "prev_active_label": prev_active_label,
                 "show_tree_bonus_badges": True,
@@ -116,6 +117,8 @@ class MatchingBonusTreeView(generic.TemplateView):
             SELECT jwoa_code
             FROM bonus_db.active_users
             WHERE active_status = 1
+              AND year = %s
+              AND month = %s
               AND jwoa_code IN ({placeholders})
         """
 
@@ -135,10 +138,13 @@ class MatchingBonusTreeView(generic.TemplateView):
                     prev_month_bv = prev_month_bv or 0
                     badge_map[code]["prev_month_bv"] = prev_month_bv
                     if prev_month_bv >= 50:
-                        badge_map[code]["prev_active_flg"] = True
+                        badge_map[code]["prev_month_repurchase_flg"] = True
 
             logger.info("マッチングTree active_usersバッジSQLを実行します。")
-            cursor.execute(active_sql, member_codes)
+            cursor.execute(
+                active_sql,
+                [prev_month_start_dt.year, prev_month_start_dt.month, *member_codes],
+            )
             for row in cursor.fetchall():
                 code = row[0]
                 if code in badge_map:
