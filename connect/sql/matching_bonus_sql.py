@@ -15,14 +15,19 @@ HAVING SUM(IFNULL(p.bv, 0)) >= 50
 ),
 
 -- アクティブuser
--- 前月50BV or active_status = 1
+-- 前月50BV or active_status = 1（ただしactive_usersも前月のみ対象に絞込）
 active_users as (
-select jwoa_code
-from bonus_db.active_users
-where active_status = 1
-union
-select jwoa_code
-from sum_prev_purchasers_list
+    select jwoa_code
+    from bonus_db.active_users
+    where active_status = 1
+      and year = %s
+      and month = %s
+
+    union
+
+    select jwoa_code
+    from sum_prev_purchasers_list
+
 ),
 
 -- ベーシックボーナス結果
@@ -244,7 +249,7 @@ matching_detail_table AS (
 )
 
 SELECT
- 'a' as kibetu,
+ %s as kibetu,
  get_basic_bonus_code as introducer_code,
  b.send_bv_name as introducer_name,
  a.up_code as line_code,

@@ -6161,6 +6161,9 @@ class MatchingBonusView(generic.ListView):
         params = [
             be_start_dt,
             be_end_dt,
+            prev_year,
+            prev_month,
+            selected_kibetu,
             selected_kibetu,
         ]
 
