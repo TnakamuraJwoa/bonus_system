@@ -47,14 +47,14 @@ week_bonus AS (
         %s AS 期別,
         a.pay_code AS 会員番号,
         a.jwoa_name AS 会員名,
-        CAST(IFNULL(b.sum_bv, 0) AS DECIMAL(18,2)) AS ドライブボーナス,
-        CAST(IFNULL(c.sum_bv, 0) AS DECIMAL(18,2)) AS ベーシックボーナス,
-        CAST(IFNULL(d.sum_bv, 0) AS DECIMAL(18,2)) AS マッチングボーナス,
-        CAST(
+        TRUNCATE(IFNULL(b.sum_bv, 0), 2) AS ドライブボーナス,
+        TRUNCATE(IFNULL(c.sum_bv, 0), 2) AS ベーシックボーナス,
+        TRUNCATE(IFNULL(d.sum_bv, 0), 2) AS マッチングボーナス,
+        TRUNCATE(
             IFNULL(b.sum_bv, 0)
             + IFNULL(c.sum_bv, 0)
-            + IFNULL(d.sum_bv, 0)
-            AS DECIMAL(18,2)
+            + IFNULL(d.sum_bv, 0),
+            2
         ) AS 週間ボーナス
     FROM week_user_list AS a
 
