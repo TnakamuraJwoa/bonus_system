@@ -122,6 +122,7 @@
                     {% sortable_th "basic_line_bv" "ベーシック系列BV" %}
                     {% sortable_th "title_name" "タイトル" %}
                     {% sortable_th "updated_at" "決済時間" %}
+                    <th class="text-center">詳細</th>
                   </tr>
                 </thead>
 
@@ -135,6 +136,12 @@
                       <td class="text-end">{{ r.basic_line_bv }}</td>
                       <td class="fw-bold text-primary">{{ r.title_name }}</td>
                       <td>{{ r.updated_at }}</td>
+                      <td class="text-center">
+                        <a class="btn btn-sm btn-outline-primary"
+                           href="{% url 'connect:month_title_detail' %}?kibetu={{ r.kibetu|urlencode }}&jwoa_code={{ r.jwoa_code|urlencode }}">
+                          詳細
+                        </a>
+                      </td>
                     </tr>
                   {% endfor %}
                 </tbody>

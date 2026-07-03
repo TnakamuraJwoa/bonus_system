@@ -948,7 +948,7 @@ SEARCH_EXPORT_COLUMNS = {
         ("down_name", "down_name"),
         ("tree_level", "tree_level", "int"),
         ("match_level", "match_level", "int"),
-        ("title_id", "title_id", "int"),
+        ("title_name", "タイトル名"),
         ("sum_bv", "sum_bv", "int"),
         ("rate", "rate", "decimal2"),
         ("bonus_amount", "bonus_amount", "decimal2"),
@@ -6880,7 +6880,7 @@ class S_TitleBonusView(generic.ListView):
                 "down_name": "down_name",
                 "tree_level": "tree_level",
                 "match_level": "match_level",
-                "title_id": "title_id",
+                "title_name": "title_name",
                 "sum_bv": "sum_bv",
                 "rate": "rate",
                 "bonus_amount": "bonus_amount",
@@ -6892,22 +6892,24 @@ class S_TitleBonusView(generic.ListView):
 
         sql = """
             SELECT
-                id,
-                kibetu,
-                root_jwoa_code,
-                root_name,
-                up_jwoa_code,
-                down_jwoa_code,
-                down_name,
-                tree_level,
-                match_level,
-                title_id,
-                sum_bv,
-                rate,
-                bonus_amount,
-                created_at
-            FROM bonus_db.B_title_bonus_result
-            WHERE kibetu = %s
+                tbr.id,
+                tbr.kibetu,
+                tbr.root_jwoa_code,
+                tbr.root_name,
+                tbr.up_jwoa_code,
+                tbr.down_jwoa_code,
+                tbr.down_name,
+                tbr.tree_level,
+                tbr.match_level,
+                COALESCE(tm.title_name, 'タイトルなし') AS title_name,
+                tbr.sum_bv,
+                tbr.rate,
+                tbr.bonus_amount,
+                tbr.created_at
+            FROM bonus_db.B_title_bonus_result AS tbr
+            LEFT JOIN bonus_db.title_master AS tm
+              ON tbr.title_id = tm.title_id
+            WHERE tbr.kibetu = %s
         """
 
         params = [selected_kibetu]
@@ -6916,9 +6918,9 @@ class S_TitleBonusView(generic.ListView):
             params,
             self.request,
             {
-                "root_jwoa_code": "root_jwoa_code",
-                "up_jwoa_code": "up_jwoa_code",
-                "down_jwoa_code": "down_jwoa_code",
+                "root_jwoa_code": "tbr.root_jwoa_code",
+                "up_jwoa_code": "tbr.up_jwoa_code",
+                "down_jwoa_code": "tbr.down_jwoa_code",
             },
         )
         ctx.update(filter_values)

@@ -10,6 +10,11 @@
            href="{% url 'connect:users' %}">会員一覧</a>
         {% endif %}
 
+        {% if user_access|can_menu:"member_month_title_search" %}
+        <a class="list-group-item list-group-item-action {% if active_menu == 'member_month_title_search' %}active{% endif %}"
+           href="{% url 'connect:member_month_title_search' %}">月タイトル検索</a>
+        {% endif %}
+
         {% if user_access|can_menu:"title_user" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'title_user' %}active{% endif %}"
            href="{% url 'connect:title_user' %}">ピンタイトル一覧</a>

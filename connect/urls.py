@@ -13,6 +13,8 @@ from .active_user_search import ActiveUserSearchExportView, ActiveUserSearchView
 from .basic_income_line_detail import BasicIncomeLineDetailView
 from .introducer_tree import IntroducerTreeExportView, IntroducerTreeView
 from .matching_bonus_detail import MatchingBonusTreeView
+from .member_month_title_search import MemberMonthTitleSearchView
+from .month_title_detail import MonthTitleDetailView
 
 
 
@@ -49,6 +51,11 @@ urlpatterns = [
 
     path('users/', views.UsersView.as_view(), name = "users"),
     path("users/export/", views.UsersExportView.as_view(), name="users_export"),
+    path(
+        "member_month_title_search/",
+        MemberMonthTitleSearchView.as_view(),
+        name="member_month_title_search",
+    ),
     path('title_user/', views.TitleUserView.as_view(), name = "title_user"),
     path("title_user/export/", views.TitleUserExportView.as_view(), name="title_user_export"),
     path("active_user_search/", ActiveUserSearchView.as_view(), name="active_user_search"),
@@ -128,6 +135,7 @@ urlpatterns = [
     path('s_matching_bonus/', views.S_MatchingBonusView.as_view(), name = "s_matching_bonus"),
     path("matching_bonus_tree/", MatchingBonusTreeView.as_view(), name="matching_bonus_tree"),
     path('s_month_title/', views.S_MonthTitleView.as_view(), name = "s_month_title"),
+    path("month_title_detail/", MonthTitleDetailView.as_view(), name="month_title_detail"),
     path('s_title_bonus/', views.S_TitleBonusView.as_view(), name = "s_title_bonus"),
     path('s_title_diff_bonus/', views.S_TitleDiffBonusView.as_view(), name = "s_title_diff_bonus"),
     path('s_repurchase_over_bonus/', views.S_RepurchaseOverBonusView.as_view(), name = "s_repurchase_over_bonus"),

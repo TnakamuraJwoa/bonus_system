@@ -1,0 +1,327 @@
+{% extends 'base.html' %}
+{% load humanize static custom_filters %}
+
+{% block head %}
+  <link href="{% static 'css/common.css' %}?v=52" rel="stylesheet">
+  <style>
+    .month-title-detail-table {
+      white-space: nowrap;
+    }
+  </style>
+{% endblock %}
+
+{% block contents %}
+<div class="container-fluid mt-3 app-page-viewport">
+  <div class="row g-1 h-100">
+
+    {% include "com/_sidebar_bonus_kensaku.html" with active_menu="month_title_detail" %}
+
+    <main class="col-12 col-md-9 col-lg-10 app-page-main">
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          {% include "com/_bonus_calc_help.html" with title="【ボーナス検索 - 月タイトル詳細】" help_title="月タイトル詳細" help_key="month_title_detail" %}
+
+          <form method="get" class="bonus-search-form">
+            <div class="bonus-search-filters">
+              <div>
+                <label class="form-label mb-0 small text-muted">月期別</label>
+                <select name="kibetu" class="form-select">
+                  <option value="">月期別を選択</option>
+                  {% for obj in period_options %}
+                    <option value="{{ obj.kibetu }}"
+                            {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
+                      【{{ obj.kibetu }}】
+                      {% if obj.payment_date %}({{ obj.payment_date }}){% endif %}
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">対象会員コード</label>
+                <input type="text"
+                       name="jwoa_code"
+                       value="{{ target_jwoa_code }}"
+                       class="form-control"
+                       placeholder="例：JP00000000">
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">ライン種別</label>
+                <select name="line_type" class="form-select">
+                  <option value="">全て</option>
+                  <option value="1" {% if line_type == "1" %}selected{% endif %}>収入ライン</option>
+                  <option value="2" {% if line_type == "2" %}selected{% endif %}>基本ライン</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">ライン会員コード</label>
+                <input type="text"
+                       name="q_line_code"
+                       value="{{ q_line_code }}"
+                       class="form-control"
+                       placeholder="部分一致">
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">購入者コード</label>
+                <input type="text"
+                       name="q_payer_code"
+                       value="{{ q_payer_code }}"
+                       class="form-control"
+                       placeholder="部分一致">
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">購入者名</label>
+                <input type="text"
+                       name="q_payer_name"
+                       value="{{ q_payer_name }}"
+                       class="form-control"
+                       placeholder="部分一致">
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">表示件数</label>
+                <select name="per_page" class="form-select">
+                  <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                  <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                  <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                  <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+                </select>
+              </div>
+
+              <div class="bonus-search-actions">
+                <button type="submit" class="btn btn-primary">表示</button>
+                <a class="btn btn-outline-secondary" href="{% url 'connect:month_title_detail' %}">リセット</a>
+              </div>
+            </div>
+          </form>
+
+          <div class="selection-indicator-group mt-3">
+            {% selection_from_period selected_period empty_message="月期別を選択してください" %}
+            {% if target_jwoa_code or line_type or q_line_code or q_payer_code or q_payer_name %}
+              <div class="selection-indicator">
+                {% if target_jwoa_code %}
+                  <span class="selection-indicator__badge badge badge-pill">対象会員：{{ target_jwoa_code }}</span>
+                {% endif %}
+                {% if line_type == "1" %}
+                  <span class="selection-indicator__badge badge badge-pill">ライン種別：収入ライン</span>
+                {% elif line_type == "2" %}
+                  <span class="selection-indicator__badge badge badge-pill">ライン種別：基本ライン</span>
+                {% endif %}
+                {% if q_line_code %}
+                  <span class="selection-indicator__badge badge badge-pill">ライン会員：{{ q_line_code }}</span>
+                {% endif %}
+                {% if q_payer_code %}
+                  <span class="selection-indicator__badge badge badge-pill">購入者コード：{{ q_payer_code }}</span>
+                {% endif %}
+                {% if q_payer_name %}
+                  <span class="selection-indicator__badge badge badge-pill">購入者名：{{ q_payer_name }}</span>
+                {% endif %}
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      {% if title_bonus_rows and not target_jwoa_code %}
+        <div class="card shadow-sm flex-grow-1"
+             data-bonus-search-fullscreen-card
+             style="min-height: 0;">
+          <div class="card-body d-flex flex-column" style="min-height: 0; overflow: hidden;">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="fw-bold">一覧</div>
+              <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+                <div class="text-end"><strong>件数：{{ title_bonus_rows|length }} 件</strong></div>
+                <button type="button"
+                        class="btn btn-sm btn-outline-primary bonus-search-fullscreen-enter"
+                        data-bonus-search-fullscreen-enter>
+                  全画面表示
+                </button>
+                <button type="button"
+                        class="btn btn-sm btn-outline-secondary bonus-search-fullscreen-exit"
+                        data-bonus-search-fullscreen-exit>
+                  全画面を閉じる
+                </button>
+              </div>
+            </div>
+
+            <div class="table-responsive flex-grow-1" style="min-height: 0; overflow-x: auto; overflow-y: auto;">
+              <table class="table table-bordered table-sm align-middle mb-0 month-title-detail-table">
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                  <tr>
+                    <th class="text-center">kibetu</th>
+                    <th class="text-center">root_jwoa_code</th>
+                    <th class="text-center">root_name</th>
+                    <th class="text-center">up_jwoa_code</th>
+                    <th class="text-center">down_jwoa_code</th>
+                    <th class="text-center">down_name</th>
+                    <th class="text-center">tree_level</th>
+                    <th class="text-center">match_level</th>
+                    <th class="text-center">title_name</th>
+                    <th class="text-center">sum_bv</th>
+                    <th class="text-center">rate</th>
+                    <th class="text-center">bonus_amount</th>
+                    <th class="text-center">created_at</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for r in title_bonus_rows %}
+                    <tr>
+                      <td>{{ r.kibetu }}</td>
+                      <td>{{ r.root_jwoa_code }}</td>
+                      <td>{{ r.root_name }}</td>
+                      <td>{{ r.up_jwoa_code }}</td>
+                      <td>{{ r.down_jwoa_code }}</td>
+                      <td>{{ r.down_name }}</td>
+                      <td class="text-end">{{ r.tree_level }}</td>
+                      <td class="text-end">{{ r.match_level }}</td>
+                      <td>{{ r.title_name }}</td>
+                      <td class="text-end">{{ r.sum_bv }}</td>
+                      <td class="text-end">{{ r.rate }}</td>
+                      <td class="text-end">{{ r.bonus_amount }}</td>
+                      <td>{{ r.created_at }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      {% elif title_result %}
+        <div class="card shadow-sm mb-3">
+          <div class="card-body">
+            <div class="fw-bold mb-2">対象月タイトル</div>
+            <div class="table-responsive">
+              <table class="table table-bordered table-sm align-middle mb-0 month-title-detail-table">
+                <thead class="table-light">
+                  <tr>
+                    <th class="text-center">期別</th>
+                    <th class="text-center">会員コード</th>
+                    <th class="text-center">会員名</th>
+                    <th class="text-center">インカム系列BV</th>
+                    <th class="text-center">ベーシック系列BV</th>
+                    <th class="text-center">タイトル</th>
+                    <th class="text-center">決済時間</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>{{ title_result.kibetu }}</td>
+                    <td>{{ title_result.jwoa_code }}</td>
+                    <td>{{ title_result.jwoa_name }}</td>
+                    <td class="text-end">{{ title_result.income_line_bv|intcomma }}</td>
+                    <td class="text-end">{{ title_result.basic_line_bv|intcomma }}</td>
+                    <td class="fw-bold text-primary">{{ title_result.title_name }}</td>
+                    <td>{{ title_result.updated_at }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card shadow-sm mb-3">
+          <div class="card-body">
+            <div class="fw-bold mb-2">ライン別集計</div>
+            {% if line_summary_rows %}
+              <div class="table-responsive">
+                <table class="table table-bordered table-sm align-middle mb-0 month-title-detail-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th class="text-center">ライン種別</th>
+                      <th class="text-center">ライン会員コード</th>
+                      <th class="text-center">ライン会員名</th>
+                      <th class="text-center">ライン合計BV</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for r in line_summary_rows %}
+                      <tr>
+                        <td class="text-center">
+                          {% if r.line_type == 1 %}
+                            <span class="badge badge-success">{{ r.line_type_label }}</span>
+                          {% else %}
+                            <span class="badge badge-info">{{ r.line_type_label }}</span>
+                          {% endif %}
+                        </td>
+                        <td>{{ r.line_code }}</td>
+                        <td>{{ r.line_name }}</td>
+                        <td class="text-end">{{ r.sum_bv|intcomma }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <p class="mb-0 text-muted">ライン別集計データがありません。</p>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="card shadow-sm flex-grow-1" style="min-height: 0;">
+          <div class="card-body d-flex flex-column" style="min-height: 0; overflow: hidden;">
+            {% if detail_rows %}
+              {% include "com/_list_summary.html" with list_title="購入者明細" %}
+              <div class="table-responsive flex-grow-1" style="min-height: 0; overflow-x: auto; overflow-y: auto;">
+                <table class="table table-bordered table-sm align-middle mb-0 month-title-detail-table">
+                  <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                    <tr>
+                      <th class="text-center">ライン種別</th>
+                      <th class="text-center">ライン会員コード</th>
+                      <th class="text-center">ライン会員名</th>
+                      <th class="text-center">購入者コード</th>
+                      <th class="text-center">購入者名</th>
+                      <th class="text-center">階層</th>
+                      <th class="text-center">計算BV</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for r in detail_rows %}
+                      <tr>
+                        <td class="text-center">
+                          {% if r.line_type == 1 %}
+                            <span class="badge badge-success">{{ r.line_type_label }}</span>
+                          {% else %}
+                            <span class="badge badge-info">{{ r.line_type_label }}</span>
+                          {% endif %}
+                        </td>
+                        <td>{{ r.line_code }}</td>
+                        <td>{{ r.line_name }}</td>
+                        <td>{{ r.payer_code }}</td>
+                        <td>{{ r.payer_name }}</td>
+                        <td class="text-end">{{ r.lvl }}</td>
+                        <td class="text-end">{{ r.sum_bv|intcomma }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+              {% include "com/_pagination.html" %}
+            {% else %}
+              <p class="mb-0 text-muted">購入者明細データがありません。</p>
+            {% endif %}
+          </div>
+        </div>
+      {% else %}
+        <div class="card shadow-sm">
+          <div class="card-body">
+            {% if selected_kibetu and target_jwoa_code %}
+              <p class="mb-0 text-muted">対象会員の月タイトル登録データがありません。</p>
+            {% elif selected_kibetu %}
+              <p class="mb-0 text-muted">この期間のデータはありません。</p>
+            {% else %}
+              <p class="mb-0 text-muted">月期別を選択して「表示」を押してください。対象会員コードを入力すると詳細を表示します。</p>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
+
+    </main>
+  </div>
+</div>
+{% include "com/_bonus_search_fullscreen_assets.html" %}
+{% endblock %}
