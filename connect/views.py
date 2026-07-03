@@ -929,9 +929,14 @@ SEARCH_EXPORT_COLUMNS = {
         ("期別", "kibetu"),
         ("紹介者コード", "introducer_code"),
         ("紹介者名", "introducer_name"),
+        ("ライン上位コード", "line_code"),
+        ("ベーシック取得者コード", "basic_code"),
+        ("ベーシック取得者名", "basic_name"),
+        ("対象ベーシックボーナス", "basic_bonus", "decimal2"),
+        ("マッチングボーナス", "matching_bonus", "decimal2"),
+        ("マッチングレベル", "level", "int"),
+        ("紹介者ツリー階層", "tree_level", "int"),
         ("直紹介アクティブ人数", "active_count", "int"),
-        ("ベーシックBV", "basic_bv", "int"),
-        ("マッチングBV", "matching_bv", "int"),
         ("作成日時", "created_at"),
     ],
     "title_bonus": [
@@ -6026,18 +6031,26 @@ class MatchingBonusView(generic.ListView):
                     kibetu,
                     introducer_code,
                     introducer_name,
+                    line_code,
+                    basic_code,
+                    basic_name,
+                    level,
+                    tree_level,
                     active_count,
-                    basic_bv,
-                    matching_bv,
+                    basic_bonus,
+                    matching_bonus,
                     created_at
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, NOW()
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
                 )
                 ON DUPLICATE KEY UPDATE
                     introducer_name = VALUES(introducer_name),
+                    basic_name      = VALUES(basic_name),
+                    level           = VALUES(level),
+                    tree_level      = VALUES(tree_level),
                     active_count    = VALUES(active_count),
-                    basic_bv        = VALUES(basic_bv),
-                    matching_bv     = VALUES(matching_bv),
+                    basic_bonus     = VALUES(basic_bonus),
+                    matching_bonus  = VALUES(matching_bonus),
                     created_at      = NOW()
             """
 
@@ -6046,10 +6059,15 @@ class MatchingBonusView(generic.ListView):
                 insert_params.append([
                     selected_kibetu,
                     r.get("introducer_code") or "",
-                    r.get("jwoa_name") or "",
+                    r.get("introducer_name") or "",
+                    r.get("line_code") or "",
+                    r.get("basic_code") or "",
+                    r.get("basic_name") or "",
+                    r.get("level") or 0,
+                    r.get("tree_level") or 0,
                     r.get("active_count") or 0,
-                    r.get("sum_bonus_amount") or 0,
-                    r.get("matching_bonus_amount") or 0,
+                    r.get("basic_bonus") or 0,
+                    r.get("matching_bonus") or 0,
                 ])
 
             with transaction.atomic(using="rds"):
@@ -6488,9 +6506,14 @@ class S_MatchingBonusView(generic.ListView):
                 "kibetu": "kibetu",
                 "introducer_code": "introducer_code",
                 "introducer_name": "introducer_name",
+                "line_code": "line_code",
+                "basic_code": "basic_code",
+                "basic_name": "basic_name",
+                "level": "level",
+                "tree_level": "tree_level",
                 "active_count": "active_count",
-                "basic_bv": "basic_bv",
-                "matching_bv": "matching_bv",
+                "basic_bonus": "basic_bonus",
+                "matching_bonus": "matching_bonus",
                 "created_at": "created_at",
             },
             default_sort="introducer_code",
@@ -6513,9 +6536,14 @@ class S_MatchingBonusView(generic.ListView):
                 kibetu,
                 introducer_code,
                 introducer_name,
+                line_code,
+                basic_code,
+                basic_name,
+                level,
+                tree_level,
                 active_count,
-                basic_bv,
-                matching_bv,
+                basic_bonus,
+                matching_bonus,
                 created_at
             FROM bonus_db.B_matching_bonus_result
             WHERE 1 = 1
@@ -10054,28 +10082,41 @@ class WeekBonusView(generic.ListView):
                 kibetu,
                 introducer_code,
                 introducer_name,
+                line_code,
+                basic_code,
+                basic_name,
+                level,
+                tree_level,
                 active_count,
-                basic_bv,
-                matching_bv,
+                basic_bonus,
+                matching_bonus,
                 created_at
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, NOW()
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
             )
             ON DUPLICATE KEY UPDATE
                 introducer_name = VALUES(introducer_name),
+                basic_name      = VALUES(basic_name),
+                level           = VALUES(level),
+                tree_level      = VALUES(tree_level),
                 active_count    = VALUES(active_count),
-                basic_bv        = VALUES(basic_bv),
-                matching_bv     = VALUES(matching_bv),
+                basic_bonus     = VALUES(basic_bonus),
+                matching_bonus  = VALUES(matching_bonus),
                 created_at      = NOW()
         """
         insert_params = [
             [
                 selected_kibetu,
                 r.get("introducer_code") or "",
-                r.get("jwoa_name") or "",
+                r.get("introducer_name") or "",
+                r.get("line_code") or "",
+                r.get("basic_code") or "",
+                r.get("basic_name") or "",
+                r.get("level") or 0,
+                r.get("tree_level") or 0,
                 r.get("active_count") or 0,
-                r.get("sum_bonus_amount") or 0,
-                r.get("matching_bonus_amount") or 0,
+                r.get("basic_bonus") or 0,
+                r.get("matching_bonus") or 0,
             ]
             for r in rows
         ]

@@ -117,9 +117,14 @@
                     {% sortable_th "kibetu" "期別" %}
                     {% sortable_th "introducer_code" "紹介者コード" %}
                     {% sortable_th "introducer_name" "紹介者名" %}
+                    {% sortable_th "line_code" "ライン上位コード" %}
+                    {% sortable_th "basic_code" "ベーシック取得者コード" %}
+                    {% sortable_th "basic_name" "ベーシック取得者名" %}
+                    {% sortable_th "basic_bonus" "対象ベーシックボーナス" %}
+                    {% sortable_th "matching_bonus" "マッチングボーナス" %}
+                    {% sortable_th "level" "マッチングレベル" %}
+                    {% sortable_th "tree_level" "紹介者ツリー階層" %}
                     {% sortable_th "active_count" "直紹介アクティブ人数" %}
-                    {% sortable_th "basic_bv" "ベーシックBV" %}
-                    {% sortable_th "matching_bv" "マッチングBV" %}
                     {% sortable_th "created_at" "作成日時" %}
                   </tr>
                 </thead>
@@ -129,9 +134,14 @@
                       <td>{{ r.kibetu }}</td>
                       <td>{{ r.introducer_code }}</td>
                       <td>{{ r.introducer_name }}</td>
-                      <td>{{ r.active_count }}</td>
-                      <td>{{ r.basic_bv }}</td>
-                      <td>{{ r.matching_bv }}</td>
+                      <td>{{ r.line_code }}</td>
+                      <td>{{ r.basic_code }}</td>
+                      <td>{{ r.basic_name }}</td>
+                      <td class="text-end">{{ r.basic_bonus }}</td>
+                      <td class="fw-bold text-primary text-end">{{ r.matching_bonus }}</td>
+                      <td class="text-end">{{ r.level }}</td>
+                      <td class="text-end">{{ r.tree_level }}</td>
+                      <td class="text-end">{{ r.active_count }}</td>
                       <td>{{ r.created_at }}</td>
                     </tr>
                   {% endfor %}
