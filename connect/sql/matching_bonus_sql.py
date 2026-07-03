@@ -9,7 +9,7 @@ SELECT
     SUM(IFNULL(p.bv, 0)) AS bv
 FROM bonus_db.purchase_info_list p
 WHERE p.bonus_payment_date >= %s
-  AND p.bonus_payment_date <  %s
+  AND p.bonus_payment_date < %s
 GROUP BY p.jwoa_code
 HAVING SUM(IFNULL(p.bv, 0)) >= 50
 ),
@@ -27,7 +27,8 @@ from sum_prev_purchasers_list
 
 -- ベーシックボーナス結果
 basic_bonus_result AS (
-    SELECT *
+    SELECT
+     *
     FROM bonus_db.B_basic_bonus_result
     WHERE kibetu = %s
 ),
@@ -44,203 +45,225 @@ basic_id_list AS (
         placement_name
 ),
 
--- ベーシックボーナス取得者の紹介元確認
-basic_bonus_with_direct_downline AS (
+-- ベーシックボーナス紹介者数
+basic_active_cnt AS (
     SELECT
-        a.*,
-        b.introducer_code,
-        c.send_bv_name,
-
-        CASE
-            WHEN parent.get_basic_bonus_code IS NOT NULL THEN 1
-            ELSE 0
-        END AS parent_exists_in_basic_flg
-
-    FROM basic_id_list AS a
-
-    LEFT JOIN bonus_db.users AS b
-        ON a.get_basic_bonus_code = b.jmoa_code
-
-    LEFT JOIN bonus_db.users AS c
-        ON b.introducer_code = c.jmoa_code
-
-    LEFT JOIN basic_id_list AS parent
-        ON b.introducer_code = parent.get_basic_bonus_code
-),
-
--- マッチングの支払いリスト
-pay_matching_list AS (
-    SELECT
-        introducer_code,
-        send_bv_name AS jwoa_name,
-        get_basic_bonus_code,
-        get_basic_bonus_name,
-        sum_bonus_amount,
-        parent_exists_in_basic_flg
-    FROM basic_bonus_with_direct_downline
-    WHERE parent_exists_in_basic_flg = 1
-    order by introducer_code
-),
-
--- マッチングボーナスの支払い対象者
-matching_root_list AS (
-    SELECT DISTINCT
-        introducer_code
-    FROM pay_matching_list
-    WHERE introducer_code IS NOT NULL
-),
-
--- マッチングボーナスの支払い対象者のアクティブ紹介者数
-matching_active_cnt AS (
-    SELECT
-        a.introducer_code,
+        a.get_basic_bonus_code as introducer_code,
         COUNT(DISTINCT b.jmoa_code) AS active_count
-    FROM matching_root_list AS a
+    FROM basic_id_list AS a
     LEFT JOIN bonus_db.users AS b
-        ON a.introducer_code = b.introducer_code
+        ON a.get_basic_bonus_code = b.introducer_code
     INNER JOIN active_users AS au
         ON au.jwoa_code = b.jmoa_code
     GROUP BY
-        a.introducer_code
+        a.get_basic_bonus_code
 ),
 
--- ベーシックボーナスの支払い対象者
-basic_paid_list AS (
-    SELECT DISTINCT
-        get_basic_bonus_code
-    FROM pay_matching_list
-    WHERE get_basic_bonus_code IS NOT NULL
-),
 
--- introducer_code を起点に配置ツリーを下にたどる
-introducer_downline_tree AS (
+
+-- 紹介者Treeで下にたどる
+introducer_down_line_tree AS (
 
     -- 起点
     SELECT
-        r.introducer_code AS root_introducer_code,
+        a.get_basic_bonus_code,
+        a.get_basic_bonus_code as up_code,
+        u.jmoa_code as down_code,
 
-        u.placement_code,
-        p.send_bv_name AS placement_name,
+        -- ベーシックボーナスを受け取っているか判定
+        CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM basic_id_list b
+                WHERE b.get_basic_bonus_code = u.jmoa_code
+            )
+            THEN 1
+            ELSE 0
+        END AS intro_basic_flg,
 
-        u.jmoa_code,
-        u.send_bv_name,
+        -- 紹介者がアクティブか判定
+        CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM active_users b
+                WHERE b.jwoa_code = u.jmoa_code
+            )
+            THEN 1
+            ELSE 0
+        END AS intro_active_flg,
+
+        -- ベーシック取得者 かつ アクティブ の場合 1
+        CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM basic_id_list b
+                WHERE b.get_basic_bonus_code = u.jmoa_code
+            )
+            AND EXISTS (
+                SELECT 1
+                FROM active_users au
+                WHERE au.jwoa_code = u.jmoa_code
+            )
+            THEN 1
+            ELSE 0
+        END AS exist,
+
+        -- ベーシック取得者 かつ アクティブ の場合
+        CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM basic_id_list b
+                WHERE b.get_basic_bonus_code = u.jmoa_code
+            )
+            AND EXISTS (
+                SELECT 1
+                FROM active_users au
+                WHERE au.jwoa_code = u.jmoa_code
+            )
+            THEN 1
+            ELSE 0
+        END AS level,
 
         0 AS tree_level,
 
-        -- 起点が basic_paid_list に存在する場合
-        CASE
-            WHEN bp.get_basic_bonus_code IS NOT NULL THEN 1
-            ELSE NULL
-        END AS matching_level
+        IFNULL(bb.sum_bonus_amount, 0) AS basic_bonus
 
-    FROM matching_root_list AS r
+    FROM basic_id_list AS a
 
     INNER JOIN bonus_db.users AS u
-        ON u.jmoa_code = r.introducer_code
+        ON a.get_basic_bonus_code = u.introducer_code
 
-    LEFT JOIN bonus_db.users AS p
-        ON p.jmoa_code = u.placement_code
-
-    LEFT JOIN basic_paid_list AS bp
-        ON bp.get_basic_bonus_code = u.jmoa_code
+    LEFT JOIN basic_id_list AS bb
+        ON bb.get_basic_bonus_code = u.jmoa_code
 
     UNION ALL
 
     -- 下にたどる
     SELECT
-        t.root_introducer_code,
+     t.get_basic_bonus_code,
+     t.down_code as up_code,
+     u.jmoa_code as down_code,
 
-        u.placement_code,
-        parent.send_bv_name AS placement_name,
+        -- ベーシックボーナスを受け取っているか判定
+        CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM basic_id_list b
+                WHERE b.get_basic_bonus_code = u.jmoa_code
+            )
+            THEN 1
+            ELSE 0
+        END AS intro_basic_flg,
 
-        u.jmoa_code,
-        u.send_bv_name,
+        -- 紹介者がアクティブか判定
+        CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM active_users b
+                WHERE b.jwoa_code = u.jmoa_code
+            )
+            THEN 1
+            ELSE 0
+        END AS intro_active_flg,
+
+        -- ベーシック取得者 かつ アクティブ の場合 1
+        CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM basic_id_list b
+                WHERE b.get_basic_bonus_code = u.jmoa_code
+            )
+            AND EXISTS (
+                SELECT 1
+                FROM active_users au
+                WHERE au.jwoa_code = u.jmoa_code
+            )
+            THEN 1
+            ELSE 0
+        END AS exist,
+
+        -- ベーシック取得者 かつ アクティブ の場合
+        CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM basic_id_list b
+                WHERE b.get_basic_bonus_code = u.jmoa_code
+            )
+            AND EXISTS (
+                SELECT 1
+                FROM active_users au
+                WHERE au.jwoa_code = u.jmoa_code
+            )
+            THEN t.level + 1
+            ELSE t.level
+        END AS level,
 
         t.tree_level + 1 AS tree_level,
 
-        -- basic_paid_list に一致した時だけ番号を増やす
-        CASE
-            WHEN bp.get_basic_bonus_code IS NOT NULL
-                THEN COALESCE(t.matching_level, 0) + 1
-            ELSE NULL
-        END AS matching_level
+        IFNULL(bb.sum_bonus_amount, 0) AS basic_bonus
 
-    FROM introducer_downline_tree AS t
+    from introducer_down_line_tree as t
 
     INNER JOIN bonus_db.users AS u
-        ON u.placement_code = t.jmoa_code
+        ON t.down_code = u.introducer_code
 
-    LEFT JOIN bonus_db.users AS parent
-        ON parent.jmoa_code = u.placement_code
+    LEFT JOIN basic_id_list AS bb
+        ON bb.get_basic_bonus_code = u.jmoa_code
 
-    LEFT JOIN basic_paid_list AS bp
-        ON bp.get_basic_bonus_code = u.jmoa_code
+    -- level が3未満の間だけ下にたどる
+    WHERE t.level < 3
 ),
 
--- ツリー階層リスト
-introducer_tree_level AS (
+-- マッチング詳細テーブル
+matching_detail_table AS (
     SELECT
-        root_introducer_code,
-        placement_code,
-        placement_name,
-        jmoa_code,
-        send_bv_name,
-        tree_level,
-        matching_level
-    FROM introducer_downline_tree
-),
+        a.*,
+        IFNULL(b.active_count, 0) AS active_count
+    FROM introducer_down_line_tree AS a
 
--- pay_matching_list に level と matching_level を追加
-pay_matching_with_level AS (
-    SELECT
-        pml.*,
-        itl.tree_level,
-        itl.matching_level
+    LEFT JOIN basic_active_cnt AS b
+        ON a.get_basic_bonus_code = b.introducer_code
 
-    FROM pay_matching_list AS pml
+    WHERE a.exist = 1
+      AND (
+            -- active_count が1なら今まで通り
+            IFNULL(b.active_count, 0) = 1
 
-    LEFT JOIN introducer_tree_level AS itl
-        ON pml.introducer_code = itl.root_introducer_code
-       AND pml.get_basic_bonus_code = itl.jmoa_code
+            -- active_count が2なら level 1〜2
+            OR (
+                IFNULL(b.active_count, 0) = 2
+                AND a.level <= 2
+            )
 
-    ORDER BY
-        pml.introducer_code,
-        itl.tree_level,
-        pml.get_basic_bonus_code
-),
-
---
-pay_matching_with_level_addcount as (
-SELECT
- a.*,
- b.active_count
-FROM pay_matching_with_level as a
-left join matching_active_cnt as b
-on a.introducer_code = b.introducer_code
-order by a.introducer_code
+            -- active_count が3以上なら level 1〜3
+            OR (
+                IFNULL(b.active_count, 0) >= 3
+                AND a.level <= 3
+            )
+      )
 )
 
-
 SELECT
-    introducer_code,
-    jwoa_name,
-    active_count,
+ 'a' as kibetu,
+ get_basic_bonus_code as introducer_code,
+ b.send_bv_name as introducer_name,
+ a.up_code as line_code,
+ a.down_code as basic_code,
+ c.send_bv_name as basic_name,
+ a.level,
+ a.tree_level,
+ a.active_count,
+ a.basic_bonus,
+ TRUNCATE(a.basic_bonus * 0.1, 2) as matching_bonus
 
-    SUM(sum_bonus_amount) AS sum_bonus_amount,
 
-    TRUNCATE(SUM(sum_bonus_amount) * 0.10, 2) AS matching_bonus_amount
+FROM matching_detail_table as a
 
-FROM pay_matching_with_level_addcount
-WHERE
-    matching_level IS NOT NULL
-    AND matching_level <= CASE
-        WHEN active_count >= 3 THEN 3
-        ELSE active_count
-    END
-GROUP BY
-    introducer_code,
-    jwoa_name,
-    active_count
-ORDER BY
-    introducer_code;
+left join bonus_db.users as b
+on a.get_basic_bonus_code = b.jmoa_code
+
+left join bonus_db.users as c
+on a.down_code = c.jmoa_code
+
+order by get_basic_bonus_code, level
 """

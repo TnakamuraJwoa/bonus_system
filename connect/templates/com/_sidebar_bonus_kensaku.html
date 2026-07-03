@@ -44,7 +44,7 @@
 <nav class="col-12 col-md-3 col-lg-2">
   <div class="card shadow-sm position-sticky" style="top: 1rem;">
 
-    {% if user_access|can_menu:"s_drive_bonus" or user_access|can_menu:"s_basic_bonus" or user_access|can_menu:"basic_income_line_detail" or user_access|can_menu:"s_matching_bonus" or user_access|can_menu:"matching_bonus_detail" or user_access|can_menu:"matching_bonus_tree" or user_access|can_menu:"s_month_title" %}
+    {% if user_access|can_menu:"s_drive_bonus" or user_access|can_menu:"s_basic_bonus" or user_access|can_menu:"basic_income_line_detail" or user_access|can_menu:"s_matching_bonus" or user_access|can_menu:"matching_bonus_tree" or user_access|can_menu:"s_month_title" %}
     <div class="card-body">
       <div class="fw-bold mb-2">■ 週ボーナス</div>
 
@@ -88,19 +88,19 @@
           {% endif %}
         {% endif %}
 
-        {% if user_access|can_menu:"s_matching_bonus" or user_access|can_menu:"matching_bonus_detail" or user_access|can_menu:"matching_bonus_tree" %}
+        {% if user_access|can_menu:"s_matching_bonus" or user_access|can_menu:"matching_bonus_tree" %}
           {% if user_access|can_menu:"s_matching_bonus" %}
             <div class="list-group-item sidebar-menu-parent p-0 {% if active_menu == 'matching_bonus' %}active{% endif %}">
               <div class="d-flex align-items-center sidebar-menu-parent__row">
-                {% if user_access|can_menu:"matching_bonus_detail" or user_access|can_menu:"matching_bonus_tree" %}
+                {% if user_access|can_menu:"matching_bonus_tree" %}
                   <button type="button"
                           class="btn btn-link sidebar-submenu-toggle"
                           data-sidebar-submenu-toggle
                           data-target="matchingBonusSubmenu"
-                          data-label="マッチング詳細メニュー"
-                          aria-expanded="{% if active_menu == 'matching_bonus_detail' or active_menu == 'matching_bonus_tree' %}true{% else %}false{% endif %}"
-                          aria-label="{% if active_menu == 'matching_bonus_detail' or active_menu == 'matching_bonus_tree' %}マッチング詳細メニューを折りたたむ{% else %}マッチング詳細メニューを展開{% endif %}">
-                    {% if active_menu == 'matching_bonus_detail' or active_menu == 'matching_bonus_tree' %}−{% else %}+{% endif %}
+                          data-label="マッチングTreeメニュー"
+                          aria-expanded="{% if active_menu == 'matching_bonus_tree' %}true{% else %}false{% endif %}"
+                          aria-label="{% if active_menu == 'matching_bonus_tree' %}マッチングTreeメニューを折りたたむ{% else %}マッチングTreeメニューを展開{% endif %}">
+                    {% if active_menu == 'matching_bonus_tree' %}−{% else %}+{% endif %}
                   </button>
                 {% else %}
                   <span class="sidebar-submenu-toggle-spacer"></span>
@@ -109,28 +109,16 @@
                    href="{% url 'connect:s_matching_bonus' %}">マッチングボーナス</a>
               </div>
             </div>
-            {% if user_access|can_menu:"matching_bonus_detail" or user_access|can_menu:"matching_bonus_tree" %}
+            {% if user_access|can_menu:"matching_bonus_tree" %}
               <div id="matchingBonusSubmenu"
-                   class="sidebar-submenu {% if active_menu != 'matching_bonus_detail' and active_menu != 'matching_bonus_tree' %}is-collapsed{% endif %}">
-                {% if user_access|can_menu:"matching_bonus_detail" %}
-                <a class="list-group-item list-group-item-action sidebar-submenu-item {% if active_menu == 'matching_bonus_detail' %}active{% endif %}"
-                   href="{% url 'connect:matching_bonus_detail' %}">　マッチング・詳細</a>
-                {% endif %}
-                {% if user_access|can_menu:"matching_bonus_tree" %}
+                   class="sidebar-submenu {% if active_menu != 'matching_bonus_tree' %}is-collapsed{% endif %}">
                 <a class="list-group-item list-group-item-action sidebar-submenu-item {% if active_menu == 'matching_bonus_tree' %}active{% endif %}"
                    href="{% url 'connect:matching_bonus_tree' %}">　マッチング・Tree</a>
-                {% endif %}
               </div>
             {% endif %}
-          {% elif user_access|can_menu:"matching_bonus_detail" or user_access|can_menu:"matching_bonus_tree" %}
-            {% if user_access|can_menu:"matching_bonus_detail" %}
-              <a class="list-group-item list-group-item-action {% if active_menu == 'matching_bonus_detail' %}active{% endif %}"
-                 href="{% url 'connect:matching_bonus_detail' %}">　マッチング・詳細</a>
-            {% endif %}
-            {% if user_access|can_menu:"matching_bonus_tree" %}
-              <a class="list-group-item list-group-item-action {% if active_menu == 'matching_bonus_tree' %}active{% endif %}"
-                 href="{% url 'connect:matching_bonus_tree' %}">　マッチング・Tree</a>
-            {% endif %}
+          {% elif user_access|can_menu:"matching_bonus_tree" %}
+            <a class="list-group-item list-group-item-action {% if active_menu == 'matching_bonus_tree' %}active{% endif %}"
+               href="{% url 'connect:matching_bonus_tree' %}">　マッチング・Tree</a>
           {% endif %}
         {% endif %}
       </div>

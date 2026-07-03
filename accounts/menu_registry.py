@@ -75,12 +75,6 @@ MENU_FEATURES = (
         ("s_matching_bonus",),
     ),
     MenuFeature(
-        "matching_bonus_detail",
-        "マッチング・詳細",
-        "bonus_search",
-        ("matching_bonus_detail",),
-    ),
-    MenuFeature(
         "matching_bonus_tree",
         "マッチング・Tree",
         "bonus_search",

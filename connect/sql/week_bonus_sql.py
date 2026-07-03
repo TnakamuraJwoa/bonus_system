@@ -21,7 +21,7 @@ basic_bonus AS (
 matching_bonus AS (
     SELECT
         introducer_code AS pay_code,
-        SUM(matching_bv) AS sum_bv
+        SUM(matching_bonus) AS sum_bv
     FROM bonus_db.B_matching_bonus_result
     WHERE kibetu = %s
     GROUP BY introducer_code

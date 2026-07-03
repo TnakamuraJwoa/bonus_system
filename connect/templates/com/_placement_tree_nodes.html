@@ -21,7 +21,7 @@
       <span class="text-muted mx-1">{{ node.send_bv_name|default:"-" }}</span>
       <span class="badge {{ node.rank|rank_badge_class }}">{{ node.rank|rank_label }}</span>
       {% if node.is_direct_introducer %}
-        <span class="badge badge-warning ml-1">紹介者</span>
+        <span class="badge badge-warning ml-1">{{ direct_badge_label|default:"紹介者" }}</span>
       {% endif %}
       {% if node.show_tree_bonus_badges %}
         {% if node.basic_acquired_flg %}
@@ -38,7 +38,7 @@
     </div>
     {% if node.children %}
       <div class="placement-tree-children is-collapsed">
-        {% include "com/_placement_tree_nodes.html" with nodes=node.children indent=indent|add:1 %}
+        {% include "com/_placement_tree_nodes.html" with nodes=node.children indent=indent|add:1 direct_badge_label=direct_badge_label %}
       </div>
     {% endif %}
   </div>

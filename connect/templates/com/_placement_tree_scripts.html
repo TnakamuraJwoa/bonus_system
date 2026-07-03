@@ -7,6 +7,8 @@
 
   var panelId = configEl.getAttribute("data-tree-panel-id") || "";
   var rootParam = configEl.getAttribute("data-tree-root-param") || "q_jwoa_code";
+  var treeType = configEl.getAttribute("data-tree-type") || "";
+  var treeTypeParam = configEl.getAttribute("data-tree-type-param") || "tree_type";
   var setViewTree = configEl.getAttribute("data-tree-set-view") === "1";
   var panel = document.getElementById(panelId);
   if (!panel) {
@@ -146,6 +148,9 @@
     var url = new URL(window.location.href);
     if (setViewTree) {
       url.searchParams.set("view", "tree");
+    }
+    if (treeType) {
+      url.searchParams.set(treeTypeParam, treeType);
     }
     url.searchParams.set("tree_search", normalizedKeyword);
     if (panel.classList.contains("is-tree-pseudo-fullscreen")) {
@@ -352,7 +357,11 @@
     });
   });
 
-  var shouldRestoreTreeFullscreen = new URLSearchParams(window.location.search).get("tree_fullscreen") === "1";
+  var restoreParams = new URLSearchParams(window.location.search);
+  var shouldRestoreTreeFullscreen = (
+    restoreParams.get("tree_fullscreen") === "1"
+    && (!treeType || restoreParams.get(treeTypeParam) === treeType)
+  );
   if (shouldRestoreTreeFullscreen) {
     enterTreePseudoFullscreen(panel);
     var url = new URL(window.location.href);

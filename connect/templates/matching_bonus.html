@@ -84,9 +84,14 @@
                   <tr>
                     <th class="text-center">紹介者コード</th>
                     <th class="text-center">紹介者名</th>
+                    <th class="text-center">上位コード</th>
+                    <th class="text-center">ベーシック取得者コード</th>
+                    <th class="text-center">ベーシック取得者名</th>
+                    <th class="text-center">マッチング段数</th>
+                    <th class="text-center">Tree階層</th>
                     <th class="text-center">直紹介数(アクティブ)</th>
-                    <th class="text-center">ベーシックBV</th>
-                    <th class="text-center">マッチングBV</th>
+                    <th class="text-center">ベーシックボーナス</th>
+                    <th class="text-center">マッチングボーナス</th>
                   </tr>
                 </thead>
 
@@ -94,10 +99,15 @@
                   {% for r in rows %}
                     <tr>
                       <td>{{ r.introducer_code }}</td>
-                      <td>{{ r.jwoa_name }}</td>
+                      <td>{{ r.introducer_name }}</td>
+                      <td>{{ r.line_code }}</td>
+                      <td>{{ r.basic_code }}</td>
+                      <td>{{ r.basic_name }}</td>
+                      <td class="text-end">{{ r.level }}</td>
+                      <td class="text-end">{{ r.tree_level }}</td>
                       <td class="text-end">{{ r.active_count }}</td>
-                      <td class="text-end">{{ r.sum_bonus_amount }}</td>
-                      <td class="fw-bold text-primary text-end">{{ r.matching_bonus_amount }}</td>
+                      <td class="text-end">{{ r.basic_bonus }}</td>
+                      <td class="fw-bold text-primary text-end">{{ r.matching_bonus }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>
