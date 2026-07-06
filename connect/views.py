@@ -3565,24 +3565,6 @@ WHERE register_year = %s
             row = cursor.fetchone()
             return int(row[0]) if row else 0
 
-    def _count_all_registered(self):
-        sql = """
-            SELECT COUNT(*)
-            FROM bonus_db.purchase_info_list
-        """
-        with connections["rds"].cursor() as cursor:
-            cursor.execute(sql)
-            row = cursor.fetchone()
-            return int(row[0]) if row else 0
-
-    def _delete_all_registered(self):
-        sql = """
-            DELETE FROM bonus_db.purchase_info_list
-        """
-        with connections["rds"].cursor() as cursor:
-            cursor.execute(sql)
-            return cursor.rowcount
-
     def _redirect_url(self, year=None, month=None):
         base_url = redirect("connect:repurchase_last_month").url
         if year is not None and month is not None:
@@ -3921,7 +3903,6 @@ WHERE name = 'set_title'
         ctx["rows"] = []
         ctx["per_page"] = self.get_per_page()
         ctx["registered_count"] = 0
-        ctx["total_registered_count"] = self._count_all_registered()
         ctx["is_registered_month"] = False
 
         if selected_choice or target_year or target_month:
@@ -4117,39 +4098,6 @@ WHERE name = 'set_title'
 
             messages.success(request, "購入情報を1件削除しました。")
             return redirect(redirect_url)
-
-        if action == "delete_all":
-            if not user_access.can_delete:
-                messages.error(request, "削除権限がありません。")
-                return redirect(self._redirect_url())
-
-            try:
-                with transaction.atomic(using="rds"):
-                    deleted_count = self._delete_all_registered()
-                    if deleted_count:
-                        record_change_audit(
-                            request,
-                            screen_name="ボーナス購入情報(登録/削除)",
-                            action_type="bulk_delete",
-                            target_table="purchase_info_list",
-                            target_pk=None,
-                            summary=f"購入情報を全件削除: {deleted_count}件",
-                            before_values={"count": deleted_count},
-                            after_values=None,
-                        )
-            except Exception as e:
-                logger.exception("ボーナス購入情報登録の全件削除エラー")
-                messages.error(request, f"削除中にエラーが発生しました: {e}")
-                return redirect(self._redirect_url())
-
-            if deleted_count:
-                messages.success(
-                    request,
-                    f"購入情報を {deleted_count}件 すべて削除しました。",
-                )
-            else:
-                messages.warning(request, "削除対象データはありません。")
-            return redirect(self._redirect_url())
 
         if action == "delete_registered_month":
             if not user_access.can_delete:

@@ -211,13 +211,17 @@
                 {% endif %}
 
                 {% if user_access.can_execute %}
-                <form method="post" class="mb-0">
+                <form method="post"
+                      class="mb-0 js-repurchase-register-form"
+                      data-loading-message="登録中..."
+                      data-loading-target="#bonusPurchaseRegisterOverlay">
                   {% csrf_token %}
                   <input type="hidden" name="action" value="register">
                   <input type="hidden" name="target_year" value="{{ target_year }}">
                   <input type="hidden" name="target_month" value="{{ target_month }}">
                   <button type="submit"
                           class="btn btn-success"
+                          data-loading-button
                           {% if not selected_month %}disabled{% endif %}>
                     登録
                   </button>
@@ -231,13 +235,6 @@
                         data-target="#repurchaseRegisterDeleteMonthModal"
                         {% if not target_year or not target_month %}disabled{% endif %}>
                   年月削除
-                </button>
-                <button type="button"
-                        class="btn btn-outline-danger"
-                        data-toggle="modal"
-                        data-target="#repurchaseRegisterDeleteAllModal"
-                        {% if total_registered_count == 0 %}disabled{% endif %}>
-                  全件削除
                 </button>
                 {% endif %}
               </div>
@@ -477,7 +474,10 @@
      aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
     <div class="modal-content">
-      <form method="post">
+      <form method="post"
+            class="js-repurchase-register-form"
+            data-loading-message="登録中..."
+            data-loading-target="#bonusPurchaseRegisterOverlay">
         {% csrf_token %}
         <input type="hidden" name="action" value="manual_create">
         <div class="modal-header">
@@ -589,7 +589,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
-          <button type="submit" class="btn btn-success">登録する</button>
+          <button type="submit" class="btn btn-success" data-loading-button>登録する</button>
         </div>
       </form>
     </div>
@@ -850,52 +850,19 @@
   </div>
 </div>
 
-<div class="modal fade"
-     id="repurchaseRegisterDeleteAllModal"
-     tabindex="-1"
-     role="dialog"
-     aria-labelledby="repurchaseRegisterDeleteAllModalLabel"
-     aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered" role="document">
-    <div class="modal-content">
-      <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="delete_all">
-        <div class="modal-header">
-          <div>
-            <h5 class="modal-title" id="repurchaseRegisterDeleteAllModalLabel">購入情報の全件削除</h5>
-            <div class="small text-danger">この操作は元に戻せません。</div>
-          </div>
-          <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
-            <span aria-hidden="true">&times;</span>
-          </button>
-        </div>
-        <div class="modal-body">
-          <p class="mb-2">
-            全期間の登録済み購入情報
-            <strong>{{ total_registered_count }}件</strong>
-            をすべて削除します。
-          </p>
-          <p class="mb-0 text-muted small">本当にすべて削除する場合のみ実行してください。</p>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
-          <button type="submit"
-                  class="btn btn-danger"
-                  {% if total_registered_count == 0 %}disabled{% endif %}>
-            全件削除する
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
 {% endif %}
 
 <div class="bonus-calculating-overlay" id="repurchaseSearchOverlay" aria-live="polite" aria-hidden="true">
   <div class="bonus-calculating-box">
     <div class="bonus-calculating-spinner" aria-hidden="true"></div>
     <div class="fw-bold mb-1" data-loading-message>検索中...</div>
+    <div class="small text-muted">完了するまでこのままお待ちください。</div>
+  </div>
+</div>
+<div class="bonus-calculating-overlay" id="bonusPurchaseRegisterOverlay" aria-live="polite" aria-hidden="true">
+  <div class="bonus-calculating-box">
+    <div class="bonus-calculating-spinner" aria-hidden="true"></div>
+    <div class="fw-bold mb-1" data-loading-message>登録中...</div>
     <div class="small text-muted">完了するまでこのままお待ちください。</div>
   </div>
 </div>
@@ -936,6 +903,38 @@
   document.querySelectorAll(".js-repurchase-search-form").forEach(function (form) {
     form.addEventListener("submit", function () {
       showSearchLoading(form);
+    });
+  });
+
+  function showRegisterLoading(form) {
+    var overlaySelector = form.getAttribute("data-loading-target");
+    var registerOverlay = overlaySelector ? document.querySelector(overlaySelector) : null;
+    if (!registerOverlay) {
+      return;
+    }
+
+    var message = form.getAttribute("data-loading-message") || "登録中...";
+    var messageEl = registerOverlay.querySelector("[data-loading-message]");
+    if (messageEl) {
+      messageEl.textContent = message;
+    }
+
+    registerOverlay.classList.add("is-active");
+    registerOverlay.setAttribute("aria-hidden", "false");
+
+    form.querySelectorAll("button, input[type='submit']").forEach(function (button) {
+      button.disabled = true;
+    });
+
+    var loadingButton = form.querySelector("[data-loading-button]");
+    if (loadingButton) {
+      loadingButton.textContent = message;
+    }
+  }
+
+  document.querySelectorAll(".js-repurchase-register-form").forEach(function (form) {
+    form.addEventListener("submit", function () {
+      showRegisterLoading(form);
     });
   });
 
