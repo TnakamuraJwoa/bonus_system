@@ -334,8 +334,23 @@ LEFT JOIN title_result AS c
 )
 
 
-select * from match_level_add_bv
-where bonus_amount > 0
-order by root_jmoa_code, tree_level, match_level
+SELECT
+    m.root_jmoa_code,
+    m.root_name,
+    m.up_jwoa_code,
+    m.down_jwoa_code,
+    m.down_name,
+    m.tree_level,
+    m.match_level,
+    m.sum_bv,
+    m.title_id,
+    COALESCE(tm.title_name, 'タイトルなし') AS title_name,
+    m.rate,
+    m.bonus_amount
+FROM match_level_add_bv AS m
+LEFT JOIN bonus_db.title_master AS tm
+  ON m.title_id = tm.title_id
+WHERE m.bonus_amount > 0
+ORDER BY m.root_jmoa_code, m.tree_level, m.match_level
 
 """

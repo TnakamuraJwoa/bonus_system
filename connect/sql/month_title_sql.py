@@ -183,11 +183,18 @@ FROM line_type_total_bv2
 )
 
 SELECT
-    *
-FROM title_result
+    tr.jwoa_code,
+    tr.jwoa_name,
+    tr.income_line_bv,
+    tr.basic_line_bv,
+    tr.title_id,
+    COALESCE(tm.title_name, 'タイトルなし') AS title_name
+FROM title_result AS tr
+LEFT JOIN bonus_db.title_master AS tm
+  ON tr.title_id = tm.title_id
 ORDER BY
-    title_id DESC,
-    income_line_bv DESC,
-    basic_line_bv DESC,
-    jwoa_code
+    tr.title_id DESC,
+    tr.income_line_bv DESC,
+    tr.basic_line_bv DESC,
+    tr.jwoa_code
 """

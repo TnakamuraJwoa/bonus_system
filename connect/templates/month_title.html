@@ -85,7 +85,7 @@
                     <th class="text-center">会員名</th>
                     <th class="text-center">インカム系列BV</th>
                     <th class="text-center">ベーシック系列BV</th>
-                    <th class="text-center">タイトルID</th>
+                    <th class="text-center">タイトル名</th>
                   </tr>
                 </thead>
 
@@ -96,7 +96,7 @@
                       <td>{{ r.jwoa_name }}</td>
                       <td class="text-end">{{ r.income_line_bv }}</td>
                       <td class="text-end">{{ r.basic_line_bv }}</td>
-                      <td class="fw-bold text-primary text-end">{{ r.title_id }}</td>
+                      <td class="fw-bold text-primary">{{ r.title_name }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

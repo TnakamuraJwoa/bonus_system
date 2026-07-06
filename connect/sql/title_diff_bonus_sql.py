@@ -172,14 +172,17 @@ on a.down_jwoa_code = b.jwoa_code
 
 SELECT
     root_title_id,
+    COALESCE(root_tm.title_name, 'タイトルなし') AS root_title_name,
     root_bonus_rate,
     root_jwoa_code,
     root_name,
     up_title_id,
+    COALESCE(up_tm.title_name, 'タイトルなし') AS up_title_name,
     up_bonus_rate,
     up_jwoa_code,
     up_jwoa_name,
     down_title_id,
+    COALESCE(down_tm.title_name, 'タイトルなし') AS down_title_name,
     down_bonus_rate,
     down_jwoa_code,
     down_name,
@@ -187,6 +190,12 @@ SELECT
     tree_level,
     sum_bv,
     title_diff_bonus
-FROM title_diff_bonus_result
+FROM title_diff_bonus_result AS tdr
+LEFT JOIN bonus_db.title_master AS root_tm
+  ON tdr.root_title_id = root_tm.title_id
+LEFT JOIN bonus_db.title_master AS up_tm
+  ON tdr.up_title_id = up_tm.title_id
+LEFT JOIN bonus_db.title_master AS down_tm
+  ON tdr.down_title_id = down_tm.title_id
 WHERE title_diff_bonus > 0
 """

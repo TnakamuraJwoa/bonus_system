@@ -956,11 +956,11 @@ SEARCH_EXPORT_COLUMNS = {
     ],
     "title_diff_bonus": [
         ("期別", "kibetu"),
-        ("root_title_id", "root_title_id", "int"),
+        ("root_title_name", "root_title_name"),
         ("root_bonus_rate", "root_bonus_rate", "decimal2"),
         ("root_jwoa_code", "root_jwoa_code"),
         ("root_name", "root_name"),
-        ("down_title_id", "down_title_id", "int"),
+        ("down_title_name", "down_title_name"),
         ("down_bonus_rate", "down_bonus_rate", "decimal2"),
         ("down_jwoa_code", "down_jwoa_code"),
         ("down_name", "down_name"),
@@ -988,7 +988,7 @@ SEARCH_EXPORT_COLUMNS = {
         ("kibetu", "kibetu"),
         ("jwoa_code", "jwoa_code"),
         ("jwoa_name", "jwoa_name"),
-        ("title_id", "title_id", "int"),
+        ("title_name", "title_name"),
         ("score", "score", "int"),
         ("total_over_bv", "total_over_bv", "int"),
         ("one_score_bonus", "one_score_bonus", "decimal2"),
@@ -3244,11 +3244,14 @@ class TitleRegistrationView(generic.TemplateView):
                 mt.basic_line_bv AS basic_bv,
                 mt.income_line_bv AS income_bv,
                 mt.title_id,
+                COALESCE(tm.title_name, 'タイトルなし') AS title_name,
                 %s AS year,
                 %s AS month
             FROM bonus_db.month_title mt
             JOIN bonus_db.user_titles u
               ON u.jmoa_code = mt.jwoa_code
+            LEFT JOIN bonus_db.title_master tm
+              ON mt.title_id = tm.title_id
             WHERE mt.kibetu = %s
               AND mt.title_id > 0
               AND mt.title_id >= IFNULL(u.title_id, 0)
@@ -7198,20 +7201,20 @@ class S_TitleDiffBonusView(generic.ListView):
         sort_ctx = get_bonus_sort_context(
             self.request,
             {
-                "kibetu": "kibetu",
-                "root_title_id": "root_title_id",
-                "root_bonus_rate": "root_bonus_rate",
-                "root_jwoa_code": "root_jwoa_code",
-                "root_name": "root_name",
-                "down_title_id": "down_title_id",
-                "down_bonus_rate": "down_bonus_rate",
-                "down_jwoa_code": "down_jwoa_code",
-                "down_name": "down_name",
-                "pay_bonus_rate": "pay_bonus_rate",
-                "sum_bv": "sum_bv",
-                "title_diff_bonus": "title_diff_bonus",
-                "created_at": "created_at",
-                "updated_at": "updated_at",
+                "kibetu": "tdbr.kibetu",
+                "root_title_name": "root_title_name",
+                "root_bonus_rate": "tdbr.root_bonus_rate",
+                "root_jwoa_code": "tdbr.root_jwoa_code",
+                "root_name": "tdbr.root_name",
+                "down_title_name": "down_title_name",
+                "down_bonus_rate": "tdbr.down_bonus_rate",
+                "down_jwoa_code": "tdbr.down_jwoa_code",
+                "down_name": "tdbr.down_name",
+                "pay_bonus_rate": "tdbr.pay_bonus_rate",
+                "sum_bv": "tdbr.sum_bv",
+                "title_diff_bonus": "tdbr.title_diff_bonus",
+                "created_at": "tdbr.created_at",
+                "updated_at": "tdbr.updated_at",
             },
             default_sort="root_jwoa_code",
         )
@@ -7219,22 +7222,28 @@ class S_TitleDiffBonusView(generic.ListView):
 
         sql = """
             SELECT
-                kibetu,
-                root_title_id,
-                root_bonus_rate,
-                root_jwoa_code,
-                root_name,
-                down_title_id,
-                down_bonus_rate,
-                down_jwoa_code,
-                down_name,
-                pay_bonus_rate,
-                sum_bv,
-                title_diff_bonus,
-                created_at,
-                updated_at
-            FROM bonus_db.B_title_diff_bonus_result
-            WHERE kibetu = %s
+                tdbr.kibetu,
+                tdbr.root_title_id,
+                COALESCE(root_tm.title_name, 'タイトルなし') AS root_title_name,
+                tdbr.root_bonus_rate,
+                tdbr.root_jwoa_code,
+                tdbr.root_name,
+                tdbr.down_title_id,
+                COALESCE(down_tm.title_name, 'タイトルなし') AS down_title_name,
+                tdbr.down_bonus_rate,
+                tdbr.down_jwoa_code,
+                tdbr.down_name,
+                tdbr.pay_bonus_rate,
+                tdbr.sum_bv,
+                tdbr.title_diff_bonus,
+                tdbr.created_at,
+                tdbr.updated_at
+            FROM bonus_db.B_title_diff_bonus_result AS tdbr
+            LEFT JOIN bonus_db.title_master AS root_tm
+              ON tdbr.root_title_id = root_tm.title_id
+            LEFT JOIN bonus_db.title_master AS down_tm
+              ON tdbr.down_title_id = down_tm.title_id
+            WHERE tdbr.kibetu = %s
         """
 
         params = [selected_kibetu]
@@ -7243,10 +7252,10 @@ class S_TitleDiffBonusView(generic.ListView):
             params,
             self.request,
             {
-                "root_jwoa_code": "root_jwoa_code",
-                "down_jwoa_code": "down_jwoa_code",
-                "root_name": "root_name",
-                "down_name": "down_name",
+                "root_jwoa_code": "tdbr.root_jwoa_code",
+                "down_jwoa_code": "tdbr.down_jwoa_code",
+                "root_name": "tdbr.root_name",
+                "down_name": "tdbr.down_name",
             },
         )
         ctx.update(filter_values)
@@ -8802,16 +8811,16 @@ class S_ThreeStarGlobalBonusView(generic.ListView):
         sort_ctx = get_bonus_sort_context(
             self.request,
             {
-                "kibetu": "kibetu",
-                "jwoa_code": "jwoa_code",
-                "jwoa_name": "jwoa_name",
-                "title_id": "title_id",
-                "score": "score",
-                "total_over_bv": "total_over_bv",
-                "one_score_bonus": "one_score_bonus",
-                "bonus_amount": "bonus_amount",
-                "created_at": "created_at",
-                "updated_at": "updated_at",
+                "kibetu": "tsgbr.kibetu",
+                "jwoa_code": "tsgbr.jwoa_code",
+                "jwoa_name": "tsgbr.jwoa_name",
+                "title_name": "title_name",
+                "score": "tsgbr.score",
+                "total_over_bv": "tsgbr.total_over_bv",
+                "one_score_bonus": "tsgbr.one_score_bonus",
+                "bonus_amount": "tsgbr.bonus_amount",
+                "created_at": "tsgbr.created_at",
+                "updated_at": "tsgbr.updated_at",
             },
             default_sort="bonus_amount",
             default_direction="desc",
@@ -8820,19 +8829,22 @@ class S_ThreeStarGlobalBonusView(generic.ListView):
 
         sql = """
             SELECT
-                id,
-                kibetu,
-                jwoa_code,
-                jwoa_name,
-                title_id,
-                score,
-                total_over_bv,
-                one_score_bonus,
-                bonus_amount,
-                created_at,
-                updated_at
-            FROM bonus_db.B_three_star_global_bonus_result
-            WHERE kibetu = %s
+                tsgbr.id,
+                tsgbr.kibetu,
+                tsgbr.jwoa_code,
+                tsgbr.jwoa_name,
+                tsgbr.title_id,
+                COALESCE(tm.title_name, 'タイトルなし') AS title_name,
+                tsgbr.score,
+                tsgbr.total_over_bv,
+                tsgbr.one_score_bonus,
+                tsgbr.bonus_amount,
+                tsgbr.created_at,
+                tsgbr.updated_at
+            FROM bonus_db.B_three_star_global_bonus_result AS tsgbr
+            LEFT JOIN bonus_db.title_master AS tm
+              ON tsgbr.title_id = tm.title_id
+            WHERE tsgbr.kibetu = %s
         """
 
         params = [selected_kibetu]
@@ -8841,8 +8853,8 @@ class S_ThreeStarGlobalBonusView(generic.ListView):
             params,
             self.request,
             {
-                "jwoa_code": "jwoa_code",
-                "jwoa_name": "jwoa_name",
+                "jwoa_code": "tsgbr.jwoa_code",
+                "jwoa_name": "tsgbr.jwoa_name",
             },
         )
         ctx.update(filter_values)
