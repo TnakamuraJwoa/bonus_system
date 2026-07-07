@@ -131,43 +131,14 @@
     </div>
     {% endif %}
 
-    {% if user_access|can_menu:"s_title_bonus" or user_access|can_menu:"month_title_detail" or user_access|can_menu:"s_title_diff_bonus" or user_access|can_menu:"s_repurchase_over_bonus" or user_access|can_menu:"s_three_star_global_bonus" %}
+    {% if user_access|can_menu:"s_title_bonus" or user_access|can_menu:"s_title_diff_bonus" or user_access|can_menu:"s_repurchase_over_bonus" or user_access|can_menu:"s_three_star_global_bonus" %}
     <div class="card-body">
       <div class="fw-bold mb-2">■ 月ボーナス</div>
 
       <div class="list-group">
-        {% if user_access|can_menu:"s_title_bonus" or user_access|can_menu:"month_title_detail" %}
-          {% if user_access|can_menu:"s_title_bonus" %}
-            <div class="list-group-item sidebar-menu-parent p-0 {% if active_menu == 'title_bonus' %}active{% endif %}">
-              <div class="d-flex align-items-center sidebar-menu-parent__row">
-                {% if user_access|can_menu:"month_title_detail" %}
-                  <button type="button"
-                          class="btn btn-link sidebar-submenu-toggle"
-                          data-sidebar-submenu-toggle
-                          data-target="titleBonusSubmenu"
-                          data-label="月タイトル詳細メニュー"
-                          aria-expanded="{% if active_menu == 'month_title_detail' %}true{% else %}false{% endif %}"
-                          aria-label="{% if active_menu == 'month_title_detail' %}月タイトル詳細メニューを折りたたむ{% else %}月タイトル詳細メニューを展開{% endif %}">
-                    {% if active_menu == 'month_title_detail' %}−{% else %}+{% endif %}
-                  </button>
-                {% else %}
-                  <span class="sidebar-submenu-toggle-spacer"></span>
-                {% endif %}
-                <a class="flex-grow-1 text-decoration-none {% if active_menu == 'title_bonus' %}text-white{% else %}text-body{% endif %} py-2 pr-3"
-                   href="{% url 'connect:s_title_bonus' %}">タイトルボーナス</a>
-              </div>
-            </div>
-            {% if user_access|can_menu:"month_title_detail" %}
-              <div id="titleBonusSubmenu"
-                   class="sidebar-submenu {% if active_menu != 'month_title_detail' %}is-collapsed{% endif %}">
-                <a class="list-group-item list-group-item-action sidebar-submenu-item {% if active_menu == 'month_title_detail' %}active{% endif %}"
-                   href="{% url 'connect:month_title_detail' %}">　月タイトル詳細</a>
-              </div>
-            {% endif %}
-          {% elif user_access|can_menu:"month_title_detail" %}
-            <a class="list-group-item list-group-item-action {% if active_menu == 'month_title_detail' %}active{% endif %}"
-               href="{% url 'connect:month_title_detail' %}">　月タイトル詳細</a>
-          {% endif %}
+        {% if user_access|can_menu:"s_title_bonus" %}
+          <a class="list-group-item list-group-item-action {% if active_menu == 'title_bonus' %}active{% endif %}"
+             href="{% url 'connect:s_title_bonus' %}">タイトルボーナス</a>
         {% endif %}
 
         {% if user_access|can_menu:"s_title_diff_bonus" %}

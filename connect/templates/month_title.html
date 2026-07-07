@@ -6,6 +6,9 @@
 {% endblock %}
 
 {% block contents %}
+{% if request.user.is_staff or request.user.is_superuser %}
+  {% bonus_help "month_title" "月タイトル" as help_data %}
+{% endif %}
 <div class="container-fluid mt-3 app-page-viewport">
   <div class="row g-1 h-100">
 
@@ -15,7 +18,37 @@
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          {% include "com/_bonus_calc_help.html" with title="【ボーナス計算 - 月タイトル】" help_title="月タイトル" help_key="month_title" history_modal_id="monthTitleHistoryModal" history_title="登録履歴を表示" %}
+          <div class="d-flex justify-content-between align-items-start flex-nowrap mb-3">
+            <h5 class="page-title mb-0" style="width: auto;">【ボーナス計算 - 月タイトル】</h5>
+            <div class="d-flex align-items-center ml-auto">
+              {% if request.user.is_staff or request.user.is_superuser %}
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-info rounded-circle mr-1"
+                  data-toggle="modal"
+                  data-target="#monthTitleHelpModal"
+                  aria-label="月タイトルの説明を表示"
+                  title="説明を表示"
+                  style="width: 1.65rem; height: 1.65rem; padding: 0; line-height: 1;"
+                >
+                  ?
+                </button>
+              {% endif %}
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-secondary rounded-circle"
+                data-toggle="modal"
+                data-target="#monthTitleHistoryModal"
+                aria-label="登録履歴を表示"
+                title="登録履歴を表示"
+                style="width: 1.65rem; height: 1.65rem; padding: 0; line-height: 1;"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                  <path fill="currentColor" d="M4 1.5A1.5 1.5 0 0 1 5.5 0h4.38c.4 0 .78.16 1.06.44l2.62 2.62c.28.28.44.66.44 1.06v10.38A1.5 1.5 0 0 1 12.5 16h-7A1.5 1.5 0 0 1 4 14.5v-13Zm5.5.1V4a1 1 0 0 0 1 1h2.4L9.5 1.6ZM6 7a.5.5 0 0 0 0 1h4a.5.5 0 0 0 0-1H6Zm0 2.5a.5.5 0 0 0 0 1h4a.5.5 0 0 0 0-1H6Zm0 2.5a.5.5 0 0 0 0 1h3a.5.5 0 0 0 0-1H6Z"/>
+                </svg>
+              </button>
+            </div>
+          </div>
 
           <div class="bonus-calc-form">
 
@@ -117,6 +150,35 @@
     </main>
   </div>
 </div>
+{% if request.user.is_staff or request.user.is_superuser %}
+<div
+  class="modal fade"
+  id="monthTitleHelpModal"
+  tabindex="-1"
+  role="dialog"
+  aria-labelledby="monthTitleHelpModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="monthTitleHelpModalLabel">{{ help_data.title }}</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="bonus-help-content">
+          {{ help_data.content|linebreaksbr }}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">閉じる</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% include "com/_bonus_histry_month_modal.html" with modal_id="monthTitleHistoryModal" %}
 {% include "com/_bonus_calc_progress_overlay.html" with form_id="monthTitleSearchForm" overlay_id="monthTitleProgressOverlay" progress_bar_id="monthTitleProgressBar" progress_text_id="monthTitleProgressText" %}
 {% include "com/_bonus_calc_register_overlay.html" %}

@@ -111,35 +111,29 @@ class MonthTitleDetailView(generic.TemplateView):
             columns = [col[0] for col in cursor.description]
             return dict(zip(columns, row))
 
-    def _fetch_title_bonus_rows(self, kibetu):
+    def _fetch_month_title_rows(self, kibetu):
         sql = """
             SELECT
-                tbr.id,
-                tbr.kibetu,
-                tbr.root_jwoa_code,
-                tbr.root_name,
-                tbr.up_jwoa_code,
-                tbr.down_jwoa_code,
-                tbr.down_name,
-                tbr.tree_level,
-                tbr.match_level,
+                mt.id,
+                mt.kibetu,
+                mt.jwoa_code,
+                mt.jwoa_name,
+                mt.income_line_bv,
+                mt.basic_line_bv,
                 COALESCE(tm.title_name, 'タイトルなし') AS title_name,
-                tbr.sum_bv,
-                tbr.rate,
-                tbr.bonus_amount,
-                tbr.created_at
-            FROM bonus_db.B_title_bonus_result AS tbr
+                mt.updated_at
+            FROM bonus_db.month_title AS mt
             LEFT JOIN bonus_db.title_master AS tm
-              ON tbr.title_id = tm.title_id
-            WHERE tbr.kibetu = %s
+              ON mt.title_id = tm.title_id
+            WHERE mt.kibetu = %s
             ORDER BY
-                tbr.root_jwoa_code,
-                tbr.tree_level,
-                tbr.match_level,
-                tbr.down_jwoa_code
+                mt.title_id DESC,
+                mt.income_line_bv DESC,
+                mt.basic_line_bv DESC,
+                mt.jwoa_code
         """
         with connections["rds"].cursor() as cursor:
-            logger.info("月タイトル詳細 タイトルボーナス一覧SQLを実行します。")
+            logger.info("月タイトル詳細 月タイトル一覧SQLを実行します。")
             cursor.execute(sql, [kibetu])
             columns = [col[0] for col in cursor.description]
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
@@ -233,6 +227,7 @@ class MonthTitleDetailView(generic.TemplateView):
 
         selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
         target_jwoa_code = (self.request.GET.get("jwoa_code") or "").strip()
+        detail_fullscreen = self.request.GET.get("detail_fullscreen") == "1"
         filters = {
             "line_type": (self.request.GET.get("line_type") or "").strip(),
             "q_line_code": (self.request.GET.get("q_line_code") or "").strip(),
@@ -252,10 +247,11 @@ class MonthTitleDetailView(generic.TemplateView):
             "per_page": per_page,
             "selected_period": None,
             "title_result": None,
-            "title_bonus_rows": [],
+            "month_title_rows": [],
             "line_summary_rows": [],
             "detail_rows": [],
             "is_searched": bool(selected_kibetu or target_jwoa_code),
+            "detail_fullscreen": detail_fullscreen,
         })
 
         base_params = {
@@ -267,6 +263,10 @@ class MonthTitleDetailView(generic.TemplateView):
             "q_payer_name": filters["q_payer_name"],
             "per_page": per_page,
         }
+        detail_fullscreen_params = {
+            **base_params,
+            "detail_fullscreen": "1",
+        }
 
         if not selected_kibetu:
             return self._set_page_context(ctx, [], per_page, 0, 1, 1, base_params)
@@ -277,7 +277,7 @@ class MonthTitleDetailView(generic.TemplateView):
 
         ctx["selected_period"] = period
         if not target_jwoa_code:
-            ctx["title_bonus_rows"] = self._fetch_title_bonus_rows(selected_kibetu)
+            ctx["month_title_rows"] = self._fetch_month_title_rows(selected_kibetu)
             return self._set_page_context(ctx, [], per_page, 0, 1, 1, base_params)
 
         ctx["title_result"] = self._get_title_result(selected_kibetu, target_jwoa_code)
@@ -286,16 +286,23 @@ class MonthTitleDetailView(generic.TemplateView):
 
         ctx["line_summary_rows"] = self._fetch_line_summary_rows(period, target_jwoa_code)
         total_count = self._count_detail_rows(period, target_jwoa_code, filters)
-        total_pages = max(1, math.ceil(total_count / per_page))
-        page = self._get_page(total_pages)
-        offset = (page - 1) * per_page
+        if detail_fullscreen:
+            total_pages = 1
+            page = 1
+            limit = total_count
+            offset = 0
+        else:
+            total_pages = max(1, math.ceil(total_count / per_page))
+            page = self._get_page(total_pages)
+            limit = per_page
+            offset = (page - 1) * per_page
         detail_rows = []
         if total_count:
             detail_rows = self._fetch_detail_rows(
                 period,
                 target_jwoa_code,
                 filters,
-                per_page,
+                limit,
                 offset,
             )
 
@@ -307,9 +314,20 @@ class MonthTitleDetailView(generic.TemplateView):
             total_pages,
             page,
             base_params,
+            detail_fullscreen_params,
         )
 
-    def _set_page_context(self, ctx, rows, per_page, total_count, total_pages, page, base_params):
+    def _set_page_context(
+        self,
+        ctx,
+        rows,
+        per_page,
+        total_count,
+        total_pages,
+        page,
+        base_params,
+        detail_fullscreen_params=None,
+    ):
         ctx["detail_rows"] = rows
         ctx["total_count"] = total_count
         ctx["per_page"] = per_page
@@ -317,11 +335,15 @@ class MonthTitleDetailView(generic.TemplateView):
         ctx["total_pages"] = total_pages
         if total_count > 0:
             ctx["display_from"] = (page - 1) * per_page + 1
-            ctx["display_to"] = min(page * per_page, total_count)
+            ctx["display_to"] = min(ctx["display_from"] + len(rows) - 1, total_count)
         else:
             ctx["display_from"] = 0
             ctx["display_to"] = 0
         ctx["base_qs"] = self._build_base_qs(base_params)
+        ctx["detail_fullscreen_qs"] = self._build_base_qs(
+            detail_fullscreen_params or {**base_params, "detail_fullscreen": "1"}
+        )
+        ctx["detail_normal_qs"] = self._build_base_qs(base_params)
         ctx["has_prev"] = page > 1
         ctx["has_next"] = page < total_pages
         ctx["prev_page"] = page - 1
