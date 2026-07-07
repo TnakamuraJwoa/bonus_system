@@ -115,8 +115,8 @@
                 <label class="form-label mb-0 small text-muted">ライン種別</label>
                 <select name="line_type" class="form-select">
                   <option value="">全て</option>
-                  <option value="1" {% if line_type == "1" %}selected{% endif %}>収入ライン</option>
-                  <option value="2" {% if line_type == "2" %}selected{% endif %}>基本ライン</option>
+                  <option value="1" {% if line_type == "1" %}selected{% endif %}>基本ライン</option>
+                  <option value="2" {% if line_type == "2" %}selected{% endif %}>収入ライン</option>
                 </select>
               </div>
 
@@ -172,9 +172,9 @@
                   <span class="selection-indicator__badge badge badge-pill">対象会員：{{ target_jwoa_code }}</span>
                 {% endif %}
                 {% if line_type == "1" %}
-                  <span class="selection-indicator__badge badge badge-pill">ライン種別：収入ライン</span>
-                {% elif line_type == "2" %}
                   <span class="selection-indicator__badge badge badge-pill">ライン種別：基本ライン</span>
+                {% elif line_type == "2" %}
+                  <span class="selection-indicator__badge badge badge-pill">ライン種別：収入ライン</span>
                 {% endif %}
                 {% if q_line_code %}
                   <span class="selection-indicator__badge badge badge-pill">ライン会員：{{ q_line_code }}</span>
@@ -221,8 +221,8 @@
                     <th class="text-center">期別</th>
                     <th class="text-center">会員コード</th>
                     <th class="text-center">会員名</th>
-                    <th class="text-center">インカム系列BV</th>
-                    <th class="text-center">ベーシック系列BV</th>
+                    <th class="text-center">収入ライン系列BV</th>
+                    <th class="text-center">基本ライン系列BV</th>
                     <th class="text-center">タイトル</th>
                     <th class="text-center">決済時間</th>
                     <th class="text-center">詳細</th>
@@ -263,8 +263,8 @@
                     <th class="text-center">期別</th>
                     <th class="text-center">会員コード</th>
                     <th class="text-center">会員名</th>
-                    <th class="text-center">インカム系列BV</th>
-                    <th class="text-center">ベーシック系列BV</th>
+                    <th class="text-center">収入ライン系列BV</th>
+                    <th class="text-center">基本ライン系列BV</th>
                     <th class="text-center">タイトル</th>
                     <th class="text-center">決済時間</th>
                   </tr>
@@ -305,9 +305,9 @@
                       <tr>
                         <td class="text-center">
                           {% if r.line_type == 1 %}
-                            <span class="badge badge-success">{{ r.line_type_label }}</span>
-                          {% else %}
                             <span class="badge badge-info">{{ r.line_type_label }}</span>
+                          {% else %}
+                            <span class="badge badge-success">{{ r.line_type_label }}</span>
                           {% endif %}
                         </td>
                         <td>{{ r.line_code }}</td>
@@ -359,6 +359,9 @@
                       <th class="text-center">ライン会員名</th>
                       <th class="text-center">購入者コード</th>
                       <th class="text-center">購入者名</th>
+                      <th class="text-center">注文番号</th>
+                      <th class="text-center">注文区分</th>
+                      <th class="text-center">ボーナス支払日</th>
                       <th class="text-center">階層</th>
                       <th class="text-center">計算BV</th>
                     </tr>
@@ -368,15 +371,18 @@
                       <tr>
                         <td class="text-center">
                           {% if r.line_type == 1 %}
-                            <span class="badge badge-success">{{ r.line_type_label }}</span>
-                          {% else %}
                             <span class="badge badge-info">{{ r.line_type_label }}</span>
+                          {% else %}
+                            <span class="badge badge-success">{{ r.line_type_label }}</span>
                           {% endif %}
                         </td>
                         <td>{{ r.line_code }}</td>
                         <td>{{ r.line_name }}</td>
                         <td>{{ r.payer_code }}</td>
                         <td>{{ r.payer_name }}</td>
+                        <td>{{ r.order_code }}</td>
+                        <td>{{ r.order_type_name }}</td>
+                        <td>{{ r.bonus_payment_date|default:"" }}</td>
                         <td class="text-end">{{ r.lvl }}</td>
                         <td class="text-end">{{ r.sum_bv|intcomma }}</td>
                       </tr>

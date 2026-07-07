@@ -182,7 +182,7 @@ class MonthTitleDetailView(generic.TemplateView):
         sql = f"""
             {MONTH_TITLE_DETAIL_CTE_SQL}
             SELECT COUNT(*)
-            FROM payer_tree AS pt
+            FROM payer_order_tree AS pt
             JOIN introducer_total_bv AS itb
               ON itb.upper_code = pt.upper_code
              AND itb.line_code = pt.line_code
@@ -205,7 +205,9 @@ class MonthTitleDetailView(generic.TemplateView):
                 itb.rn,
                 pt.line_code,
                 pt.lvl,
-                pt.payer_code
+                pt.payer_code,
+                pt.bonus_payment_date,
+                pt.order_code
             LIMIT %s OFFSET %s
         """
         params = [

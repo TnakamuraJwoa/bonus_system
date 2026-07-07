@@ -113,8 +113,8 @@ line_type_total_bv2 AS (
     SELECT
         upper_code,
         send_bv_name,
-        IFNULL(MAX(CASE WHEN rn = 1 THEN sum_bv END), 0) AS income_line_bv,
-        IFNULL(MAX(CASE WHEN rn = 2 THEN sum_bv END), 0) AS basic_line_bv
+        IFNULL(MAX(CASE WHEN rn = 2 THEN sum_bv END), 0) AS income_line_bv,
+        IFNULL(MAX(CASE WHEN rn = 1 THEN sum_bv END), 0) AS basic_line_bv
 
     FROM line_type_total_bv AS a
     LEFT JOIN bonus_db.users AS b
