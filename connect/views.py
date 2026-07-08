@@ -3729,9 +3729,17 @@ VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         filters = {
             "edit_register_year": (self.request.GET.get("edit_register_year") or selected_year or "").strip(),
             "edit_register_month": (self.request.GET.get("edit_register_month") or selected_month or "").strip(),
+            "edit_order_year": (self.request.GET.get("edit_order_year") or "").strip(),
+            "edit_order_month": (self.request.GET.get("edit_order_month") or "").strip(),
             "edit_order_code": (self.request.GET.get("edit_order_code") or "").strip(),
             "edit_jwoa_code": (self.request.GET.get("edit_jwoa_code") or "").strip(),
             "edit_name": (self.request.GET.get("edit_name") or "").strip(),
+            "edit_bonus_payment_date_from": (
+                self.request.GET.get("edit_bonus_payment_date_from") or ""
+            ).strip(),
+            "edit_bonus_payment_date_to": (
+                self.request.GET.get("edit_bonus_payment_date_to") or ""
+            ).strip(),
         }
         panel_opened = self.request.GET.get("edit_panel") == "1"
         submitted = any(key in self.request.GET for key in filters)
@@ -3739,7 +3747,11 @@ VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ctx.update(filters)
         ctx["registered_edit_panel_open"] = panel_opened or submitted
         ctx["registered_edit_searched"] = submitted
-        ctx["registered_edit_rows"] = self._fetch_registered_edit_rows(filters) if submitted else []
+        try:
+            ctx["registered_edit_rows"] = self._fetch_registered_edit_rows(filters) if submitted else []
+        except ValueError as e:
+            messages.error(self.request, str(e))
+            ctx["registered_edit_rows"] = []
         keep_params = {}
         for key in ("target_year", "target_month", "per_page"):
             value = ctx.get(key)
@@ -3763,6 +3775,12 @@ VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         if filters["edit_register_month"]:
             where.append("register_month = %s")
             params.append(filters["edit_register_month"])
+        if filters["edit_order_year"]:
+            where.append("order_year = %s")
+            params.append(filters["edit_order_year"])
+        if filters["edit_order_month"]:
+            where.append("order_month = %s")
+            params.append(filters["edit_order_month"])
         if filters["edit_order_code"]:
             where.append("order_code LIKE %s")
             params.append(f"%{filters['edit_order_code']}%")
@@ -3772,6 +3790,18 @@ VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         if filters["edit_name"]:
             where.append("send_bv_name LIKE %s")
             params.append(f"%{filters['edit_name']}%")
+        payment_date_from = None
+        payment_date_to = None
+        if filters["edit_bonus_payment_date_from"]:
+            payment_date_from = parse_input_date(filters["edit_bonus_payment_date_from"])
+            where.append("bonus_payment_date >= %s")
+            params.append(payment_date_from)
+        if filters["edit_bonus_payment_date_to"]:
+            payment_date_to = parse_input_date(filters["edit_bonus_payment_date_to"])
+            where.append("bonus_payment_date <= %s")
+            params.append(payment_date_to)
+        if payment_date_from and payment_date_to and payment_date_from > payment_date_to:
+            raise ValueError("ボーナス支払日のFromはTo以前の日付を指定してください。")
 
         if not where:
             return []
@@ -3872,6 +3902,83 @@ VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 row["order_at"],
                 row["payment_date"],
                 row_id,
+            ],
+        )
+        return cursor.rowcount
+
+    def _parse_manual_date_copy_target_ids(self, request, current_row_id):
+        if request.POST.get("manual_apply_date_to_selected") != "1":
+            return []
+
+        raw_ids = (request.POST.get("manual_date_copy_target_ids") or "").strip()
+        if not raw_ids:
+            return []
+
+        target_ids = []
+        for raw_id in raw_ids.split(","):
+            raw_id = raw_id.strip()
+            if not raw_id:
+                continue
+            try:
+                target_id = int(raw_id)
+            except ValueError as exc:
+                raise ValueError("日付データ反映対象IDが不正です。") from exc
+            if target_id != current_row_id and target_id not in target_ids:
+                target_ids.append(target_id)
+        return target_ids
+
+    def _fetch_manual_purchase_rows_for_update(self, cursor, row_ids):
+        if not row_ids:
+            return []
+
+        placeholders = ", ".join(["%s"] * len(row_ids))
+        sql = f"""
+            SELECT
+                id,
+                register_year,
+                register_month,
+                order_year,
+                order_month,
+                order_code,
+                order_type,
+                jwoa_code,
+                send_bv_name,
+                total_bv,
+                bv,
+                deposit_at,
+                order_at,
+                bonus_payment_date,
+                created_at,
+                updated_at
+            FROM bonus_db.purchase_info_list
+            WHERE id IN ({placeholders})
+            FOR UPDATE
+        """
+        cursor.execute(sql, row_ids)
+        columns = [col[0] for col in cursor.description]
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+    def _update_manual_purchase_date_fields(self, cursor, row_ids, row):
+        if not row_ids:
+            return 0
+
+        placeholders = ", ".join(["%s"] * len(row_ids))
+        update_sql = f"""
+            UPDATE bonus_db.purchase_info_list
+            SET
+                register_year = %s,
+                register_month = %s,
+                bonus_payment_date = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id IN ({placeholders})
+        """
+        cursor.execute(
+            update_sql,
+            [
+                row["register_year"],
+                row["register_month"],
+                row["payment_date"],
+                *row_ids,
             ],
         )
         return cursor.rowcount
@@ -4002,6 +4109,7 @@ WHERE name = 'set_title'
 
             try:
                 row = self._build_manual_purchase_row(request)
+                date_copy_target_ids = self._parse_manual_date_copy_target_ids(request, row_id)
             except ValueError as e:
                 messages.error(request, str(e))
                 return redirect(self._redirect_url())
@@ -4011,6 +4119,7 @@ WHERE name = 'set_title'
             else:
                 redirect_url = self._redirect_url(row["register_year"], row["register_month"])
 
+            date_copy_count = 0
             try:
                 with transaction.atomic(using="rds"):
                     with connections["rds"].cursor() as cursor:
@@ -4018,6 +4127,17 @@ WHERE name = 'set_title'
                         if not before_row:
                             messages.error(request, "更新対象データが見つかりませんでした。")
                             return redirect(redirect_url)
+
+                        before_copy_rows = []
+                        if date_copy_target_ids:
+                            before_copy_rows = self._fetch_manual_purchase_rows_for_update(
+                                cursor,
+                                date_copy_target_ids,
+                            )
+                            found_ids = {int(r["id"]) for r in before_copy_rows}
+                            if len(found_ids) != len(date_copy_target_ids):
+                                messages.error(request, "日付データ反映対象に存在しないデータが含まれています。")
+                                return redirect(redirect_url)
 
                         updated_count = self._update_manual_purchase_row(cursor, row_id, row)
                         if updated_count:
@@ -4036,6 +4156,33 @@ WHERE name = 'set_title'
                                 before_values=before_row,
                                 after_values=after_values,
                             )
+
+                        if date_copy_target_ids:
+                            date_copy_count = self._update_manual_purchase_date_fields(
+                                cursor,
+                                date_copy_target_ids,
+                                row,
+                            )
+                            if date_copy_count:
+                                record_change_audit(
+                                    request,
+                                    screen_name="ボーナス購入情報(登録/削除)",
+                                    action_type="bulk_update",
+                                    target_table="purchase_info_list",
+                                    target_pk=",".join(str(i) for i in date_copy_target_ids),
+                                    summary=(
+                                        "選択行へ日付データを反映: "
+                                        f"登録年月 {row['register_year']}年{row['register_month']}月 / "
+                                        f"ボーナス支払日 {row['payment_date']} / {date_copy_count}件"
+                                    ),
+                                    before_values={"rows": before_copy_rows},
+                                    after_values={
+                                        "ids": date_copy_target_ids,
+                                        "register_year": row["register_year"],
+                                        "register_month": row["register_month"],
+                                        "bonus_payment_date": row["payment_date"],
+                                    },
+                                )
             except IntegrityError:
                 logger.exception("ボーナス購入情報の手入力編集重複エラー")
                 messages.error(request, "同じ登録年月・会員番号・注文番号のデータは既に登録されています。")
@@ -4045,7 +4192,10 @@ WHERE name = 'set_title'
                 messages.error(request, f"更新中にエラーが発生しました: {e}")
                 return redirect(redirect_url)
 
-            messages.success(request, "購入情報を更新しました。")
+            if date_copy_count:
+                messages.success(request, f"購入情報を更新しました。選択行 {date_copy_count}件へ日付データを反映しました。")
+            else:
+                messages.success(request, "購入情報を更新しました。")
             return redirect(redirect_url)
 
         if action == "manual_delete":

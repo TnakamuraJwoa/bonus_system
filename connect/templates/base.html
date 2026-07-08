@@ -437,10 +437,18 @@ $(function () {
         </div>
     </div>
 </div>
+<div class="bonus-calculating-overlay" id="globalFormLoadingOverlay" aria-live="polite" aria-hidden="true">
+    <div class="bonus-calculating-box">
+        <div class="bonus-calculating-spinner" aria-hidden="true"></div>
+        <div class="fw-bold mb-1" data-loading-message>処理中...</div>
+        <div class="small text-muted">処理が完了するまでお待ちください。</div>
+    </div>
+</div>
 <script>
 (function () {
     var pendingConfirmAction = null;
     var pendingParentModal = null;
+    var lastSubmitter = null;
     var modal = $("#appConfirmModal");
     var message = document.getElementById("appConfirmModalMessage");
     var yesButton = document.getElementById("appConfirmModalYes");
@@ -484,14 +492,67 @@ $(function () {
         pendingParentModal = null;
     });
 
-    function showFormLoading(form) {
-        var loadingMessage = form.getAttribute("data-loading-message");
-        if (!loadingMessage) {
+    function getFormLoadingMessage(form, submitter) {
+        var explicitMessage = form.getAttribute("data-loading-message");
+        if (explicitMessage) {
+            return explicitMessage;
+        }
+        if (submitter && submitter.getAttribute("data-loading-message")) {
+            return submitter.getAttribute("data-loading-message");
+        }
+
+        var actionValues = [];
+        form.querySelectorAll("input[name='action'], button[name], input[type='submit'][name]").forEach(function (element) {
+            actionValues.push(element.name || "");
+            actionValues.push(element.value || "");
+            actionValues.push(element.textContent || "");
+        });
+        if (submitter) {
+            actionValues.push(submitter.name || "");
+            actionValues.push(submitter.value || "");
+            actionValues.push(submitter.textContent || "");
+        }
+
+        var actionText = actionValues.join(" ").toLowerCase();
+        if (/(delete|remove|削除)/.test(actionText)) {
+            return "削除中...";
+        }
+        if (/(update|edit|変更|編集|更新)/.test(actionText)) {
+            return "更新中...";
+        }
+        if (/(create|register|insert|bulk_create|登録|作成|追加)/.test(actionText)) {
+            return "登録中...";
+        }
+        return "処理中...";
+    }
+
+    function preserveSubmitterValue(form, submitter) {
+        if (!submitter || !submitter.name || submitter.disabled) {
             return;
         }
 
+        var preservedInputs = form.querySelectorAll("input[type='hidden'][data-preserved-submitter='1']");
+        for (var i = 0; i < preservedInputs.length; i++) {
+            if (preservedInputs[i].name === submitter.name) {
+                return;
+            }
+        }
+
+        var hidden = document.createElement("input");
+        hidden.type = "hidden";
+        hidden.name = submitter.name;
+        hidden.value = submitter.value;
+        hidden.setAttribute("data-preserved-submitter", "1");
+        form.appendChild(hidden);
+    }
+
+    function showFormLoading(form, submitter) {
+        var loadingMessage = getFormLoadingMessage(form, submitter);
         var overlaySelector = form.getAttribute("data-loading-target");
         var overlay = overlaySelector ? document.querySelector(overlaySelector) : null;
+        if (!overlay) {
+            overlay = document.getElementById("globalFormLoadingOverlay");
+        }
         if (overlay) {
             var messageEl = overlay.querySelector("[data-loading-message]");
             if (messageEl) {
@@ -511,6 +572,13 @@ $(function () {
         }
     }
 
+    document.addEventListener("click", function (event) {
+        var submitter = event.target.closest("button, input[type='submit']");
+        if (submitter && submitter.form) {
+            lastSubmitter = submitter;
+        }
+    }, true);
+
     document.addEventListener("submit", function (event) {
         var form = event.target;
         if (!form.matches("form[data-confirm]")) {
@@ -518,10 +586,24 @@ $(function () {
         }
 
         event.preventDefault();
+        var submitter = event.submitter || (lastSubmitter && lastSubmitter.form === form ? lastSubmitter : null);
         openConfirm(form.getAttribute("data-confirm"), function () {
-            showFormLoading(form);
+            preserveSubmitterValue(form, submitter);
+            showFormLoading(form, submitter);
             form.submit();
         }, form.closest(".modal"));
+    });
+
+    document.addEventListener("submit", function (event) {
+        var form = event.target;
+        var method = (form.getAttribute("method") || "get").toLowerCase();
+        if (method !== "post" || form.matches("form[data-confirm]")) {
+            return;
+        }
+
+        var submitter = event.submitter || (lastSubmitter && lastSubmitter.form === form ? lastSubmitter : null);
+        preserveSubmitterValue(form, submitter);
+        showFormLoading(form, submitter);
     });
 
     document.addEventListener("click", function (event) {
@@ -545,7 +627,7 @@ $(function () {
                 form.appendChild(hidden);
             }
 
-            showFormLoading(form);
+            showFormLoading(form, trigger);
             form.submit();
         }, trigger.closest(".modal"));
     });

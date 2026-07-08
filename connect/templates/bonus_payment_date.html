@@ -180,7 +180,8 @@
               <form method="post"
                     enctype="multipart/form-data"
                     class="bonus-payment-date-section bonus-payment-date-section--create mb-0"
-                    data-confirm="選択したファイルで一括登録しますか？既に同じ注文番号がある場合は支払日を更新します。">
+                    data-confirm="選択したファイルで一括登録しますか？既に同じ注文番号がある場合は支払日を更新します。"
+                    data-loading-message="登録中...">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="bulk_create">
                 <input type="hidden" name="q_order_code" value="{{ q_order_code|default:'' }}">
@@ -206,7 +207,7 @@
                     <div class="small text-muted mt-1">1列目: 注文番号 / 2列目: 支払日</div>
                   </div>
 
-                  <button type="submit" class="btn btn-success">一括登録</button>
+                  <button type="submit" class="btn btn-success" data-loading-button>一括登録</button>
                 </div>
               </form>
             {% endif %}
