@@ -1,0 +1,216 @@
+{% extends 'base.html' %}
+{% load static custom_filters %}
+
+{% block head %}
+  <link href="{% static 'css/common.css' %}" rel="stylesheet">
+{% endblock %}
+
+{% block contents %}
+{% if request.user.is_staff or request.user.is_superuser %}
+  {% bonus_help "member_month_title_search" "月タイトル検索" as help_data %}
+{% endif %}
+<div class="container-fluid mt-3 list-page-viewport">
+  <div class="row g-1 h-100">
+
+    {% include "com/_sidebar_users.html" with active_menu="member_month_title_search" %}
+
+    <main class="col-12 col-md-9 col-lg-10 list-page-main">
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+
+          <div class="d-flex justify-content-between align-items-start flex-wrap mb-3">
+            <div>
+              <h5 class="page-title mb-1">【会員 - 月タイトル検索】</h5>
+              <div class="text-muted small">登録済みの月タイトルを、期別・会員情報から検索します。</div>
+            </div>
+            {% if request.user.is_staff or request.user.is_superuser %}
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-info rounded-circle"
+                data-toggle="modal"
+                data-target="#memberMonthTitleSearchHelpModal"
+                aria-label="月タイトル検索の説明を表示"
+                title="説明を表示"
+                style="width: 1.65rem; height: 1.65rem; padding: 0; line-height: 1;"
+              >
+                ?
+              </button>
+            {% endif %}
+          </div>
+
+          <div class="bonus-calc-form">
+            <form method="get" id="memberMonthTitleSearchForm" class="mb-0">
+              <div class="d-flex align-items-end flex-wrap">
+                <div class="mr-2 mb-2" style="width: 220px;">
+                  <label class="form-label mb-0 small text-muted">期別</label>
+                  <select name="q_kibetu" class="form-control">
+                    <option value="">期別を選択</option>
+                    {% for option in registered_kibetu_options %}
+                      <option value="{{ option.kibetu }}" {% if q_kibetu == option.kibetu %}selected{% endif %}>
+                        {{ option.kibetu }}{% if option.year and option.month %}（{{ option.year }}/{{ option.month }}）{% endif %}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </div>
+
+                <div class="mr-2 mb-2">
+                  <label class="form-label mb-0 small text-muted">会員コード</label>
+                  <input type="text"
+                         name="q_jwoa_code"
+                         class="form-control"
+                         value="{{ q_jwoa_code|default:'' }}"
+                         placeholder="例: JP05198407">
+                </div>
+
+                <div class="mr-2 mb-2">
+                  <label class="form-label mb-0 small text-muted">会員名</label>
+                  <input type="text"
+                         name="q_name"
+                         class="form-control"
+                         value="{{ q_name|default:'' }}"
+                         placeholder="例: 山田">
+                </div>
+
+                <div class="mr-2 mb-2" style="width: 180px;">
+                  <label class="form-label mb-0 small text-muted">タイトル</label>
+                  <select name="q_title_id" class="form-control">
+                    <option value="">全て</option>
+                    {% for option in title_options %}
+                      <option value="{{ option.title_id }}" {% if q_title_id == option.title_id %}selected{% endif %}>
+                        {{ option.title_name }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </div>
+
+                <div class="mr-2 mb-2" style="width: 110px;">
+                  <label class="form-label mb-0 small text-muted">表示件数</label>
+                  <select name="per_page" class="form-control">
+                    <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                    <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                    <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                    <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+                  </select>
+                </div>
+              </div>
+            </form>
+
+            <div class="bonus-calc-selection-status">
+              {% if q_kibetu or q_jwoa_code or q_name or q_title_id %}
+                <span class="text-muted small">絞り込み中：</span>
+                {% if q_kibetu %}
+                  <span class="badge badge-info">期別={{ q_kibetu }}</span>
+                {% endif %}
+                {% if q_jwoa_code %}
+                  <span class="badge badge-info">会員コード={{ q_jwoa_code }}</span>
+                {% endif %}
+                {% if q_name %}
+                  <span class="badge badge-secondary">会員名={{ q_name }}</span>
+                {% endif %}
+                {% if q_title_id %}
+                  {% for option in title_options %}
+                    {% if q_title_id == option.title_id %}
+                      <span class="badge badge-success">タイトル={{ option.title_name }}</span>
+                    {% endif %}
+                  {% endfor %}
+                {% endif %}
+              {% else %}
+                <span class="text-muted small">期別を選択して検索してください。</span>
+              {% endif %}
+            </div>
+
+            <div class="bonus-calc-action-row">
+              <button type="submit" form="memberMonthTitleSearchForm" class="btn btn-primary">検索</button>
+              <a class="btn btn-outline-secondary" href="{% url 'connect:member_month_title_search' %}">リセット</a>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="card shadow-sm">
+        <div class="card-body">
+
+          {% if rows %}
+            {% include "com/_list_summary.html" %}
+
+            <div class="table-responsive">
+              <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
+                <thead class="table-light">
+                  <tr>
+                    <th class="text-center">ID</th>
+                    <th class="text-center">期別</th>
+                    <th class="text-center">会員コード</th>
+                    <th class="text-center">会員名</th>
+                    <th class="text-center">収入ラインBV</th>
+                    <th class="text-center">基本ラインBV</th>
+                    <th class="text-center">タイトル</th>
+                    <th class="text-center">作成日時</th>
+                    <th class="text-center">更新日時</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for r in rows %}
+                    <tr>
+                      <td class="text-end">{{ r.id }}</td>
+                      <td>{{ r.kibetu }}</td>
+                      <td>{{ r.jwoa_code }}</td>
+                      <td>{{ r.jwoa_name }}</td>
+                      <td class="text-end">{{ r.income_line_bv }}</td>
+                      <td class="text-end">{{ r.basic_line_bv }}</td>
+                      <td>{{ r.title_name }}</td>
+                      <td>{{ r.created_at|date:"Y-m-d H:i:s" }}</td>
+                      <td>{{ r.updated_at|date:"Y-m-d H:i:s" }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            {% include "com/_pagination.html" %}
+
+          {% else %}
+            {% if is_searched %}
+              <p class="mb-0 text-muted">該当データがありません。</p>
+            {% else %}
+              <p class="mb-0 text-muted">期別を選択して「検索」を押してください。</p>
+            {% endif %}
+          {% endif %}
+
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+{% if request.user.is_staff or request.user.is_superuser %}
+<div
+  class="modal fade"
+  id="memberMonthTitleSearchHelpModal"
+  tabindex="-1"
+  role="dialog"
+  aria-labelledby="memberMonthTitleSearchHelpModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="memberMonthTitleSearchHelpModalLabel">{{ help_data.title }}</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="bonus-help-content">
+          {{ help_data.content|linebreaksbr }}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">閉じる</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -38,7 +38,7 @@
 
           <div class="d-flex justify-content-between align-items-start flex-wrap mb-3">
             <div>
-              <h5 class="page-title mb-1">【会員 - ピンタイトル一覧】</h5>
+              <h5 class="page-title mb-1">【会員 - 最高ピンタイトル一覧】</h5>
               <div class="text-muted small">ピンタイトルを検索し、表示データを確認します。</div>
             </div>
             {% if user_access.can_export %}
@@ -64,7 +64,7 @@
                     {% for t in title_choices %}
                       <option value="{{ t.title_id }}"
                               {% if t.title_id|stringformat:"s" == selected_title_id %}selected{% endif %}>
-                        {{ t.title_id }} : {{ t.title_name }}
+                        {{ t.title_name }}
                       </option>
                     {% endfor %}
                   </select>
@@ -95,7 +95,11 @@
               {% if selected_title_id or q_jpid %}
                 <span class="text-muted small">絞り込み中：</span>
                 {% if selected_title_id %}
-                  <span class="badge badge-info">title_id={{ selected_title_id }}</span>
+                  {% for t in title_choices %}
+                    {% if t.title_id|stringformat:"s" == selected_title_id %}
+                      <span class="badge badge-info">タイトル={{ t.title_name }}</span>
+                    {% endif %}
+                  {% endfor %}
                 {% endif %}
                 {% if q_jpid %}
                   <span class="badge badge-secondary">会員ID={{ q_jpid }}</span>
@@ -127,7 +131,6 @@
                   <tr>
                     <th>jmoa_code</th>
                     <th>jwoa_name</th>
-                    <th>title_id</th>
                     <th>title_name</th>
                     <th>update_date</th>
                     {% if title_user_can_update %}
@@ -140,7 +143,6 @@
                     <tr>
                       <td>{{ r.jmoa_code }}</td>
                       <td>{{ r.jwoa_name }}</td>
-                      <td>{{ r.title_id }}</td>
                       <td>{{ r.title_name }}</td>
                       <td>{{ r.update_date }}</td>
                       {% if title_user_can_update %}
@@ -207,7 +209,7 @@
             <label for="titleUpdateTitleId" class="form-label">変更後タイトル</label>
             <select name="title_id" id="titleUpdateTitleId" class="form-control" required>
               {% for t in title_choices %}
-                <option value="{{ t.title_id }}">{{ t.title_id }} : {{ t.title_name }}</option>
+                <option value="{{ t.title_id }}">{{ t.title_name }}</option>
               {% endfor %}
             </select>
           </div>

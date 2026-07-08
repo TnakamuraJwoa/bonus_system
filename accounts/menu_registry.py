@@ -28,7 +28,13 @@ MENU_GROUPS = (
 MENU_FEATURES = (
     # --- 会員 ---
     MenuFeature("users", "会員一覧", "users", ("users", "users_export")),
-    MenuFeature("title_user", "ピンタイトル一覧", "users", ("title_user", "title_user_export")),
+    MenuFeature(
+        "member_month_title_search",
+        "月タイトル検索",
+        "users",
+        ("member_month_title_search",),
+    ),
+    MenuFeature("title_user", "最高ピンタイトル一覧", "users", ("title_user", "title_user_export")),
     MenuFeature(
         "active_user_search",
         "アクティブ会員検索",
@@ -80,7 +86,7 @@ MENU_FEATURES = (
         "bonus_search",
         ("matching_bonus_tree",),
     ),
-    MenuFeature("s_month_title", "月タイトル（検索）", "bonus_search", ("s_month_title",)),
+    MenuFeature("s_month_title", "月タイトル（検索）", "bonus_search", ("s_month_title", "month_title_detail")),
     MenuFeature("s_title_bonus", "タイトルボーナス（検索）", "bonus_search", ("s_title_bonus",)),
     MenuFeature(
         "s_title_diff_bonus",

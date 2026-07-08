@@ -131,5 +131,16 @@ from payment_target_members
 
 
 
-select * from three_star_global_bonus_result
+SELECT
+    tsgbr.jwoa_code,
+    tsgbr.jwoa_name,
+    tsgbr.title_id,
+    COALESCE(tm.title_name, 'タイトルなし') AS title_name,
+    tsgbr.score,
+    tsgbr.total_over_bv,
+    tsgbr.one_score_bonus,
+    tsgbr.bonus_amount
+FROM three_star_global_bonus_result AS tsgbr
+LEFT JOIN bonus_db.title_master AS tm
+  ON tsgbr.title_id = tm.title_id
 """

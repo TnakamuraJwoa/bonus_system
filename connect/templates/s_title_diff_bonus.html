@@ -180,11 +180,11 @@
                        style="position: sticky; top: 0; z-index: 1;">
                   <tr>
                     {% sortable_th "kibetu" "期別" %}
-                    {% sortable_th "root_title_id" "root_title_id" %}
+                    {% sortable_th "root_title_name" "root_title_name" %}
                     {% sortable_th "root_bonus_rate" "root_bonus_rate" %}
                     {% sortable_th "root_jwoa_code" "root_jwoa_code" %}
                     {% sortable_th "root_name" "root_name" %}
-                    {% sortable_th "down_title_id" "down_title_id" %}
+                    {% sortable_th "down_title_name" "down_title_name" %}
                     {% sortable_th "down_bonus_rate" "down_bonus_rate" %}
                     {% sortable_th "down_jwoa_code" "down_jwoa_code" %}
                     {% sortable_th "down_name" "down_name" %}
@@ -202,11 +202,11 @@
 
                     <tr>
                       <td>{{ r.kibetu }}</td>
-                      <td class="text-end">{{ r.root_title_id }}</td>
+                      <td>{{ r.root_title_name }}</td>
                       <td class="text-end">{{ r.root_bonus_rate }}</td>
                       <td>{{ r.root_jwoa_code }}</td>
                       <td>{{ r.root_name }}</td>
-                      <td class="text-end">{{ r.down_title_id }}</td>
+                      <td>{{ r.down_title_name }}</td>
                       <td class="text-end">{{ r.down_bonus_rate }}</td>
                       <td>{{ r.down_jwoa_code }}</td>
                       <td>{{ r.down_name }}</td>

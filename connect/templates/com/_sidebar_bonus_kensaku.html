@@ -25,6 +25,11 @@
     color: #1d4ed8;
   }
 
+  .sidebar-menu-parent.active .sidebar-submenu-toggle,
+  .sidebar-menu-parent.active .sidebar-submenu-toggle:hover {
+    color: #fff;
+  }
+
   .sidebar-submenu-toggle-spacer {
     display: inline-block;
     width: 1.5rem;
@@ -44,7 +49,7 @@
 <nav class="col-12 col-md-3 col-lg-2">
   <div class="card shadow-sm position-sticky" style="top: 1rem;">
 
-    {% if user_access|can_menu:"s_drive_bonus" or user_access|can_menu:"s_basic_bonus" or user_access|can_menu:"basic_income_line_detail" or user_access|can_menu:"s_matching_bonus" or user_access|can_menu:"matching_bonus_tree" or user_access|can_menu:"s_month_title" %}
+    {% if user_access|can_menu:"s_drive_bonus" or user_access|can_menu:"s_basic_bonus" or user_access|can_menu:"basic_income_line_detail" or user_access|can_menu:"s_matching_bonus" or user_access|can_menu:"matching_bonus_tree" %}
     <div class="card-body">
       <div class="fw-bold mb-2">■ 週ボーナス</div>
 
@@ -123,13 +128,6 @@
         {% endif %}
       </div>
 
-      {% if user_access|can_menu:"s_month_title" %}
-      <div class="fw-bold mt-4 mb-2">■ 月タイトル</div>
-      <div class="list-group">
-        <a class="list-group-item list-group-item-action {% if active_menu == 'month_title' %}active{% endif %}"
-           href="{% url 'connect:s_month_title' %}">月タイトル</a>
-      </div>
-      {% endif %}
     </div>
     {% endif %}
 
@@ -139,8 +137,8 @@
 
       <div class="list-group">
         {% if user_access|can_menu:"s_title_bonus" %}
-        <a class="list-group-item list-group-item-action {% if active_menu == 'title_bonus' %}active{% endif %}"
-           href="{% url 'connect:s_title_bonus' %}">タイトルボーナス</a>
+          <a class="list-group-item list-group-item-action {% if active_menu == 'title_bonus' %}active{% endif %}"
+             href="{% url 'connect:s_title_bonus' %}">タイトルボーナス</a>
         {% endif %}
 
         {% if user_access|can_menu:"s_title_diff_bonus" %}
@@ -157,6 +155,16 @@
         <a class="list-group-item list-group-item-action {% if active_menu == 'three_star_global_bonus' %}active{% endif %}"
            href="{% url 'connect:s_three_star_global_bonus' %}">3スター配当</a>
         {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if user_access|can_menu:"s_month_title" %}
+    <div class="card-body">
+      <div class="fw-bold mb-2">■ タイトル</div>
+      <div class="list-group">
+        <a class="list-group-item list-group-item-action {% if active_menu == 'month_title' %}active{% endif %}"
+           href="{% url 'connect:s_month_title' %}">月タイトル</a>
       </div>
     </div>
     {% endif %}

@@ -948,7 +948,7 @@ SEARCH_EXPORT_COLUMNS = {
         ("down_name", "down_name"),
         ("tree_level", "tree_level", "int"),
         ("match_level", "match_level", "int"),
-        ("title_id", "title_id", "int"),
+        ("title_name", "タイトル名"),
         ("sum_bv", "sum_bv", "int"),
         ("rate", "rate", "decimal2"),
         ("bonus_amount", "bonus_amount", "decimal2"),
@@ -956,11 +956,11 @@ SEARCH_EXPORT_COLUMNS = {
     ],
     "title_diff_bonus": [
         ("期別", "kibetu"),
-        ("root_title_id", "root_title_id", "int"),
+        ("root_title_name", "root_title_name"),
         ("root_bonus_rate", "root_bonus_rate", "decimal2"),
         ("root_jwoa_code", "root_jwoa_code"),
         ("root_name", "root_name"),
-        ("down_title_id", "down_title_id", "int"),
+        ("down_title_name", "down_title_name"),
         ("down_bonus_rate", "down_bonus_rate", "decimal2"),
         ("down_jwoa_code", "down_jwoa_code"),
         ("down_name", "down_name"),
@@ -988,7 +988,7 @@ SEARCH_EXPORT_COLUMNS = {
         ("kibetu", "kibetu"),
         ("jwoa_code", "jwoa_code"),
         ("jwoa_name", "jwoa_name"),
-        ("title_id", "title_id", "int"),
+        ("title_name", "title_name"),
         ("score", "score", "int"),
         ("total_over_bv", "total_over_bv", "int"),
         ("one_score_bonus", "one_score_bonus", "decimal2"),
@@ -1010,8 +1010,8 @@ SEARCH_EXPORT_COLUMNS = {
         ("期別", "kibetu"),
         ("会員コード", "jwoa_code"),
         ("会員名", "jwoa_name"),
-        ("インカム系列BV", "income_line_bv", "int"),
-        ("ベーシック系列BV", "basic_line_bv", "int"),
+        ("収入ライン系列BV", "income_line_bv", "int"),
+        ("基本ライン系列BV", "basic_line_bv", "int"),
         ("タイトル", "title_name"),
         ("決済時間", "updated_at"),
     ],
@@ -2752,7 +2752,7 @@ LIMIT 1
     def _update_user_title(self, jmoa_code: str, title_id: int) -> int:
         with connections["rds"].cursor() as cursor:
             logger.info(
-                "ピンタイトル一覧からタイトルIDを更新します。jmoa_code=%s title_id=%s",
+                "最高ピンタイトル一覧からタイトルIDを更新します。jmoa_code=%s title_id=%s",
                 jmoa_code,
                 title_id,
             )
@@ -2818,7 +2818,7 @@ WHERE jmoa_code = %s
             with transaction.atomic(using="rds"):
                 updated_count = self._update_user_title(jmoa_code, title_id)
         except Exception as e:
-            logger.exception("ピンタイトル一覧のタイトルID更新エラー")
+            logger.exception("最高ピンタイトル一覧のタイトルID更新エラー")
             messages.error(request, f"タイトルID更新中にエラーが発生しました: {e}")
             return redirect(next_url)
 
@@ -2834,7 +2834,7 @@ WHERE jmoa_code = %s
             )
             record_change_audit(
                 request,
-                screen_name="ピンタイトル一覧",
+                screen_name="最高ピンタイトル一覧",
                 action_type="update",
                 target_table="user_titles",
                 target_pk=jmoa_code,
@@ -2919,7 +2919,7 @@ ORDER BY ut.title_id, ut.jmoa_code
         """
 
         wb = openpyxl.Workbook(write_only=True)
-        ws = wb.create_sheet("ピンタイトル一覧")
+        ws = wb.create_sheet("最高ピンタイトル一覧")
         ws.append(["jmoa_code", "jwoa_name", "title_id", "title_name", "update_date"])
 
         with connections["rds"].cursor() as cursor:
@@ -3244,11 +3244,14 @@ class TitleRegistrationView(generic.TemplateView):
                 mt.basic_line_bv AS basic_bv,
                 mt.income_line_bv AS income_bv,
                 mt.title_id,
+                COALESCE(tm.title_name, 'タイトルなし') AS title_name,
                 %s AS year,
                 %s AS month
             FROM bonus_db.month_title mt
             JOIN bonus_db.user_titles u
               ON u.jmoa_code = mt.jwoa_code
+            LEFT JOIN bonus_db.title_master tm
+              ON mt.title_id = tm.title_id
             WHERE mt.kibetu = %s
               AND mt.title_id > 0
               AND mt.title_id >= IFNULL(u.title_id, 0)
@@ -3561,24 +3564,6 @@ WHERE register_year = %s
             cursor.execute(sql, [year, month])
             row = cursor.fetchone()
             return int(row[0]) if row else 0
-
-    def _count_all_registered(self):
-        sql = """
-            SELECT COUNT(*)
-            FROM bonus_db.purchase_info_list
-        """
-        with connections["rds"].cursor() as cursor:
-            cursor.execute(sql)
-            row = cursor.fetchone()
-            return int(row[0]) if row else 0
-
-    def _delete_all_registered(self):
-        sql = """
-            DELETE FROM bonus_db.purchase_info_list
-        """
-        with connections["rds"].cursor() as cursor:
-            cursor.execute(sql)
-            return cursor.rowcount
 
     def _redirect_url(self, year=None, month=None):
         base_url = redirect("connect:repurchase_last_month").url
@@ -3918,7 +3903,6 @@ WHERE name = 'set_title'
         ctx["rows"] = []
         ctx["per_page"] = self.get_per_page()
         ctx["registered_count"] = 0
-        ctx["total_registered_count"] = self._count_all_registered()
         ctx["is_registered_month"] = False
 
         if selected_choice or target_year or target_month:
@@ -4114,39 +4098,6 @@ WHERE name = 'set_title'
 
             messages.success(request, "購入情報を1件削除しました。")
             return redirect(redirect_url)
-
-        if action == "delete_all":
-            if not user_access.can_delete:
-                messages.error(request, "削除権限がありません。")
-                return redirect(self._redirect_url())
-
-            try:
-                with transaction.atomic(using="rds"):
-                    deleted_count = self._delete_all_registered()
-                    if deleted_count:
-                        record_change_audit(
-                            request,
-                            screen_name="ボーナス購入情報(登録/削除)",
-                            action_type="bulk_delete",
-                            target_table="purchase_info_list",
-                            target_pk=None,
-                            summary=f"購入情報を全件削除: {deleted_count}件",
-                            before_values={"count": deleted_count},
-                            after_values=None,
-                        )
-            except Exception as e:
-                logger.exception("ボーナス購入情報登録の全件削除エラー")
-                messages.error(request, f"削除中にエラーが発生しました: {e}")
-                return redirect(self._redirect_url())
-
-            if deleted_count:
-                messages.success(
-                    request,
-                    f"購入情報を {deleted_count}件 すべて削除しました。",
-                )
-            else:
-                messages.warning(request, "削除対象データはありません。")
-            return redirect(self._redirect_url())
 
         if action == "delete_registered_month":
             if not user_access.can_delete:
@@ -6525,11 +6476,13 @@ class S_MatchingBonusView(generic.ListView):
 
         introducer_code = self.request.GET.get("introducer_code", "").strip()
         introducer_name = self.request.GET.get("introducer_name", "").strip()
+        matching_level = self.request.GET.get("matching_level", "").strip()
 
-        if not selected_kibetu_list and not introducer_code and not introducer_name:
+        if not selected_kibetu_list and not introducer_code and not introducer_name and not matching_level:
             ctx.update({
                 "introducer_code": introducer_code,
                 "introducer_name": introducer_name,
+                "matching_level": matching_level,
             })
             return ctx
 
@@ -6571,6 +6524,14 @@ class S_MatchingBonusView(generic.ListView):
             },
         )
         ctx.update(filter_values)
+
+        if matching_level:
+            sql += """
+                AND level = %s
+            """
+            params.append(matching_level)
+        ctx["matching_level"] = matching_level
+
         sql += "\n            ORDER BY " + sort_ctx["order_sql"]
 
         with connections["rds"].cursor() as cursor:
@@ -6870,7 +6831,7 @@ class S_TitleBonusView(generic.ListView):
                 "down_name": "down_name",
                 "tree_level": "tree_level",
                 "match_level": "match_level",
-                "title_id": "title_id",
+                "title_name": "title_name",
                 "sum_bv": "sum_bv",
                 "rate": "rate",
                 "bonus_amount": "bonus_amount",
@@ -6882,22 +6843,24 @@ class S_TitleBonusView(generic.ListView):
 
         sql = """
             SELECT
-                id,
-                kibetu,
-                root_jwoa_code,
-                root_name,
-                up_jwoa_code,
-                down_jwoa_code,
-                down_name,
-                tree_level,
-                match_level,
-                title_id,
-                sum_bv,
-                rate,
-                bonus_amount,
-                created_at
-            FROM bonus_db.B_title_bonus_result
-            WHERE kibetu = %s
+                tbr.id,
+                tbr.kibetu,
+                tbr.root_jwoa_code,
+                tbr.root_name,
+                tbr.up_jwoa_code,
+                tbr.down_jwoa_code,
+                tbr.down_name,
+                tbr.tree_level,
+                tbr.match_level,
+                COALESCE(tm.title_name, 'タイトルなし') AS title_name,
+                tbr.sum_bv,
+                tbr.rate,
+                tbr.bonus_amount,
+                tbr.created_at
+            FROM bonus_db.B_title_bonus_result AS tbr
+            LEFT JOIN bonus_db.title_master AS tm
+              ON tbr.title_id = tm.title_id
+            WHERE tbr.kibetu = %s
         """
 
         params = [selected_kibetu]
@@ -6906,9 +6869,9 @@ class S_TitleBonusView(generic.ListView):
             params,
             self.request,
             {
-                "root_jwoa_code": "root_jwoa_code",
-                "up_jwoa_code": "up_jwoa_code",
-                "down_jwoa_code": "down_jwoa_code",
+                "root_jwoa_code": "tbr.root_jwoa_code",
+                "up_jwoa_code": "tbr.up_jwoa_code",
+                "down_jwoa_code": "tbr.down_jwoa_code",
             },
         )
         ctx.update(filter_values)
@@ -7186,20 +7149,20 @@ class S_TitleDiffBonusView(generic.ListView):
         sort_ctx = get_bonus_sort_context(
             self.request,
             {
-                "kibetu": "kibetu",
-                "root_title_id": "root_title_id",
-                "root_bonus_rate": "root_bonus_rate",
-                "root_jwoa_code": "root_jwoa_code",
-                "root_name": "root_name",
-                "down_title_id": "down_title_id",
-                "down_bonus_rate": "down_bonus_rate",
-                "down_jwoa_code": "down_jwoa_code",
-                "down_name": "down_name",
-                "pay_bonus_rate": "pay_bonus_rate",
-                "sum_bv": "sum_bv",
-                "title_diff_bonus": "title_diff_bonus",
-                "created_at": "created_at",
-                "updated_at": "updated_at",
+                "kibetu": "tdbr.kibetu",
+                "root_title_name": "root_title_name",
+                "root_bonus_rate": "tdbr.root_bonus_rate",
+                "root_jwoa_code": "tdbr.root_jwoa_code",
+                "root_name": "tdbr.root_name",
+                "down_title_name": "down_title_name",
+                "down_bonus_rate": "tdbr.down_bonus_rate",
+                "down_jwoa_code": "tdbr.down_jwoa_code",
+                "down_name": "tdbr.down_name",
+                "pay_bonus_rate": "tdbr.pay_bonus_rate",
+                "sum_bv": "tdbr.sum_bv",
+                "title_diff_bonus": "tdbr.title_diff_bonus",
+                "created_at": "tdbr.created_at",
+                "updated_at": "tdbr.updated_at",
             },
             default_sort="root_jwoa_code",
         )
@@ -7207,22 +7170,28 @@ class S_TitleDiffBonusView(generic.ListView):
 
         sql = """
             SELECT
-                kibetu,
-                root_title_id,
-                root_bonus_rate,
-                root_jwoa_code,
-                root_name,
-                down_title_id,
-                down_bonus_rate,
-                down_jwoa_code,
-                down_name,
-                pay_bonus_rate,
-                sum_bv,
-                title_diff_bonus,
-                created_at,
-                updated_at
-            FROM bonus_db.B_title_diff_bonus_result
-            WHERE kibetu = %s
+                tdbr.kibetu,
+                tdbr.root_title_id,
+                COALESCE(root_tm.title_name, 'タイトルなし') AS root_title_name,
+                tdbr.root_bonus_rate,
+                tdbr.root_jwoa_code,
+                tdbr.root_name,
+                tdbr.down_title_id,
+                COALESCE(down_tm.title_name, 'タイトルなし') AS down_title_name,
+                tdbr.down_bonus_rate,
+                tdbr.down_jwoa_code,
+                tdbr.down_name,
+                tdbr.pay_bonus_rate,
+                tdbr.sum_bv,
+                tdbr.title_diff_bonus,
+                tdbr.created_at,
+                tdbr.updated_at
+            FROM bonus_db.B_title_diff_bonus_result AS tdbr
+            LEFT JOIN bonus_db.title_master AS root_tm
+              ON tdbr.root_title_id = root_tm.title_id
+            LEFT JOIN bonus_db.title_master AS down_tm
+              ON tdbr.down_title_id = down_tm.title_id
+            WHERE tdbr.kibetu = %s
         """
 
         params = [selected_kibetu]
@@ -7231,10 +7200,10 @@ class S_TitleDiffBonusView(generic.ListView):
             params,
             self.request,
             {
-                "root_jwoa_code": "root_jwoa_code",
-                "down_jwoa_code": "down_jwoa_code",
-                "root_name": "root_name",
-                "down_name": "down_name",
+                "root_jwoa_code": "tdbr.root_jwoa_code",
+                "down_jwoa_code": "tdbr.down_jwoa_code",
+                "root_name": "tdbr.root_name",
+                "down_name": "tdbr.down_name",
             },
         )
         ctx.update(filter_values)
@@ -8790,16 +8759,16 @@ class S_ThreeStarGlobalBonusView(generic.ListView):
         sort_ctx = get_bonus_sort_context(
             self.request,
             {
-                "kibetu": "kibetu",
-                "jwoa_code": "jwoa_code",
-                "jwoa_name": "jwoa_name",
-                "title_id": "title_id",
-                "score": "score",
-                "total_over_bv": "total_over_bv",
-                "one_score_bonus": "one_score_bonus",
-                "bonus_amount": "bonus_amount",
-                "created_at": "created_at",
-                "updated_at": "updated_at",
+                "kibetu": "tsgbr.kibetu",
+                "jwoa_code": "tsgbr.jwoa_code",
+                "jwoa_name": "tsgbr.jwoa_name",
+                "title_name": "title_name",
+                "score": "tsgbr.score",
+                "total_over_bv": "tsgbr.total_over_bv",
+                "one_score_bonus": "tsgbr.one_score_bonus",
+                "bonus_amount": "tsgbr.bonus_amount",
+                "created_at": "tsgbr.created_at",
+                "updated_at": "tsgbr.updated_at",
             },
             default_sort="bonus_amount",
             default_direction="desc",
@@ -8808,19 +8777,22 @@ class S_ThreeStarGlobalBonusView(generic.ListView):
 
         sql = """
             SELECT
-                id,
-                kibetu,
-                jwoa_code,
-                jwoa_name,
-                title_id,
-                score,
-                total_over_bv,
-                one_score_bonus,
-                bonus_amount,
-                created_at,
-                updated_at
-            FROM bonus_db.B_three_star_global_bonus_result
-            WHERE kibetu = %s
+                tsgbr.id,
+                tsgbr.kibetu,
+                tsgbr.jwoa_code,
+                tsgbr.jwoa_name,
+                tsgbr.title_id,
+                COALESCE(tm.title_name, 'タイトルなし') AS title_name,
+                tsgbr.score,
+                tsgbr.total_over_bv,
+                tsgbr.one_score_bonus,
+                tsgbr.bonus_amount,
+                tsgbr.created_at,
+                tsgbr.updated_at
+            FROM bonus_db.B_three_star_global_bonus_result AS tsgbr
+            LEFT JOIN bonus_db.title_master AS tm
+              ON tsgbr.title_id = tm.title_id
+            WHERE tsgbr.kibetu = %s
         """
 
         params = [selected_kibetu]
@@ -8829,8 +8801,8 @@ class S_ThreeStarGlobalBonusView(generic.ListView):
             params,
             self.request,
             {
-                "jwoa_code": "jwoa_code",
-                "jwoa_name": "jwoa_name",
+                "jwoa_code": "tsgbr.jwoa_code",
+                "jwoa_name": "tsgbr.jwoa_name",
             },
         )
         ctx.update(filter_values)

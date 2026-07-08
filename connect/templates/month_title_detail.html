@@ -1,0 +1,419 @@
+{% extends 'base.html' %}
+{% load humanize static custom_filters %}
+
+{% block head %}
+  <link href="{% static 'css/common.css' %}?v=52" rel="stylesheet">
+  <style>
+    .month-title-detail-table {
+      white-space: nowrap;
+    }
+
+    .month-title-detail-list-wrap {
+      overflow-x: auto;
+      overflow-y: visible;
+    }
+
+    .month-title-detail-viewport {
+      height: auto;
+      max-height: none;
+      overflow: visible;
+    }
+
+    .month-title-detail-viewport > .row {
+      height: auto;
+    }
+
+    .month-title-detail-main {
+      display: block;
+      height: auto;
+      overflow: visible;
+    }
+
+    .month-title-detail-filter-card {
+      position: sticky;
+      top: 0.75rem;
+      z-index: 30;
+    }
+
+    .month-title-detail-card.is-bonus-search-fullscreen .month-title-detail-list-wrap {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+    }
+
+    .month-title-detail-fullscreen-mode {
+      height: calc(100vh - 1rem);
+      max-height: calc(100vh - 1rem);
+      overflow: hidden;
+    }
+
+    .month-title-detail-fullscreen-mode .month-title-detail-main {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .month-title-detail-fullscreen-mode .month-title-detail-card {
+      height: 100%;
+      margin-bottom: 0 !important;
+    }
+
+    .month-title-detail-fullscreen-mode .month-title-detail-card > .card-body {
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .month-title-detail-fullscreen-mode .month-title-detail-list-wrap {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+    }
+  </style>
+{% endblock %}
+
+{% block contents %}
+<div class="container-fluid mt-3 app-page-viewport month-title-detail-viewport {% if detail_fullscreen %}month-title-detail-fullscreen-mode{% endif %}">
+  <div class="row g-1 h-100">
+
+    {% if not detail_fullscreen %}
+      {% include "com/_sidebar_bonus_kensaku.html" with active_menu="month_title" %}
+    {% endif %}
+
+    <main class="{% if detail_fullscreen %}col-12{% else %}col-12 col-md-9 col-lg-10{% endif %} app-page-main month-title-detail-main">
+
+      {% if not detail_fullscreen %}
+      <div class="card shadow-sm mb-3 month-title-detail-filter-card">
+        <div class="card-body">
+          {% include "com/_bonus_calc_help.html" with title="【ボーナス検索 - 月タイトル詳細】" help_title="月タイトル詳細" help_key="month_title_detail" %}
+
+          <form method="get" class="bonus-search-form">
+            <div class="bonus-search-filters">
+              <div>
+                <label class="form-label mb-0 small text-muted">月期別</label>
+                <select name="kibetu" class="form-select">
+                  <option value="">月期別を選択</option>
+                  {% for obj in period_options %}
+                    <option value="{{ obj.kibetu }}"
+                            {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
+                      【{{ obj.kibetu }}】
+                      {% if obj.payment_date %}({{ obj.payment_date }}){% endif %}
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">対象会員コード</label>
+                <input type="text"
+                       name="jwoa_code"
+                       value="{{ target_jwoa_code }}"
+                       class="form-control"
+                       placeholder="例：JP00000000">
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">ライン種別</label>
+                <select name="line_type" class="form-select">
+                  <option value="">全て</option>
+                  <option value="1" {% if line_type == "1" %}selected{% endif %}>基本ライン</option>
+                  <option value="2" {% if line_type == "2" %}selected{% endif %}>収入ライン</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">ライン会員コード</label>
+                <input type="text"
+                       name="q_line_code"
+                       value="{{ q_line_code }}"
+                       class="form-control"
+                       placeholder="部分一致">
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">購入者コード</label>
+                <input type="text"
+                       name="q_payer_code"
+                       value="{{ q_payer_code }}"
+                       class="form-control"
+                       placeholder="部分一致">
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">購入者名</label>
+                <input type="text"
+                       name="q_payer_name"
+                       value="{{ q_payer_name }}"
+                       class="form-control"
+                       placeholder="部分一致">
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">表示件数</label>
+                <select name="per_page" class="form-select">
+                  <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                  <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                  <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                  <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+                </select>
+              </div>
+
+              <div class="bonus-search-actions">
+                <button type="submit" class="btn btn-primary">表示</button>
+                <a class="btn btn-outline-secondary" href="{% url 'connect:month_title_detail' %}">リセット</a>
+              </div>
+            </div>
+          </form>
+
+          <div class="selection-indicator-group mt-3">
+            {% selection_from_period selected_period empty_message="月期別を選択してください" %}
+            {% if target_jwoa_code or line_type or q_line_code or q_payer_code or q_payer_name %}
+              <div class="selection-indicator">
+                {% if target_jwoa_code %}
+                  <span class="selection-indicator__badge badge badge-pill">対象会員：{{ target_jwoa_code }}</span>
+                {% endif %}
+                {% if line_type == "1" %}
+                  <span class="selection-indicator__badge badge badge-pill">ライン種別：基本ライン</span>
+                {% elif line_type == "2" %}
+                  <span class="selection-indicator__badge badge badge-pill">ライン種別：収入ライン</span>
+                {% endif %}
+                {% if q_line_code %}
+                  <span class="selection-indicator__badge badge badge-pill">ライン会員：{{ q_line_code }}</span>
+                {% endif %}
+                {% if q_payer_code %}
+                  <span class="selection-indicator__badge badge badge-pill">購入者コード：{{ q_payer_code }}</span>
+                {% endif %}
+                {% if q_payer_name %}
+                  <span class="selection-indicator__badge badge badge-pill">購入者名：{{ q_payer_name }}</span>
+                {% endif %}
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if month_title_rows and not target_jwoa_code %}
+        <div class="card shadow-sm flex-grow-1"
+             data-bonus-search-fullscreen-card
+             style="min-height: 0;">
+          <div class="card-body d-flex flex-column" style="min-height: 0; overflow: hidden;">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="fw-bold">月タイトル一覧</div>
+              <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+                <div class="text-end"><strong>件数：{{ month_title_rows|length }} 件</strong></div>
+                <button type="button"
+                        class="btn btn-sm btn-outline-primary bonus-search-fullscreen-enter"
+                        data-bonus-search-fullscreen-enter>
+                  全画面表示
+                </button>
+                <button type="button"
+                        class="btn btn-sm btn-outline-secondary bonus-search-fullscreen-exit"
+                        data-bonus-search-fullscreen-exit>
+                  全画面を閉じる
+                </button>
+              </div>
+            </div>
+
+            <div class="table-responsive flex-grow-1" style="min-height: 0; overflow-x: auto; overflow-y: auto;">
+              <table class="table table-bordered table-sm align-middle mb-0 month-title-detail-table">
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                  <tr>
+                    <th class="text-center">期別</th>
+                    <th class="text-center">会員コード</th>
+                    <th class="text-center">会員名</th>
+                    <th class="text-center">収入ライン系列BV</th>
+                    <th class="text-center">基本ライン系列BV</th>
+                    <th class="text-center">タイトル</th>
+                    <th class="text-center">決済時間</th>
+                    <th class="text-center">詳細</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for r in month_title_rows %}
+                    <tr>
+                      <td>{{ r.kibetu }}</td>
+                      <td>{{ r.jwoa_code }}</td>
+                      <td>{{ r.jwoa_name }}</td>
+                      <td class="text-end">{{ r.income_line_bv|intcomma }}</td>
+                      <td class="text-end">{{ r.basic_line_bv|intcomma }}</td>
+                      <td class="fw-bold text-primary">{{ r.title_name }}</td>
+                      <td>{{ r.updated_at }}</td>
+                      <td class="text-center">
+                        <a class="btn btn-sm btn-outline-primary"
+                           href="{% url 'connect:month_title_detail' %}?kibetu={{ r.kibetu|urlencode }}&jwoa_code={{ r.jwoa_code|urlencode }}">
+                          詳細
+                        </a>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      {% elif title_result %}
+        {% if not detail_fullscreen %}
+        <div class="card shadow-sm mb-3">
+          <div class="card-body">
+            <div class="fw-bold mb-2">対象月タイトル</div>
+            <div class="table-responsive">
+              <table class="table table-bordered table-sm align-middle mb-0 month-title-detail-table">
+                <thead class="table-light">
+                  <tr>
+                    <th class="text-center">期別</th>
+                    <th class="text-center">会員コード</th>
+                    <th class="text-center">会員名</th>
+                    <th class="text-center">収入ライン系列BV</th>
+                    <th class="text-center">基本ライン系列BV</th>
+                    <th class="text-center">タイトル</th>
+                    <th class="text-center">決済時間</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>{{ title_result.kibetu }}</td>
+                    <td>{{ title_result.jwoa_code }}</td>
+                    <td>{{ title_result.jwoa_name }}</td>
+                    <td class="text-end">{{ title_result.income_line_bv|intcomma }}</td>
+                    <td class="text-end">{{ title_result.basic_line_bv|intcomma }}</td>
+                    <td class="fw-bold text-primary">{{ title_result.title_name }}</td>
+                    <td>{{ title_result.updated_at }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="card shadow-sm mb-3 month-title-detail-card">
+          <div class="card-body d-flex flex-column">
+            <div class="fw-bold mb-2">ライン別集計</div>
+            {% if line_summary_rows %}
+              <div class="table-responsive mb-3">
+                <table class="table table-bordered table-sm align-middle mb-0 month-title-detail-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th class="text-center">ライン種別</th>
+                      <th class="text-center">ライン会員コード</th>
+                      <th class="text-center">ライン会員名</th>
+                      <th class="text-center">ライン合計BV</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for r in line_summary_rows %}
+                      <tr>
+                        <td class="text-center">
+                          {% if r.line_type == 1 %}
+                            <span class="badge badge-info">{{ r.line_type_label }}</span>
+                          {% else %}
+                            <span class="badge badge-success">{{ r.line_type_label }}</span>
+                          {% endif %}
+                        </td>
+                        <td>{{ r.line_code }}</td>
+                        <td>{{ r.line_name }}</td>
+                        <td class="text-end">{{ r.sum_bv|intcomma }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <p class="mb-0 text-muted">ライン別集計データがありません。</p>
+            {% endif %}
+            {% if detail_rows %}
+              <div class="list-summary mb-3">
+                <div class="list-summary__title">
+                  <span class="list-summary__marker" aria-hidden="true"></span>
+                  <span class="list-summary__text">購入者明細</span>
+                </div>
+                <p class="list-summary__count mb-0">
+                  <span class="list-summary__label">件数</span>
+                  {% if display_from %}
+                    <span class="list-summary__num">{{ display_from|intcomma }}</span><span class="list-summary__range">–</span><span class="list-summary__num">{{ display_to|intcomma }}</span><span class="list-summary__sep"> / </span><span class="list-summary__num">{{ total_count|intcomma }}</span><span class="list-summary__unit"> 件</span>
+                  {% else %}
+                    <span class="list-summary__num">{{ total_count|intcomma }}</span><span class="list-summary__unit"> 件</span>
+                  {% endif %}
+                </p>
+                <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+                  {% if detail_fullscreen %}
+                    <span class="badge badge-info">全件表示中</span>
+                    <a class="btn btn-sm btn-outline-secondary"
+                       href="{% url 'connect:month_title_detail' %}?{{ detail_normal_qs }}">
+                      全画面を閉じる
+                    </a>
+                  {% else %}
+                    <a class="btn btn-sm btn-outline-primary"
+                       href="{% url 'connect:month_title_detail' %}?{{ detail_fullscreen_qs }}">
+                      全画面表示
+                    </a>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="table-responsive month-title-detail-list-wrap mt-2">
+                <table class="table table-bordered table-sm align-middle mb-0 month-title-detail-table">
+                  <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                    <tr>
+                      <th class="text-center">ライン種別</th>
+                      <th class="text-center">ライン会員コード</th>
+                      <th class="text-center">ライン会員名</th>
+                      <th class="text-center">購入者コード</th>
+                      <th class="text-center">購入者名</th>
+                      <th class="text-center">注文番号</th>
+                      <th class="text-center">注文区分</th>
+                      <th class="text-center">ボーナス支払日</th>
+                      <th class="text-center">階層</th>
+                      <th class="text-center">計算BV</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for r in detail_rows %}
+                      <tr>
+                        <td class="text-center">
+                          {% if r.line_type == 1 %}
+                            <span class="badge badge-info">{{ r.line_type_label }}</span>
+                          {% else %}
+                            <span class="badge badge-success">{{ r.line_type_label }}</span>
+                          {% endif %}
+                        </td>
+                        <td>{{ r.line_code }}</td>
+                        <td>{{ r.line_name }}</td>
+                        <td>{{ r.payer_code }}</td>
+                        <td>{{ r.payer_name }}</td>
+                        <td>{{ r.order_code }}</td>
+                        <td>{{ r.order_type_name }}</td>
+                        <td>{{ r.bonus_payment_date|default:"" }}</td>
+                        <td class="text-end">{{ r.lvl }}</td>
+                        <td class="text-end">{{ r.sum_bv|intcomma }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+              {% if not detail_fullscreen %}
+                {% include "com/_pagination.html" %}
+              {% endif %}
+            {% else %}
+              <p class="mb-0 text-muted">購入者明細データがありません。</p>
+            {% endif %}
+          </div>
+        </div>
+      {% else %}
+        <div class="card shadow-sm">
+          <div class="card-body">
+            {% if selected_kibetu and target_jwoa_code %}
+              <p class="mb-0 text-muted">対象会員の月タイトル登録データがありません。</p>
+            {% elif selected_kibetu %}
+              <p class="mb-0 text-muted">この期間のデータはありません。</p>
+            {% else %}
+              <p class="mb-0 text-muted">月期別を選択して「表示」を押してください。対象会員コードを入力すると詳細を表示します。</p>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
+
+    </main>
+  </div>
+</div>
+{% include "com/_bonus_search_fullscreen_assets.html" %}
+{% endblock %}

@@ -71,6 +71,16 @@
                      value="{{ introducer_name }}" placeholder="部分一致">
             </div>
 
+            <div>
+              <label class="form-label mb-0 small text-muted">マッチングレベル</label>
+              <select name="matching_level" class="form-control">
+                <option value="">すべて</option>
+                <option value="1" {% if matching_level == "1" %}selected{% endif %}>1</option>
+                <option value="2" {% if matching_level == "2" %}selected{% endif %}>2</option>
+                <option value="3" {% if matching_level == "3" %}selected{% endif %}>3</option>
+              </select>
+            </div>
+
             <div class="bonus-search-actions">
               <button type="submit" class="btn btn-primary">表示</button>
               <a class="btn btn-outline-secondary" href="{% url 'connect:s_matching_bonus' %}">リセット</a>
@@ -87,13 +97,16 @@
             {% else %}
               <span class="selection-indicator__badge selection-indicator__badge--kibetu-none badge badge-pill">期別：指定なし</span>
             {% endif %}
-          {% if introducer_code or introducer_name %}
+          {% if introducer_code or introducer_name or matching_level %}
           <div class="selection-indicator">
             {% if introducer_code %}
               <span class="selection-indicator__badge selection-indicator__badge--introducer-code badge badge-pill">紹介者コード：{{ introducer_code }}</span>
             {% endif %}
             {% if introducer_name %}
               <span class="selection-indicator__badge selection-indicator__badge--introducer-name badge badge-pill">紹介者名：{{ introducer_name }}</span>
+            {% endif %}
+            {% if matching_level %}
+              <span class="selection-indicator__badge badge badge-pill">マッチングレベル：{{ matching_level }}</span>
             {% endif %}
           </div>
           {% endif %}
@@ -162,11 +175,11 @@
             </div>
 
           {% else %}
-            {% if selected_kibetu_list or introducer_code or introducer_name %}
+            {% if selected_kibetu_list or introducer_code or introducer_name or matching_level %}
               <p class="mb-0">この条件のデータはありません。</p>
             {% else %}
               <p class="mb-0 text-muted">
-                期別、紹介者コード、紹介者名のいずれかを入力して「表示」を押してください。
+                期別、紹介者コード、紹介者名、マッチングレベルのいずれかを入力して「表示」を押してください。
               </p>
             {% endif %}
           {% endif %}

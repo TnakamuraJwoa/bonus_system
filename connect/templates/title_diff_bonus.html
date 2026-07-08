@@ -82,15 +82,15 @@
               <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                   <tr>
-                    <th class="text-center">root_title_id</th>
+                    <th class="text-center">root_title_name</th>
                     <th class="text-center">root_bonus_rate</th>
                     <th class="text-center">root_jwoa_code</th>
                     <th class="text-center">root_name</th>
-                    <th class="text-center">up_title_id</th>
+                    <th class="text-center">up_title_name</th>
                     <th class="text-center">up_bonus_rate</th>
                     <th class="text-center">up_jwoa_code</th>
                     <th class="text-center">up_jwoa_name</th>
-                    <th class="text-center">down_title_id</th>
+                    <th class="text-center">down_title_name</th>
                     <th class="text-center">down_bonus_rate</th>
                     <th class="text-center">down_jwoa_code</th>
                     <th class="text-center">down_name</th>
@@ -104,15 +104,15 @@
                 <tbody>
                   {% for r in rows %}
                     <tr>
-                      <td>{{ r.root_title_id }}</td>
+                      <td>{{ r.root_title_name }}</td>
                       <td>{{ r.root_bonus_rate }}</td>
                       <td>{{ r.root_jwoa_code }}</td>
                       <td>{{ r.root_name }}</td>
-                      <td class="text-end">{{ r.up_title_id }}</td>
+                      <td>{{ r.up_title_name }}</td>
                       <td class="text-end">{{ r.up_bonus_rate }}</td>
                       <td>{{ r.up_jwoa_code }}</td>
                       <td>{{ r.up_jwoa_name }}</td>
-                      <td class="text-end">{{ r.down_title_id }}</td>
+                      <td>{{ r.down_title_name }}</td>
                       <td class="text-end">{{ r.down_bonus_rate }}</td>
                       <td>{{ r.down_jwoa_code }}</td>
                       <td>{{ r.down_name }}</td>
