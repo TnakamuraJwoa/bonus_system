@@ -34,7 +34,7 @@ MENU_FEATURES = (
         "users",
         ("member_month_title_search",),
     ),
-    MenuFeature("title_user", "ピンタイトル一覧", "users", ("title_user", "title_user_export")),
+    MenuFeature("title_user", "最高ピンタイトル一覧", "users", ("title_user", "title_user_export")),
     MenuFeature(
         "active_user_search",
         "アクティブ会員検索",

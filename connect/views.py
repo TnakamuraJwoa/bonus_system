@@ -2752,7 +2752,7 @@ LIMIT 1
     def _update_user_title(self, jmoa_code: str, title_id: int) -> int:
         with connections["rds"].cursor() as cursor:
             logger.info(
-                "ピンタイトル一覧からタイトルIDを更新します。jmoa_code=%s title_id=%s",
+                "最高ピンタイトル一覧からタイトルIDを更新します。jmoa_code=%s title_id=%s",
                 jmoa_code,
                 title_id,
             )
@@ -2818,7 +2818,7 @@ WHERE jmoa_code = %s
             with transaction.atomic(using="rds"):
                 updated_count = self._update_user_title(jmoa_code, title_id)
         except Exception as e:
-            logger.exception("ピンタイトル一覧のタイトルID更新エラー")
+            logger.exception("最高ピンタイトル一覧のタイトルID更新エラー")
             messages.error(request, f"タイトルID更新中にエラーが発生しました: {e}")
             return redirect(next_url)
 
@@ -2834,7 +2834,7 @@ WHERE jmoa_code = %s
             )
             record_change_audit(
                 request,
-                screen_name="ピンタイトル一覧",
+                screen_name="最高ピンタイトル一覧",
                 action_type="update",
                 target_table="user_titles",
                 target_pk=jmoa_code,
@@ -2919,7 +2919,7 @@ ORDER BY ut.title_id, ut.jmoa_code
         """
 
         wb = openpyxl.Workbook(write_only=True)
-        ws = wb.create_sheet("ピンタイトル一覧")
+        ws = wb.create_sheet("最高ピンタイトル一覧")
         ws.append(["jmoa_code", "jwoa_name", "title_id", "title_name", "update_date"])
 
         with connections["rds"].cursor() as cursor:
