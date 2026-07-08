@@ -17,6 +17,19 @@
     line-height: 1.1;
   }
 
+  .repurchase-last-month-page {
+    height: auto !important;
+    max-height: none !important;
+    min-height: calc(100vh - var(--app-navbar-height) - var(--app-footer-height) - 2rem);
+    overflow-y: visible !important;
+    padding-bottom: 1rem;
+  }
+
+  .repurchase-last-month-page .list-page-main {
+    height: auto;
+    overflow: visible;
+  }
+
   .repurchase-register-sections {
     display: grid;
     grid-template-columns: minmax(520px, 1.4fr) minmax(280px, 0.8fr);
@@ -63,6 +76,12 @@
     border-left: 4px solid #0ea5e9;
   }
 
+  .repurchase-registered-table-wrap {
+    max-height: 28vh !important;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+  }
+
   .repurchase-registered-table {
     white-space: nowrap;
     min-width: max-content;
@@ -90,7 +109,7 @@
 {% endblock %}
 
 {% block contents %}
-<div class="container-fluid mt-3 list-page-viewport">
+<div class="container-fluid mt-3 list-page-viewport repurchase-last-month-page">
 
   <div class="row g-1 h-100">
 
@@ -295,7 +314,7 @@
 
           {% if registered_edit_searched %}
             {% if registered_edit_rows %}
-              <div class="table-responsive">
+              <div class="table-responsive repurchase-registered-table-wrap">
                 <table class="table table-bordered table-sm align-middle mb-0 repurchase-registered-table">
                   <thead class="table-light">
                     <tr>
