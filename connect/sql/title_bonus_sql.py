@@ -1,34 +1,39 @@
 TITLE_BONUS_SQL = """
 WITH RECURSIVE
 
--- (taitle 当月購入情報)
-T_this_month_purchase_info_list as (
+-- タイトルボーナス対象売上 x
+-- 初回購入BV + ランクアップ購入BV + 50BV再購入 + 50BV特別対応
+title_bonus_target_purchase_list as (
 SELECT
-    p.*,
+    p.jwoa_code,
+    SUM(
+        CASE
+            WHEN p.order_type IN (101, 105)
+            THEN LEAST(IFNULL(p.bv, 0), 50)
 
+            WHEN p.order_type IN (102, 103)
+            THEN IFNULL(p.bv, 0)
+
+            ELSE 0
+        END
+    ) AS sum_bv
+FROM bonus_db.purchase_info_list AS p
+WHERE p.order_type IN (101, 102, 103, 105)
+  AND p.register_year = %s
+  AND p.register_month = %s
+GROUP BY
+    p.jwoa_code
+HAVING SUM(
     CASE
-        WHEN p.order_type = 101
+        WHEN p.order_type IN (101, 105)
         THEN LEAST(IFNULL(p.bv, 0), 50)
 
-        ELSE IFNULL(p.bv, 0)
-    END AS custom_bv
+        WHEN p.order_type IN (102, 103)
+        THEN IFNULL(p.bv, 0)
 
-FROM bonus_db.purchase_info_list AS p
-WHERE p.register_year = %s
-  AND p.register_month = %s
-),
-
--- (taitle 当月購入情報)合計
-T_sum_this_month_purchase_info_list as (
-SELECT
-    jwoa_code,
-    send_bv_name,
-    SUM(custom_bv) AS sum_bv
-FROM T_this_month_purchase_info_list
-GROUP BY
-    jwoa_code,
-    send_bv_name
-HAVING SUM(custom_bv) > 0
+        ELSE 0
+    END
+) > 0
 ),
 
 -- タイトル結果（月タイトル登録済みデータを参照）
@@ -167,36 +172,90 @@ JOIN purchase_active  AS b
   ON a.jwoa_code = b.jwoa_code
 ),
 
--- ３スターダイヤ以上でアクティブ + 紹介者
-active_three_star_dia_with_intro as (
+-- ３スターダイヤ以上でアクティブ + 直下傘下組織
+active_three_star_dia_with_placement as (
     SELECT
         ats.jwoa_code AS root_jmoa_code,
         ats.jwoa_name AS root_name,
-        u.introducer_code,
+        u.jmoa_code AS line_jwoa_code,
+        u.send_bv_name AS line_name,
         u.jmoa_code AS down_jwoa_code,
         u.send_bv_name AS down_name,
         1 AS tree_level
     FROM active_three_star_dia AS ats
     JOIN bonus_db.users AS u
-      ON u.introducer_code = ats.jwoa_code
+      ON u.placement_code = ats.jwoa_code
 ),
 
--- active_three_star_dia_with_intro を起点に上位者で下を見る
-introducer_down_tree AS (
-
-    -- 1階層目：直紹介
+-- 直下傘下組織の全員を上位者ツリーでたどる
+placement_line_tree AS (
     SELECT
         root_jmoa_code,
         root_name,
-        introducer_code AS up_jwoa_code,
+        line_jwoa_code,
+        line_name,
         down_jwoa_code,
         down_name,
-        tree_level,
+        tree_level
+    FROM active_three_star_dia_with_placement
 
-        0 AS match_level,
-        0 AS matched_flg
+    UNION ALL
 
-    FROM active_three_star_dia_with_intro
+    SELECT
+        t.root_jmoa_code,
+        t.root_name,
+        t.line_jwoa_code,
+        t.line_name,
+        u.jmoa_code AS down_jwoa_code,
+        u.send_bv_name AS down_name,
+        t.tree_level + 1 AS tree_level
+    FROM placement_line_tree AS t
+    JOIN bonus_db.users AS u
+      ON u.placement_code = t.down_jwoa_code
+    WHERE t.tree_level < 10000
+),
+
+-- 直下傘下組織ごとのタイトルボーナス対象売上 x
+placement_line_sales AS (
+    SELECT
+        t.root_jmoa_code,
+        t.line_jwoa_code,
+        SUM(IFNULL(p.sum_bv, 0)) AS sum_bv
+    FROM placement_line_tree AS t
+    LEFT JOIN title_bonus_target_purchase_list AS p
+      ON t.down_jwoa_code = p.jwoa_code
+    GROUP BY
+        t.root_jmoa_code,
+        t.line_jwoa_code
+),
+
+-- active_three_star_dia_with_placement を起点に上位者ツリーで下を見る
+placement_down_tree AS (
+
+    -- 1階層目：直下傘下組織
+    SELECT
+        a.root_jmoa_code,
+        a.root_name,
+        a.line_jwoa_code,
+        a.line_name,
+        a.root_jmoa_code AS up_jwoa_code,
+        a.down_jwoa_code,
+        a.down_name,
+        a.tree_level,
+
+        CASE
+            WHEN ats.jwoa_code IS NOT NULL THEN 1
+            ELSE 0
+        END AS match_level,
+
+        CASE
+            WHEN ats.jwoa_code IS NOT NULL THEN 1
+            ELSE 0
+        END AS matched_flg
+
+    FROM active_three_star_dia_with_placement AS a
+    LEFT JOIN active_three_star_dia AS ats
+      ON ats.jwoa_code = a.down_jwoa_code
 
     UNION ALL
 
@@ -204,6 +263,8 @@ introducer_down_tree AS (
     SELECT
         t.root_jmoa_code,
         t.root_name,
+        t.line_jwoa_code,
+        t.line_name,
         t.down_jwoa_code AS up_jwoa_code,
         u.jmoa_code AS down_jwoa_code,
         u.send_bv_name AS down_name,
@@ -220,10 +281,10 @@ introducer_down_tree AS (
             ELSE 0
         END AS matched_flg
 
-    FROM introducer_down_tree AS t
+    FROM placement_down_tree AS t
 
     JOIN bonus_db.users AS u
-      ON u.introducer_code = t.down_jwoa_code
+      ON u.placement_code = t.down_jwoa_code
 
     LEFT JOIN active_three_star_dia AS ats
       ON ats.jwoa_code = u.jmoa_code
@@ -237,20 +298,16 @@ match_level AS (
 SELECT
     root_jmoa_code,
     root_name,
+    line_jwoa_code,
+    line_name,
     up_jwoa_code,
     down_jwoa_code,
     down_name,
     tree_level,
     match_level,
     matched_flg
-FROM introducer_down_tree
-WHERE
-    tree_level = 1
-    OR
-    (
-        tree_level >= 2
-        AND matched_flg = 1
-    )
+FROM placement_down_tree
+WHERE matched_flg = 1
 ORDER BY
     root_jmoa_code,
     match_level,
@@ -324,8 +381,9 @@ SELECT
 
 FROM match_level AS a
 
-LEFT JOIN T_sum_this_month_purchase_info_list AS b
-  ON a.down_jwoa_code = b.jwoa_code
+LEFT JOIN placement_line_sales AS b
+  ON a.root_jmoa_code = b.root_jmoa_code
+ AND a.line_jwoa_code = b.line_jwoa_code
 
 LEFT JOIN title_result AS c
   ON a.root_jmoa_code = c.jwoa_code
