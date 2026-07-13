@@ -1,0 +1,988 @@
+{% extends 'base.html' %}
+{% load humanize static custom_filters %}
+
+{% block head %}
+  <link href="{% static 'css/common.css' %}?v=52" rel="stylesheet">
+  <style>
+    .title-bonus-detail-table {
+      width: max-content;
+      min-width: 100%;
+      white-space: nowrap;
+    }
+
+    .title-bonus-detail-list-wrap {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow-x: auto;
+      overflow-y: visible;
+    }
+
+    .title-bonus-team-card-body {
+      min-width: 0;
+    }
+
+    .title-bonus-detail-viewport {
+      height: auto;
+      max-height: none;
+      overflow: visible;
+    }
+
+    .title-bonus-detail-viewport > .row {
+      height: auto;
+    }
+
+    .title-bonus-detail-main {
+      display: block;
+      height: auto;
+      overflow: visible;
+    }
+
+    .title-bonus-detail-filter-card {
+      position: sticky;
+      top: 0.75rem;
+      z-index: 30;
+    }
+
+    .title-bonus-detail-summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: .75rem;
+    }
+
+    .title-bonus-detail-summary__item {
+      border: 1px solid #e5e7eb;
+      border-radius: .5rem;
+      padding: .75rem;
+      background: #fff;
+    }
+
+    .title-bonus-detail-summary__label {
+      color: #64748b;
+      font-size: .8rem;
+      margin-bottom: .25rem;
+    }
+
+    .title-bonus-detail-summary__value {
+      font-weight: 700;
+      font-size: 1.05rem;
+    }
+
+    .bonus-search-fullscreen-card.is-bonus-search-fullscreen .title-bonus-detail-list-wrap {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+    }
+
+    .bonus-search-fullscreen-card.is-bonus-search-fullscreen > .title-bonus-team-card-body {
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+
+    .bonus-search-fullscreen-card.is-bonus-search-fullscreen .placement-tree-panel {
+      min-height: 320px;
+      max-height: 48vh;
+    }
+
+    .bonus-search-fullscreen-card.is-bonus-search-fullscreen .title-bonus-detail-list-wrap {
+      min-height: 260px;
+      max-height: 48vh;
+    }
+
+    .bonus-search-fullscreen-card.is-bonus-search-fullscreen .title-bonus-team-card-body.is-tree-hidden .title-bonus-detail-list-wrap {
+      max-height: 70vh;
+    }
+
+    .placement-tree-panel {
+      flex: 1 1 auto;
+      min-height: 460px;
+      overflow: auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 0.75rem;
+      background: #fafafa;
+    }
+
+    .title-bonus-tree-card.is-tree-hidden [data-title-bonus-tree-body] {
+      display: none;
+    }
+
+    .title-bonus-tree-card [data-title-bonus-tree-show] {
+      display: none;
+    }
+
+    .title-bonus-tree-card.is-tree-hidden [data-title-bonus-tree-show] {
+      display: inline-block;
+    }
+
+    .title-bonus-tree-card.is-tree-hidden [data-title-bonus-tree-hide] {
+      display: none;
+    }
+
+    .placement-tree-panel.is-tree-pseudo-fullscreen {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483000;
+      width: 100vw;
+      height: 100vh;
+      padding: 1rem;
+      background: #f8fafc;
+      border-radius: 0;
+      box-sizing: border-box;
+      margin: 0 !important;
+      transform: none !important;
+    }
+
+    .placement-tree-panel.is-tree-pseudo-fullscreen .placement-tree-fullscreen-header {
+      display: flex;
+    }
+
+    .placement-tree-fullscreen-header {
+      display: none;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid #e5e7eb;
+      background: #f8fafc;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    .placement-tree-fullscreen-header__actions {
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-end;
+      gap: 0.5rem;
+      margin-left: auto;
+      flex-wrap: wrap;
+    }
+
+    .placement-tree-node__row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.15rem;
+      padding: 0.2rem 0.35rem;
+      border-radius: 6px;
+    }
+
+    .placement-tree-node__row:hover {
+      background: #f1f5f9;
+    }
+
+    .placement-tree-node--focus > .placement-tree-node__row {
+      background: #dbeafe;
+      border: 1px solid #93c5fd;
+    }
+
+    .placement-tree-node--ancestor > .placement-tree-node__row {
+      border-left: 3px solid #94a3b8;
+    }
+
+    .placement-tree-node--searched > .placement-tree-node__row {
+      background: #fef3c7;
+      border: 1px solid #f59e0b;
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.18);
+    }
+
+    .placement-tree-search {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+    }
+
+    .placement-tree-search input {
+      width: 220px;
+    }
+
+    .placement-tree-search__message {
+      flex-basis: 100%;
+      font-size: 0.8rem;
+    }
+
+    .placement-tree-db-path {
+      border: 1px solid #fde68a;
+      background: #fffbeb;
+      border-radius: 8px;
+      padding: 0.65rem 0.75rem 0;
+      margin-bottom: 0.75rem;
+      max-height: 11rem;
+      overflow: hidden;
+      flex: 0 0 auto;
+      display: flex;
+      flex-direction: column;
+      min-height: 8rem;
+    }
+
+    .placement-tree-db-path__list {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.35rem;
+      margin-top: 0.45rem;
+      max-height: 6.5rem;
+      overflow: auto;
+      padding: 0.15rem 0.2rem 0.25rem 0;
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+
+    .placement-tree-db-path__resize {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      margin: 0.45rem -0.75rem 0;
+      padding: 0.35rem 0.5rem;
+      border-top: 1px dashed #fbbf24;
+      background: #fef3c7;
+      color: #92400e;
+      cursor: ns-resize;
+      font-size: 0.78rem;
+      user-select: none;
+      flex: 0 0 auto;
+      position: sticky;
+      bottom: 0;
+      z-index: 1;
+    }
+
+    .placement-tree-db-path__resize::before {
+      content: "";
+      width: 2rem;
+      height: 0.25rem;
+      border-top: 1px solid #d97706;
+      border-bottom: 1px solid #d97706;
+    }
+
+    body.is-tree-path-resizing {
+      cursor: ns-resize;
+      user-select: none;
+    }
+
+    .placement-tree-db-path__item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      border: 1px solid #dbeafe;
+      background: #eff6ff;
+      border-radius: 999px;
+      padding: 0.25rem 0.55rem;
+      font-size: 0.82rem;
+      white-space: nowrap;
+    }
+
+    .placement-tree-db-path__item--target {
+      border-color: #f59e0b;
+      background: #fef3c7;
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.16);
+    }
+
+    .placement-tree-db-path__arrow {
+      color: #94a3b8;
+      font-weight: 700;
+    }
+
+    .placement-tree-toggle {
+      width: 1.2rem;
+      text-align: center;
+      line-height: 1;
+      color: #475569;
+    }
+
+    .placement-tree-toggle-spacer {
+      display: inline-block;
+      width: 1.2rem;
+    }
+
+    .placement-tree-children {
+      border-left: 1px dashed #cbd5e1;
+      margin-left: 0.55rem;
+    }
+
+    .placement-tree-children.is-collapsed {
+      display: none;
+    }
+
+    body.is-tree-pseudo-fullscreen-active {
+      overflow: hidden;
+    }
+
+    body.is-tree-pseudo-fullscreen-active #wrapper {
+      overflow: visible;
+    }
+  </style>
+{% endblock %}
+
+{% block contents %}
+<div class="container-fluid mt-3 app-page-viewport title-bonus-detail-viewport">
+  <div class="row g-1">
+
+    {% include "com/_sidebar_bonus_kensaku.html" with active_menu="title_bonus_detail" %}
+
+    <main class="col-12 col-md-9 col-lg-10 app-page-main title-bonus-detail-main">
+
+      <div class="card shadow-sm mb-3 title-bonus-detail-filter-card">
+        <div class="card-body">
+          <div class="bonus-search-header">
+            <h5 class="page-title mb-0">【ボーナス検索 - タイトルボーナス詳細】</h5>
+          </div>
+
+          <form method="get" class="bonus-search-form">
+            <div class="bonus-search-filters">
+              <div>
+                <label class="form-label mb-0 small text-muted">期別</label>
+                <select name="kibetu" class="form-select">
+                  <option value="">期別を選択</option>
+                  {% for obj in period_options %}
+                    <option value="{{ obj.kibetu }}"
+                            {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
+                      【{{ obj.kibetu }}】
+                      {% if obj.payment_date %}({{ obj.payment_date }}){% endif %}
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">root会員ID</label>
+                <input type="text"
+                       name="root_jwoa_code"
+                       value="{{ root_jwoa_code }}"
+                       class="form-control"
+                       placeholder="部分一致">
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">直下ライン会員ID</label>
+                <input type="text"
+                       name="line_jwoa_code"
+                       value="{{ line_jwoa_code }}"
+                       class="form-control"
+                       placeholder="部分一致">
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">down会員ID</label>
+                <input type="text"
+                       name="down_jwoa_code"
+                       value="{{ down_jwoa_code }}"
+                       class="form-control"
+                       placeholder="部分一致">
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">match_level</label>
+                <select name="match_level" class="form-select">
+                  <option value="">全て</option>
+                  {% for level in match_level_options %}
+                    <option value="{{ level }}" {% if match_level == level %}selected{% endif %}>{{ level }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div>
+                <label class="form-label mb-0 small text-muted">表示件数</label>
+                <select name="per_page" class="form-select">
+                  <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                  <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                  <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                  <option value="500" {% if per_page == 500 %}selected{% endif %}>500</option>
+                </select>
+              </div>
+
+              <div class="bonus-search-actions">
+                <button type="submit" class="btn btn-primary">表示</button>
+                <a class="btn btn-outline-secondary" href="{% url 'connect:title_bonus_detail' %}">リセット</a>
+              </div>
+            </div>
+          </form>
+
+          <div class="selection-indicator-group mt-3">
+            {% if selected_period %}
+              {% selection_from_period selected_period empty_message="期別を選択してください" %}
+            {% elif selected_kibetu %}
+              <div class="selection-indicator">
+                <span class="selection-indicator__badge badge badge-pill">期別：{{ selected_kibetu }}</span>
+                <span class="selection-indicator__badge badge badge-pill">月期別マスタ未登録</span>
+              </div>
+            {% else %}
+              {% selection_from_period selected_period empty_message="期別を選択してください" %}
+            {% endif %}
+            {% if root_jwoa_code or line_jwoa_code or down_jwoa_code or match_level %}
+              <div class="selection-indicator">
+                {% if root_jwoa_code %}
+                  <span class="selection-indicator__badge badge badge-pill">root会員ID：{{ root_jwoa_code }}</span>
+                {% endif %}
+                {% if line_jwoa_code %}
+                  <span class="selection-indicator__badge badge badge-pill">直下ライン会員ID：{{ line_jwoa_code }}</span>
+                {% endif %}
+                {% if down_jwoa_code %}
+                  <span class="selection-indicator__badge badge badge-pill">down会員ID：{{ down_jwoa_code }}</span>
+                {% endif %}
+                {% if match_level %}
+                  <span class="selection-indicator__badge badge badge-pill">match_level：{{ match_level }}</span>
+                {% endif %}
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      {% if selected_kibetu %}
+        <div class="card shadow-sm mb-3">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="fw-bold">発生明細</div>
+              <div class="text-end">
+                {% if total_count %}
+                  <strong>{{ display_from|intcomma }} - {{ display_to|intcomma }} / {{ total_count|intcomma }} 件</strong>
+                {% else %}
+                  <strong>件数：0 件</strong>
+                {% endif %}
+              </div>
+            </div>
+
+            {% if not selected_period %}
+              <div class="alert alert-warning py-2 mb-3">
+                この期別は月期別マスタに存在しないため、発生明細・チーム業績の再計算には月期別マスタが必要です。
+              </div>
+            {% endif %}
+
+            {% if detail_rows %}
+              <div class="table-responsive title-bonus-detail-list-wrap">
+                <table class="table table-bordered table-sm align-middle mb-0 title-bonus-detail-table">
+                  <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                    <tr>
+                      <th class="text-center">root_jwoa_code</th>
+                      <th class="text-center">root_name</th>
+                      <th class="text-center">line_jwoa_code</th>
+                      <th class="text-center">line_name</th>
+                      <th class="text-center">up_jwoa_code</th>
+                      <th class="text-center">down_jwoa_code</th>
+                      <th class="text-center">down_name</th>
+                      <th class="text-center">tree_level</th>
+                      <th class="text-center">match_level</th>
+                      <th class="text-center">title_name</th>
+                      <th class="text-center">sum_bv</th>
+                      <th class="text-center">rate</th>
+                      <th class="text-center">bonus_amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for r in detail_rows %}
+                      <tr>
+                        <td>{{ r.root_jwoa_code }}</td>
+                        <td>{{ r.root_name }}</td>
+                        <td>{{ r.line_jwoa_code }}</td>
+                        <td>{{ r.line_name }}</td>
+                        <td>{{ r.up_jwoa_code }}</td>
+                        <td>{{ r.down_jwoa_code }}</td>
+                        <td>{{ r.down_name }}</td>
+                        <td class="text-end">{{ r.tree_level }}</td>
+                        <td class="text-end">{{ r.match_level }}</td>
+                        <td>{{ r.title_name }}</td>
+                        <td class="text-end">{{ r.sum_bv|default:0|intcomma }}</td>
+                        <td class="text-end">{{ r.rate|floatformat:2 }}</td>
+                        <td class="fw-bold text-primary text-end">{{ r.bonus_amount|default:0|floatformat:2|intcomma }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+
+              {% if total_pages > 1 %}
+                <nav class="mt-3" aria-label="発生明細ページ">
+                  <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item {% if not has_prev %}disabled{% endif %}">
+                      <a class="page-link" href="?{{ base_qs }}&page={{ prev_page }}">前へ</a>
+                    </li>
+                    {% for p in pagination_pages %}
+                      {% if p %}
+                        <li class="page-item {% if p == page %}active{% endif %}">
+                          <a class="page-link" href="?{{ base_qs }}&page={{ p }}">{{ p }}</a>
+                        </li>
+                      {% else %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                      {% endif %}
+                    {% endfor %}
+                    <li class="page-item {% if not has_next %}disabled{% endif %}">
+                      <a class="page-link" href="?{{ base_qs }}&page={{ next_page }}">次へ</a>
+                    </li>
+                  </ul>
+                </nav>
+              {% endif %}
+            {% else %}
+              <p class="mb-0 text-muted">条件に一致する発生明細はありません。</p>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="card shadow-sm mb-3">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div>
+                <div class="fw-bold">直紹介者サマリ</div>
+                <div class="small text-muted">対象root会員が直接紹介している会員のタイトルとアクティブ状態です。</div>
+              </div>
+              <div class="text-end"><strong>件数：{{ direct_introducer_summary_rows|length|intcomma }} 件</strong></div>
+            </div>
+
+            {% if direct_introducer_summary_rows %}
+              <div class="table-responsive title-bonus-detail-list-wrap">
+                <table class="table table-bordered table-sm align-middle mb-0 title-bonus-detail-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th class="text-center">root_jwoa_code</th>
+                      <th class="text-center">root_name</th>
+                      <th class="text-center">紹介者コード</th>
+                      <th class="text-center">紹介者名</th>
+                      <th class="text-center">rank</th>
+                      <th class="text-center">ステータス</th>
+                      <th class="text-center">紹介者タイトル</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for r in direct_introducer_summary_rows %}
+                      <tr>
+                        <td>{{ r.root_jwoa_code }}</td>
+                        <td>{{ r.root_name }}</td>
+                        <td>{{ r.introducer_jwoa_code }}</td>
+                        <td>{{ r.introducer_name }}</td>
+                        <td class="text-center">
+                          <span class="badge {{ r.rank|rank_badge_class }}">{{ r.rank|rank_label }}</span>
+                        </td>
+                        <td class="text-center">
+                          <span class="badge {{ r.status_badge_class|default:'badge-light text-muted' }}">{{ r.status_name|default:"-" }}</span>
+                        </td>
+                        <td class="text-center">
+                          <span class="badge {{ r.title_id|rank_badge_class }}">{{ r.title_name }}</span>
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <p class="mb-0 text-muted">条件に一致する直紹介者サマリはありません。</p>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="card shadow-sm mb-3">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div>
+                <div class="fw-bold">3スター達成者サマリ</div>
+                <div class="small text-muted">タイトルボーナス計算で3スター以上として判定された会員を、紹介者Tree別に表示します。</div>
+              </div>
+              <div class="text-end"><strong>件数：{{ three_star_summary_rows|length|intcomma }} 件</strong></div>
+            </div>
+
+            {% if three_star_summary_rows %}
+              <div class="table-responsive title-bonus-detail-list-wrap">
+                <table class="table table-bordered table-sm align-middle mb-0 title-bonus-detail-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th class="text-center">root_jwoa_code</th>
+                      <th class="text-center">root_name</th>
+                      <th class="text-center">直下紹介者コード</th>
+                      <th class="text-center">直下紹介者名</th>
+                      <th class="text-center">紹介階層</th>
+                      <th class="text-center">達成者コード</th>
+                      <th class="text-center">達成者名</th>
+                      <th class="text-center">rank</th>
+                      <th class="text-center">タイトル</th>
+                      <th class="text-center">tree_level</th>
+                      <th class="text-center">match_level</th>
+                      <th class="text-center">当月アクティブ</th>
+                      <th class="text-center">前月アクティブ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for r in three_star_summary_rows %}
+                      <tr>
+                        <td>{{ r.root_jwoa_code }}</td>
+                        <td>{{ r.root_name }}</td>
+                        <td>{{ r.direct_introducer_jwoa_code|default:"-" }}</td>
+                        <td>{{ r.direct_introducer_name|default:"-" }}</td>
+                        <td class="text-end">{{ r.introducer_level|default:"-" }}</td>
+                        <td>{{ r.achiever_jwoa_code }}</td>
+                        <td>{{ r.achiever_name }}</td>
+                        <td class="text-center">
+                          <span class="badge {{ r.rank|rank_badge_class }}">{{ r.rank|rank_label }}</span>
+                        </td>
+                        <td class="text-center">
+                          <span class="badge {{ r.achiever_title_id|rank_badge_class }}">{{ r.achiever_title_name }}</span>
+                        </td>
+                        <td class="text-end">{{ r.tree_level }}</td>
+                        <td class="text-end">{{ r.match_level }}</td>
+                        <td class="text-center">
+                          {% if r.current_active_flg %}
+                            <span class="badge badge-success">アクティブ</span>
+                          {% else %}
+                            <span class="badge badge-light text-muted">非アクティブ</span>
+                          {% endif %}
+                        </td>
+                        <td class="text-center">
+                          {% if r.prev_active_flg %}
+                            <span class="badge badge-success">アクティブ</span>
+                          {% else %}
+                            <span class="badge badge-light text-muted">非アクティブ</span>
+                          {% endif %}
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <p class="mb-0 text-muted">条件に一致する3スター達成者サマリはありません。</p>
+            {% endif %}
+          </div>
+        </div>
+
+      {% endif %}
+
+        <div id="purchase-detail"
+             class="card shadow-sm mb-3"
+             data-bonus-search-fullscreen-card>
+          <div class="card-body d-flex flex-column title-bonus-team-card-body" style="min-height: 0;">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div>
+                <div class="fw-bold">{{ purchase_team_title }}</div>
+                <div class="small text-muted">{{ purchase_team_description }}</div>
+              </div>
+              <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+                <div class="text-end">
+                  {% if purchase_total_count %}
+                    <strong>{{ purchase_display_from|intcomma }} - {{ purchase_display_to|intcomma }} / {{ purchase_total_count|intcomma }} 件</strong>
+                  {% else %}
+                    <strong>件数：0 件</strong>
+                  {% endif %}
+                  <span class="text-muted small">（1ページ {{ purchase_detail_per_page|intcomma }} 件）</span>
+                </div>
+                <button type="button"
+                        class="btn btn-sm btn-outline-primary bonus-search-fullscreen-enter"
+                        data-bonus-search-fullscreen-enter>
+                  全画面表示
+                </button>
+                <button type="button"
+                        class="btn btn-sm btn-outline-secondary bonus-search-fullscreen-exit"
+                        data-bonus-search-fullscreen-exit>
+                  全画面を閉じる
+                </button>
+              </div>
+            </div>
+
+            <ul class="nav nav-tabs mb-3">
+              <li class="nav-item">
+                <a class="nav-link {% if team_type == team_type_introducer %}active{% endif %}"
+                   href="?{{ purchase_introducer_qs }}#purchase-detail">
+                  紹介者チーム業績
+                </a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link {% if team_type == team_type_placement %}active{% endif %}"
+                   href="?{{ purchase_placement_qs }}#purchase-detail">
+                  上位者チーム業績
+                </a>
+              </li>
+            </ul>
+
+            <form method="get" action="#purchase-detail" class="bonus-search-form mb-3">
+              <input type="hidden" name="kibetu" value="{{ selected_kibetu }}">
+              <input type="hidden" name="team_type" value="{{ team_type }}">
+              <input type="hidden" name="root_jwoa_code" value="{{ root_jwoa_code }}">
+              <input type="hidden" name="line_jwoa_code" value="{{ line_jwoa_code }}">
+              <input type="hidden" name="down_jwoa_code" value="{{ down_jwoa_code }}">
+              <input type="hidden" name="match_level" value="{{ match_level }}">
+              <input type="hidden" name="per_page" value="{{ per_page }}">
+
+              <div class="bonus-search-filters">
+                <div>
+                  <label class="form-label mb-0 small text-muted">期別</label>
+                  <select name="purchase_kibetu" class="form-select">
+                    <option value="">期別を選択</option>
+                    {% for obj in period_options %}
+                      <option value="{{ obj.kibetu }}"
+                              {% if obj.kibetu == purchase_kibetu %}selected{% endif %}>
+                        【{{ obj.kibetu }}】
+                        {% if obj.payment_date %}({{ obj.payment_date }}){% endif %}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </div>
+
+                <div>
+                  <label class="form-label mb-0 small text-muted">起点会員ID</label>
+                  <input type="text"
+                         name="purchase_line_jwoa_code"
+                         value="{{ purchase_line_jwoa_code }}"
+                         class="form-control"
+                         placeholder="例：JP00000000">
+                </div>
+
+                <div>
+                  <label class="form-label mb-0 small text-muted">購入者ID</label>
+                  <input type="text"
+                         name="purchase_down_jwoa_code"
+                         value="{{ purchase_down_jwoa_code }}"
+                         class="form-control"
+                         placeholder="部分一致">
+                </div>
+
+                <div>
+                  <label class="form-label mb-0 small text-muted">購入者名</label>
+                  <input type="text"
+                         name="purchase_down_name"
+                         value="{{ purchase_down_name }}"
+                         class="form-control"
+                         placeholder="部分一致">
+                </div>
+
+                <div>
+                  <label class="form-label mb-0 small text-muted">タイトル</label>
+                  <select name="purchase_title_id" class="form-select">
+                    <option value="">全て</option>
+                    {% for title in title_options %}
+                      {% if title.title_id %}
+                        <option value="{{ title.title_id }}" {% if purchase_title_id == title.title_id|stringformat:"s" %}selected{% endif %}>
+                          {{ title.title_name }}
+                        </option>
+                      {% else %}
+                        <option value="none" {% if purchase_title_id == "none" %}selected{% endif %}>
+                          タイトルなし
+                        </option>
+                      {% endif %}
+                    {% endfor %}
+                  </select>
+                </div>
+
+                <div class="bonus-search-actions">
+                  <button type="submit" class="btn btn-primary">チーム業績を絞込</button>
+                  <a class="btn btn-outline-secondary" href="?{{ purchase_reset_qs }}#purchase-detail">チーム業績条件リセット</a>
+                </div>
+              </div>
+            </form>
+
+            {% if purchase_kibetu and not purchase_period %}
+              <div class="alert alert-warning py-2 mb-3">
+                チーム業績の期別が月期別マスタに存在しません。期別を選択し直してください。
+              </div>
+            {% elif not purchase_kibetu %}
+              <div class="alert alert-info py-2 mb-3">
+                チーム業績の期別を選択して「チーム業績を絞込」を押してください。
+              </div>
+            {% endif %}
+
+            {% if purchase_line_jwoa_code %}
+              <div class="card shadow-sm mb-3 title-bonus-tree-card {% if not purchase_tree_search %}is-tree-hidden{% endif %}" data-title-bonus-tree-card data-placement-tree-scope>
+                <div class="card-body">
+                  <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                    <div>
+                      <div class="fw-bold">{{ purchase_team_tree_title }}</div>
+                      <div class="small text-muted">
+                        起点会員ID「{{ purchase_line_jwoa_code }}」の{{ purchase_team_tree_description }}
+                      </div>
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap align-items-center">
+                      <button type="button"
+                              class="btn btn-sm btn-outline-secondary"
+                              data-title-bonus-tree-hide>
+                        Treeを非表示
+                      </button>
+                      <button type="button"
+                              class="btn btn-sm btn-outline-primary"
+                              data-title-bonus-tree-show>
+                        Treeを表示
+                      </button>
+                      {% if not purchase_tree.tree_unavailable_reason %}
+                        {% if purchase_tree.tree_node_count %}
+                          <div class="text-muted small">表示ノード数：{{ purchase_tree.tree_node_count }} 件</div>
+                        {% endif %}
+                        <div class="placement-tree-search">
+                          <input type="text"
+                                 class="form-control form-control-sm"
+                                 data-tree-search-input
+                                 value="{{ purchase_tree_search|default:'' }}"
+                                 placeholder="down会員ID・down_name">
+                          <button type="button"
+                                  class="btn btn-sm btn-outline-primary"
+                                  data-tree-search-button>
+                            検索
+                          </button>
+                          <button type="button"
+                                  class="btn btn-sm btn-outline-secondary"
+                                  data-tree-path-button>
+                            経路表示
+                          </button>
+                          <span class="placement-tree-search__message text-muted" data-tree-search-message></span>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary js-tree-collapse-all">全て閉じる</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary js-tree-expand-all">全て開く</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary js-tree-fullscreen">全画面表示</button>
+                        {% if team_type == team_type_introducer %}
+                          <a class="btn btn-sm btn-outline-success"
+                             href="{% url 'connect:title_bonus_detail_tree_export' %}?{{ purchase_base_qs }}">
+                            Excel出力
+                          </a>
+                        {% endif %}
+                      {% endif %}
+                    </div>
+                  </div>
+
+                  <div data-title-bonus-tree-body>
+                    {% include "com/_placement_tree_panel.html" with tree_panel_id="titleBonusPurchaseTreePanel" tree_panel_title=purchase_team_tree_title tree_search=purchase_tree_search tree_unavailable_reason=purchase_tree.tree_unavailable_reason tree_truncated=purchase_tree.tree_truncated tree_node_count=purchase_tree.tree_node_count tree_search_path_rows=purchase_tree.tree_search_path_rows tree_search_target=purchase_tree.tree_search_target tree_search_not_found=purchase_tree.tree_search_not_found tree_ancestors=purchase_tree.tree_ancestors tree_focus=purchase_tree.tree_focus tree_children=purchase_tree.tree_children tree_ancestor_title=purchase_tree_ancestor_title tree_ancestor_badge_label=purchase_tree_ancestor_badge_label direct_badge_label=purchase_tree_direct_badge_label %}
+                  </div>
+                </div>
+              </div>
+            {% endif %}
+
+            {% if purchase_summary %}
+              <div class="title-bonus-detail-summary mb-3">
+                <div class="title-bonus-detail-summary__item">
+                  <div class="title-bonus-detail-summary__label">対象件数</div>
+                  <div class="title-bonus-detail-summary__value">{{ purchase_summary.row_count|default:0|intcomma }} 件</div>
+                </div>
+                <div class="title-bonus-detail-summary__item">
+                  <div class="title-bonus-detail-summary__label">購入者数</div>
+                  <div class="title-bonus-detail-summary__value">{{ purchase_summary.buyer_count|default:0|intcomma }} 人</div>
+                </div>
+                <div class="title-bonus-detail-summary__item">
+                  <div class="title-bonus-detail-summary__label">original_bv 合計</div>
+                  <div class="title-bonus-detail-summary__value">{{ purchase_summary.original_bv_total|default:0|floatformat:0|intcomma }}</div>
+                </div>
+                <div class="title-bonus-detail-summary__item">
+                  <div class="title-bonus-detail-summary__label">bv_max50 合計</div>
+                  <div class="title-bonus-detail-summary__value">{{ purchase_summary.bv_max50_total|default:0|floatformat:0|intcomma }}</div>
+                </div>
+                <div class="title-bonus-detail-summary__item">
+                  <div class="title-bonus-detail-summary__label">50BV上限差分</div>
+                  <div class="title-bonus-detail-summary__value">{{ purchase_summary.bv_limit_diff|default:0|floatformat:0|intcomma }}</div>
+                </div>
+              </div>
+            {% endif %}
+
+            {% if purchase_detail_rows %}
+              <div class="table-responsive title-bonus-detail-list-wrap">
+                <table class="table table-bordered table-sm align-middle mb-0 title-bonus-detail-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th class="text-center">root_jwoa_code</th>
+                      <th class="text-center">{{ purchase_line_header }}</th>
+                      <th class="text-center">down_jwoa_code</th>
+                      <th class="text-center">down_name</th>
+                      <th class="text-center">タイトル</th>
+                      <th class="text-center">tree_level</th>
+                      <th class="text-center">order_code</th>
+                      <th class="text-center">order_type</th>
+                      <th class="text-center">original_bv</th>
+                      <th class="text-center">bv_max50</th>
+                      <th class="text-center">bonus_payment_date</th>
+                      <th class="text-center">登録年月</th>
+                      <th class="text-center">注文年月</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for r in purchase_detail_rows %}
+                      <tr>
+                        <td>{{ r.root_jwoa_code }}</td>
+                        <td>{{ r.line_jwoa_code }}</td>
+                        <td>{{ r.down_jwoa_code }}</td>
+                        <td>{{ r.down_name }}</td>
+                        <td class="text-center">
+                          <span class="badge {{ r.title_id|rank_badge_class }}">{{ r.title_name }}</span>
+                        </td>
+                        <td class="text-end">{{ r.tree_level }}</td>
+                        <td>{{ r.order_code }}</td>
+                        <td>{{ r.order_type }} {{ r.order_type_name }}</td>
+                        <td class="text-end">{{ r.original_bv|default:0|intcomma }}</td>
+                        <td class="fw-bold text-end">{{ r.bv_max50|default:0|intcomma }}</td>
+                        <td>{{ r.bonus_payment_date }}</td>
+                        <td>{{ r.register_year }}/{{ r.register_month }}</td>
+                        <td>{{ r.order_year }}/{{ r.order_month }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+
+              {% if purchase_total_pages > 1 %}
+                <nav class="mt-3" aria-label="{{ purchase_pagination_label }}">
+                  <ul class="pagination pagination-sm mb-0 justify-content-end">
+                    <li class="page-item {% if not purchase_has_prev %}disabled{% endif %}">
+                      <a class="page-link" href="?{{ purchase_base_qs }}&purchase_page={{ purchase_prev_page }}#purchase-detail">前へ</a>
+                    </li>
+                    {% for p in purchase_pagination_pages %}
+                      {% if p %}
+                        <li class="page-item {% if p == purchase_page %}active{% endif %}">
+                          <a class="page-link" href="?{{ purchase_base_qs }}&purchase_page={{ p }}#purchase-detail">{{ p }}</a>
+                        </li>
+                      {% else %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                      {% endif %}
+                    {% endfor %}
+                    <li class="page-item {% if not purchase_has_next %}disabled{% endif %}">
+                      <a class="page-link" href="?{{ purchase_base_qs }}&purchase_page={{ purchase_next_page }}#purchase-detail">次へ</a>
+                    </li>
+                  </ul>
+                </nav>
+              {% endif %}
+            {% else %}
+              <p class="mb-0 text-muted">{{ purchase_empty_message }}</p>
+            {% endif %}
+          </div>
+        </div>
+
+    </main>
+  </div>
+</div>
+{% include "com/_bonus_search_fullscreen_assets.html" %}
+{% endblock %}
+
+{% block script %}
+<div id="titleBonusPurchaseTreeScriptConfig"
+     data-tree-panel-id="titleBonusPurchaseTreePanel"
+     data-tree-root-param="purchase_line_jwoa_code"
+     data-tree-type=""
+     data-tree-type-param="tree_type"
+     data-tree-set-view="0"
+     hidden></div>
+{% include "com/_placement_tree_scripts.html" with tree_script_config_id="titleBonusPurchaseTreeScriptConfig" %}
+<script>
+  (function () {
+    document.querySelectorAll("[data-title-bonus-tree-card]").forEach(function (treeCard) {
+      var teamCardBody = treeCard.closest(".title-bonus-team-card-body");
+      var hideButton = treeCard.querySelector("[data-title-bonus-tree-hide]");
+      var showButton = treeCard.querySelector("[data-title-bonus-tree-show]");
+
+      function setTreeVisible(isVisible) {
+        treeCard.classList.toggle("is-tree-hidden", !isVisible);
+        if (teamCardBody) {
+          teamCardBody.classList.toggle("is-tree-hidden", !isVisible);
+        }
+      }
+
+      if (hideButton) {
+        hideButton.addEventListener("click", function () {
+          setTreeVisible(false);
+        });
+      }
+
+      if (showButton) {
+        showButton.addEventListener("click", function () {
+          setTreeVisible(true);
+        });
+      }
+
+      setTreeVisible(!treeCard.classList.contains("is-tree-hidden"));
+    });
+  })();
+</script>
+{% endblock %}

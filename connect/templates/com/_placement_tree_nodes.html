@@ -23,6 +23,11 @@
       {% if node.is_direct_introducer %}
         <span class="badge badge-warning ml-1">{{ direct_badge_label|default:"紹介者" }}</span>
       {% endif %}
+      {% for badge in node.purchase_badges %}
+        <span class="badge {{ badge.badge_class|default:'badge-secondary' }} ml-1">
+          {{ badge.order_type }} {{ badge.order_type_name }} / {{ badge.bv_max50|floatformat:0 }}BV
+        </span>
+      {% endfor %}
       {% if node.show_tree_bonus_badges %}
         {% if node.basic_acquired_flg %}
           <span class="badge badge-danger ml-1">ベーシック取得</span>

@@ -87,7 +87,12 @@ MENU_FEATURES = (
         ("matching_bonus_tree",),
     ),
     MenuFeature("s_month_title", "月タイトル（検索）", "bonus_search", ("s_month_title", "month_title_detail")),
-    MenuFeature("s_title_bonus", "タイトルボーナス（検索）", "bonus_search", ("s_title_bonus",)),
+    MenuFeature(
+        "s_title_bonus",
+        "タイトルボーナス（検索）",
+        "bonus_search",
+        ("s_title_bonus", "title_bonus_detail"),
+    ),
     MenuFeature(
         "s_title_diff_bonus",
         "タイトル差額ボーナス（検索）",
