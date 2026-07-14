@@ -102,8 +102,8 @@ repurchase_bv as (
         GREATEST(SUM(IFNULL(p.bv, 0)) - 50, 0) AS over_bv
     FROM bonus_db.purchase_info_list AS p
     WHERE p.order_type IN (101, 105)
-      AND p.register_year = 2025
-      AND p.register_month = 12
+      AND p.register_year = %s
+      AND p.register_month = %s
     GROUP BY
         p.jwoa_code
 ),

@@ -8816,6 +8816,9 @@ class ThreeStarGlobalBonusView(generic.ListView):
             prev_year,
             prev_month,
             selected_kibetu,
+            kibetu_year,
+            kibetu_month,
+            
         ]
 
         with connections["rds"].cursor() as cursor:
