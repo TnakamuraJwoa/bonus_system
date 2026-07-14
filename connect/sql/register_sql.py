@@ -412,8 +412,8 @@ def get_three_star_global_bonus_insert_data(selected_kibetu, rows):
             jwoa_name,
             title_id,
             score,
+            total_score,
             total_over_bv,
-            one_score_bonus,
             bonus_amount,
             created_at,
             updated_at
@@ -426,8 +426,8 @@ def get_three_star_global_bonus_insert_data(selected_kibetu, rows):
             jwoa_name = VALUES(jwoa_name),
             title_id = VALUES(title_id),
             score = VALUES(score),
+            total_score = VALUES(total_score),
             total_over_bv = VALUES(total_over_bv),
-            one_score_bonus = VALUES(one_score_bonus),
             bonus_amount = VALUES(bonus_amount),
             updated_at = CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo')
     """
@@ -441,8 +441,8 @@ def get_three_star_global_bonus_insert_data(selected_kibetu, rows):
             r.get("jwoa_name") or "",
             r.get("title_id") or 0,
             r.get("score") or 0,
+            r.get("total_score") or 0,
             r.get("total_over_bv") or 0,
-            r.get("one_score_bonus") or 0,
             r.get("bonus_amount") or 0,
         ])
 

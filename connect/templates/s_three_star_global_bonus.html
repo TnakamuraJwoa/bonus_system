@@ -155,8 +155,8 @@
                     {% sortable_th "jwoa_name" "jwoa_name" %}
                     {% sortable_th "title_name" "title_name" %}
                     {% sortable_th "score" "score" %}
+                    {% sortable_th "total_score" "total_score" %}
                     {% sortable_th "total_over_bv" "total_over_bv" %}
-                    {% sortable_th "one_score_bonus" "one_score_bonus" %}
                     {% sortable_th "bonus_amount" "bonus_amount" %}
                     {% sortable_th "created_at" "created_at" %}
                     {% sortable_th "updated_at" "updated_at" %}
@@ -183,11 +183,11 @@
                       </td>
 
                       <td class="text-end">
-                        {{ r.total_over_bv }}
+                        {{ r.total_score }}
                       </td>
 
                       <td class="text-end">
-                        {{ r.one_score_bonus }}
+                        {{ r.total_over_bv }}
                       </td>
 
                       <td class="fw-bold text-primary text-end">

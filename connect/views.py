@@ -990,8 +990,8 @@ SEARCH_EXPORT_COLUMNS = {
         ("jwoa_name", "jwoa_name"),
         ("title_name", "title_name"),
         ("score", "score", "int"),
-        ("total_over_bv", "total_over_bv", "int"),
-        ("one_score_bonus", "one_score_bonus", "decimal2"),
+        ("total_score", "total_score", "int"),
+        ("total_over_bv", "total_over_bv", "decimal2"),
         ("bonus_amount", "bonus_amount", "decimal2"),
         ("created_at", "created_at"),
         ("updated_at", "updated_at"),
@@ -8813,6 +8813,8 @@ class ThreeStarGlobalBonusView(generic.ListView):
         params = [
             prev_year,
             prev_month,
+            prev_year,
+            prev_month,
             selected_kibetu,
         ]
 
@@ -8914,8 +8916,8 @@ class S_ThreeStarGlobalBonusView(generic.ListView):
                 "jwoa_name": "tsgbr.jwoa_name",
                 "title_name": "title_name",
                 "score": "tsgbr.score",
+                "total_score": "tsgbr.total_score",
                 "total_over_bv": "tsgbr.total_over_bv",
-                "one_score_bonus": "tsgbr.one_score_bonus",
                 "bonus_amount": "tsgbr.bonus_amount",
                 "created_at": "tsgbr.created_at",
                 "updated_at": "tsgbr.updated_at",
@@ -8934,8 +8936,8 @@ class S_ThreeStarGlobalBonusView(generic.ListView):
                 tsgbr.title_id,
                 COALESCE(tm.title_name, 'タイトルなし') AS title_name,
                 tsgbr.score,
+                tsgbr.total_score,
                 tsgbr.total_over_bv,
-                tsgbr.one_score_bonus,
                 tsgbr.bonus_amount,
                 tsgbr.created_at,
                 tsgbr.updated_at
@@ -10420,15 +10422,36 @@ class S_MonthTitleView(generic.ListView):
         )
 
     def get_title_options(self):
-        title_options = [{"title_id": "0", "title_name": "タイトルなし"}]
-        title_options.extend(
-            {
-                "title_id": str(title.title_id),
-                "title_name": title.title_name,
-            }
-            for title in TitleMaster.objects.using("rds").order_by("title_id")
-        )
+        title_options = []
+        seen_ids = set()
+        for title in TitleMaster.objects.using("rds").order_by("title_id"):
+            title_id = str(title.title_id)
+            if title_id in seen_ids:
+                continue
+            seen_ids.add(title_id)
+            title_options.append(
+                {
+                    "title_id": title_id,
+                    "title_name": title.title_name or "タイトルなし",
+                }
+            )
+        if "0" not in seen_ids:
+            title_options.insert(0, {"title_id": "0", "title_name": "タイトルなし"})
         return title_options
+
+    def _parse_selected_title_ids(self):
+        raw_ids = [
+            (value or "").strip()
+            for value in self.request.GET.getlist("title_id")
+        ]
+        selected = []
+        seen = set()
+        for value in raw_ids:
+            if not value or not value.isdigit() or value in seen:
+                continue
+            seen.add(value)
+            selected.append(value)
+        return selected
 
     def get(self, request, *args, **kwargs):
         self.object_list = self.get_queryset()
@@ -10451,15 +10474,25 @@ class S_MonthTitleView(generic.ListView):
         ctx = super().get_context_data(**kwargs)
 
         selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
-        selected_title_id = (self.request.GET.get("title_id") or "").strip()
+        selected_title_ids = self._parse_selected_title_ids()
         if not selected_kibetu and self.object_list:
             selected_kibetu = self.object_list[0].kibetu
 
         ctx["selected_kibetu"] = selected_kibetu
-        ctx["selected_title_id"] = selected_title_id
+        ctx["selected_title_ids"] = selected_title_ids
+        # 後方互換（テンプレート・旧URL）
+        ctx["selected_title_id"] = (
+            selected_title_ids[0] if len(selected_title_ids) == 1 else ""
+        )
         ctx["title_options"] = self.get_title_options()
         ctx["rows"] = []
         ctx["selected_period"] = None
+        ctx["selected_title_labels"] = [
+            option["title_name"]
+            for option in ctx["title_options"]
+            if option["title_id"] in selected_title_ids
+        ]
+        ctx["selected_title_label"] = "、".join(ctx["selected_title_labels"])
 
         if not selected_kibetu:
             return ctx
@@ -10505,9 +10538,10 @@ class S_MonthTitleView(generic.ListView):
         """
 
         params = [selected_kibetu]
-        if selected_title_id:
-            sql += "\n            AND mt.title_id = %s"
-            params.append(selected_title_id)
+        if selected_title_ids:
+            placeholders = ", ".join(["%s"] * len(selected_title_ids))
+            sql += f"\n            AND mt.title_id IN ({placeholders})"
+            params.extend(selected_title_ids)
 
         sql, filter_values = apply_like_filters(
             sql,
@@ -10519,11 +10553,6 @@ class S_MonthTitleView(generic.ListView):
             },
         )
         ctx.update(filter_values)
-        ctx["selected_title_label"] = ""
-        for option in ctx["title_options"]:
-            if option["title_id"] == selected_title_id:
-                ctx["selected_title_label"] = option["title_name"]
-                break
         sql += "\n            ORDER BY " + sort_ctx["order_sql"]
 
         with connections["rds"].cursor() as cursor:
@@ -10674,7 +10703,7 @@ class MonthTitleView(generic.ListView):
             elif title_registration_status == "skipped":
                 messages.success(
                     request,
-                    f"{len(rows)}件を月タイトル結果に登録しました。タイトルユーザー登録は登録済みのためスキップしました。",
+                    f"{len(rows)}件を月タイトル結果に登録しました。最高ピンタイトルの登録は登録済みのためスキップしました。",
                 )
             else:
                 messages.success(

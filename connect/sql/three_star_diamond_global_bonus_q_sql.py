@@ -28,119 +28,141 @@ HAVING
 ),
 
 
+-- 前月50BV再購入会員 + アクティブ設定会員
+prev_month_active as (
+select jwoa_code
+from repurchase_50over_users
+
+union
+
+select jwoa_code
+FROM bonus_db.active_users
+WHERE year = %s AND month = %s
+  AND active_status = 1
+),
+
 -- ------------------------- taitle  ----------------------------------
 
 -- タイトル結果（月タイトル登録済みデータを参照）
 title_result as (
 SELECT
-    a.*
-FROM (
-    SELECT
-        jwoa_code,
-        jwoa_name,
-        income_line_bv,
-        basic_line_bv,
-        title_id,
-        CASE
-            WHEN income_line_bv >= 562500
-             AND basic_line_bv >= 562500
-            THEN 11
+    jwoa_code,
+    jwoa_name,
+    income_line_bv,
+    basic_line_bv,
+    title_id
+FROM bonus_db.month_title
+WHERE kibetu = %s
+),
 
-            WHEN income_line_bv >= 375000
-             AND basic_line_bv >= 375000
-            THEN 9
-
-            WHEN income_line_bv >= 250000
-             AND basic_line_bv >= 250000
-            THEN 7
-
-            WHEN income_line_bv >= 125000
-             AND basic_line_bv >= 125000
-            THEN 5
-
-            WHEN income_line_bv >= 62500
-             AND basic_line_bv >= 62500
-            THEN 3
-
-            WHEN income_line_bv >= 31250
-             AND basic_line_bv >= 31250
-            THEN 1
-
-            ELSE 0
-        END AS score
-    FROM bonus_db.month_title
-    WHERE kibetu = %s
-) AS a
-WHERE a.score > 0
+-- 当月、３スターダイヤ以上
+this_month_three_star_dia as (
+select *
+from title_result
+where title_id >= 6
 ),
 
 
 -- ------------------------- 支払い対象会員  --------------------------
 
-payment_target_members as (
-SELECT
- a.jmoa_code as jwoa_code,
- a.send_bv_name as jwoa_name,
- b.title_id,
- b.score
-FROM bonus_db.users AS a
+-- 前月50BV以上再購入した会員
+-- 当月、３スターダイヤ以上
+payment_target_members AS (
+    SELECT
+        a.jmoa_code AS jwoa_code,
+        a.send_bv_name AS jwoa_name,
+        b.title_id,
 
-JOIN title_result AS b
-  ON a.jmoa_code = b.jwoa_code
+        CASE
+            WHEN b.title_id = 6 THEN 1
+            WHEN b.title_id = 7 THEN 3
+            WHEN b.title_id = 8 THEN 5
+            WHEN b.title_id = 9 THEN 7
+            WHEN b.title_id = 10 THEN 9
+            WHEN b.title_id = 11 THEN 11
+            ELSE 0
+        END AS score
 
-JOIN repurchase_50over_users AS c
-  ON a.jmoa_code = c.jwoa_code
+    FROM bonus_db.users AS a
+
+    JOIN this_month_three_star_dia AS b
+      ON a.jmoa_code = b.jwoa_code
+
+    JOIN prev_month_active AS c
+      ON a.jmoa_code = c.jwoa_code
 ),
 
 
+-- ------------------------- 再購入超過BV総額  -------------------------
+-- 再購入超過BV総額
+repurchase_bv as (
+    SELECT
+        p.jwoa_code,
+        SUM(IFNULL(p.bv, 0)) AS sum_bv,
+        GREATEST(SUM(IFNULL(p.bv, 0)) - 50, 0) AS over_bv
+    FROM bonus_db.purchase_info_list AS p
+    WHERE p.order_type IN (101, 105)
+      AND p.register_year = 2025
+      AND p.register_month = 12
+    GROUP BY
+        p.jwoa_code
+),
+
+-- 再購入超過BV
+repurchase_over_bv as (
+select *
+from repurchase_bv
+where over_bv > 0
+),
+
+-- 超過BV総額
+over_total_bv AS (
+    SELECT
+        IFNULL(SUM(over_bv), 0) AS sum_over_bv
+    FROM repurchase_over_bv
+),
 
 -- ---------------------------- total_score  --------------------------
 total_score as (
 select
  sum(score) as total_score
 from payment_target_members
-group by jwoa_code
 ),
 
 
--- ------------------------- 再購入超過BV総額  -------------------------
--- 再購入超過BV総額
--- 総点数
--- 一点に対するボーナス
-repurchase_over_total_bv AS (
-    SELECT
-        2000 AS total_over_bv,
-        (SELECT total_score FROM total_score) AS total_score,
-        TRUNCATE(
-            (2000 * 0.05) / (SELECT total_score FROM total_score),
-            2
-        ) AS one_score_bonus
-
-),
-
--- -------------------------  3スターダイヤグローバル配当結果  -------------------------
-
-three_star_global_bonus_result as (
-select
- *,
- (SELECT total_over_bv FROM repurchase_over_total_bv) as total_over_bv,
- (SELECT one_score_bonus FROM repurchase_over_total_bv) as one_score_bonus,
- score * (SELECT one_score_bonus FROM repurchase_over_total_bv) as bonus_amount
-from payment_target_members
+-- -------------------------  3スターダイヤグローバル配当結果  ---------
+three_star_bonus_result as (
+SELECT
+    ptm.*,
+    
+    (
+        SELECT ts.total_score
+        FROM total_score AS ts
+    ) AS total_score,
+    
+    (
+        SELECT otb.sum_over_bv
+        FROM over_total_bv AS otb
+    ) AS total_over_bv
+FROM payment_target_members AS ptm
 )
 
 
-
 SELECT
-    tsgbr.jwoa_code,
-    tsgbr.jwoa_name,
-    tsgbr.title_id,
-    COALESCE(tm.title_name, 'タイトルなし') AS title_name,
-    tsgbr.score,
-    tsgbr.total_over_bv,
-    tsgbr.one_score_bonus,
-    tsgbr.bonus_amount
-FROM three_star_global_bonus_result AS tsgbr
-LEFT JOIN bonus_db.title_master AS tm
-  ON tsgbr.title_id = tm.title_id
+    a.jwoa_code,
+    a.jwoa_name,
+    a.title_id,
+    a.score,
+    a.total_score,
+    a.total_over_bv,
+
+    TRUNCATE(
+        IFNULL(
+            (a.total_over_bv * (a.score / NULLIF(a.total_score, 0))) * 0.05,
+            0
+        ),
+        2
+    ) AS bonus_amount
+
+FROM three_star_bonus_result AS a
 """

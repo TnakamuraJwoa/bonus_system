@@ -385,8 +385,28 @@ $(function () {
     }
   }
 
+  function updateTitleSelectionIndicator($form) {
+    var $dropdown = $form.find('.filter-dropdown--title').first();
+    if (!$dropdown.length) {
+      return;
+    }
+
+    var $toggle = $dropdown.find('.filter-dropdown__toggle').first();
+    var $checked = $dropdown.find('input[name="title_id"]:checked');
+    if (!$toggle.length) {
+      return;
+    }
+
+    if ($checked.length) {
+      $toggle.text('タイトル（' + $checked.length + '件）');
+    } else {
+      $toggle.text('タイトルを選択');
+    }
+  }
+
   $('.bonus-search-form').each(function () {
     updateKibetuSelectionIndicator($(this));
+    updateTitleSelectionIndicator($(this));
   });
 
   $(document).on('click', '.filter-dropdown__toggle', function (e) {
@@ -405,11 +425,20 @@ $(function () {
     e.stopPropagation();
   });
 
-  $(document).on('change', '.filter-dropdown__menu input, .filter-dropdown__menu select', function () {
+  $(document).on('change', '.filter-dropdown__menu input[type="checkbox"]', function () {
+    var $form = $(this).closest('.bonus-search-form');
+    if ($form.length) {
+      updateKibetuSelectionIndicator($form);
+      updateTitleSelectionIndicator($form);
+    }
+  });
+
+  $(document).on('change', '.filter-dropdown__menu select', function () {
     closeAllFilterDropdowns();
     var $form = $(this).closest('.bonus-search-form');
     if ($form.length) {
       updateKibetuSelectionIndicator($form);
+      updateTitleSelectionIndicator($form);
     }
   });
 
