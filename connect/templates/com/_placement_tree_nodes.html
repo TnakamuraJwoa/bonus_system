@@ -20,12 +20,17 @@
       <span class="font-weight-bold">{{ node.jwoa_code }}</span>
       <span class="text-muted mx-1">{{ node.send_bv_name|default:"-" }}</span>
       <span class="badge {{ node.rank|rank_badge_class }}">{{ node.rank|rank_label }}</span>
+      {% if node.title_id|is_three_star_title %}
+        <span class="badge {{ node.title_id|title_badge_class }} ml-1">{{ node.title_name }}</span>
+      {% elif node.title_name and node.title_name != "タイトルなし" %}
+        <span class="badge badge-light text-muted ml-1">{{ node.title_name }}</span>
+      {% endif %}
       {% if node.is_direct_introducer %}
         <span class="badge badge-warning ml-1">{{ direct_badge_label|default:"紹介者" }}</span>
       {% endif %}
       {% for badge in node.purchase_badges %}
         <span class="badge {{ badge.badge_class|default:'badge-secondary' }} ml-1">
-          {{ badge.order_type }} {{ badge.order_type_name }} / {{ badge.bv_max50|floatformat:0 }}BV
+          {{ badge.order_type_name }} / {{ badge.bv_max50|floatformat:0 }}BV
         </span>
       {% endfor %}
       {% if node.show_tree_bonus_badges %}

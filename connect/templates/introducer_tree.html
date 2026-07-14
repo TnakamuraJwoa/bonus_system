@@ -18,13 +18,21 @@
       background: #fafafa;
     }
 
-    .placement-tree-panel:fullscreen {
+    .placement-tree-panel.is-tree-pseudo-fullscreen {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483000;
+      width: 100vw;
+      height: 100vh;
       padding: 1rem;
       background: #f8fafc;
       border-radius: 0;
+      box-sizing: border-box;
+      margin: 0 !important;
+      transform: none !important;
     }
 
-    .placement-tree-panel:fullscreen .placement-tree-fullscreen-header {
+    .placement-tree-panel.is-tree-pseudo-fullscreen .placement-tree-fullscreen-header {
       display: flex;
     }
 
@@ -32,6 +40,8 @@
       display: none;
       justify-content: space-between;
       align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
       margin-bottom: 0.75rem;
       padding-bottom: 0.5rem;
       border-bottom: 1px solid #e5e7eb;
@@ -39,6 +49,15 @@
       position: sticky;
       top: 0;
       z-index: 2;
+    }
+
+    .placement-tree-fullscreen-header__actions {
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-end;
+      gap: 0.5rem;
+      margin-left: auto;
+      flex-wrap: wrap;
     }
 
     .placement-tree-node__row {
@@ -61,6 +80,118 @@
 
     .placement-tree-node--ancestor > .placement-tree-node__row {
       border-left: 3px solid #94a3b8;
+    }
+
+    .placement-tree-node--searched > .placement-tree-node__row {
+      background: #fef3c7;
+      border: 1px solid #f59e0b;
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.18);
+    }
+
+    .placement-tree-search {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+    }
+
+    .placement-tree-search input {
+      width: 220px;
+    }
+
+    .placement-tree-search__message {
+      flex-basis: 100%;
+      font-size: 0.8rem;
+    }
+
+    .placement-tree-db-path {
+      border: 1px solid #fde68a;
+      background: #fffbeb;
+      border-radius: 8px;
+      padding: 0.65rem 0.75rem 0;
+      margin-bottom: 0.75rem;
+      max-height: 11rem;
+      overflow: hidden;
+      flex: 0 0 auto;
+      display: flex;
+      flex-direction: column;
+      min-height: 8rem;
+    }
+
+    .placement-tree-db-path__list {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.35rem;
+      margin-top: 0.45rem;
+      max-height: 6.5rem;
+      overflow: auto;
+      padding: 0.15rem 0.2rem 0.25rem 0;
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+
+    .placement-tree-db-path__resize {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      margin: 0.45rem -0.75rem 0;
+      padding: 0.35rem 0.5rem;
+      border-top: 1px dashed #fbbf24;
+      background: #fef3c7;
+      color: #92400e;
+      cursor: ns-resize;
+      font-size: 0.78rem;
+      user-select: none;
+      flex: 0 0 auto;
+      position: sticky;
+      bottom: 0;
+      z-index: 1;
+    }
+
+    .placement-tree-db-path__resize::before {
+      content: "";
+      width: 2rem;
+      height: 0.25rem;
+      border-top: 1px solid #d97706;
+      border-bottom: 1px solid #d97706;
+    }
+
+    body.is-tree-path-resizing {
+      cursor: ns-resize;
+      user-select: none;
+    }
+
+    .placement-tree-panel.is-tree-pseudo-fullscreen .placement-tree-db-path {
+      max-height: 9.5rem;
+    }
+
+    .placement-tree-panel.is-tree-pseudo-fullscreen .placement-tree-db-path__list {
+      max-height: 5.5rem;
+    }
+
+    .placement-tree-db-path__item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      border: 1px solid #dbeafe;
+      background: #eff6ff;
+      border-radius: 999px;
+      padding: 0.25rem 0.55rem;
+      font-size: 0.82rem;
+      white-space: nowrap;
+    }
+
+    .placement-tree-db-path__item--target {
+      border-color: #f59e0b;
+      background: #fef3c7;
+      font-weight: 700;
+    }
+
+    .placement-tree-db-path__arrow {
+      color: #94a3b8;
+      font-weight: 700;
     }
 
     .placement-tree-toggle {
@@ -100,7 +231,7 @@
           <div class="d-flex justify-content-between align-items-start flex-wrap mb-3">
             <div>
               <h5 class="page-title mb-2">【紹介者 Tree】</h5>
-              <p class="text-muted small mb-0">会員コードを起点に、紹介者チェーンと紹介下位組織を確認できます。ランクは rank を表示します。</p>
+              <p class="text-muted small mb-0">会員コードを起点に、紹介者チェーンと紹介下位組織を確認できます。ランクは rank を表示します。下位会員コード・会員名で経路検索できます。</p>
             </div>
             {% if user_access.can_export %}
               <a class="btn btn-sm btn-outline-success rounded-circle"
@@ -119,6 +250,9 @@
             <form method="get" id="introducerTreeSearchForm" class="mb-0">
               {% if view_mode == "tree" %}
                 <input type="hidden" name="view" value="tree">
+              {% endif %}
+              {% if tree_search %}
+                <input type="hidden" name="tree_search" value="{{ tree_search }}">
               {% endif %}
               <div class="d-flex align-items-end flex-wrap">
                 <div class="mr-2 mb-2">
@@ -172,7 +306,7 @@
                   </select>
                 </div>
 
-                <div class="mr-2 mb-2" style="width: 110px;">
+                <div class="mr-2 mb-2" style="width: 120px;">
                   <label class="form-label mb-0 small text-muted">表示件数</label>
                   <select name="per_page" class="form-control">
                     <option value="50"  {% if per_page == 50 %}selected{% endif %}>50</option>
@@ -184,56 +318,58 @@
               </div>
             </form>
 
-            <div class="bonus-calc-selection-status">
-              {% if q_jwoa_code or q_name or q_introducer_code or q_introducer_rank or q_rank %}
-                <span class="text-muted small">絞り込み中：</span>
-                {% if q_introducer_code %}
-                  <span class="badge badge-dark">紹介者コード={{ q_introducer_code }}</span>
+            <div class="d-flex justify-content-between align-items-center flex-wrap mt-2">
+              <div class="mb-2">
+                {% if q_jwoa_code or q_name or q_introducer_code or q_introducer_rank or q_rank %}
+                  <span class="text-muted small mr-1">絞り込み中:</span>
+                  {% if q_introducer_code %}
+                    <span class="badge badge-primary">紹介者コード={{ q_introducer_code }}</span>
+                  {% endif %}
+                  {% if q_jwoa_code %}
+                    <span class="badge badge-primary">会員コード={{ q_jwoa_code }}</span>
+                  {% endif %}
+                  {% if q_name %}
+                    <span class="badge badge-primary">会員名={{ q_name }}</span>
+                  {% endif %}
+                  {% if q_introducer_rank %}
+                    <span class="badge badge-primary">紹介者ランク={{ q_introducer_rank|rank_label }}</span>
+                  {% endif %}
+                  {% if q_rank %}
+                    <span class="badge badge-primary">ランク={{ q_rank|rank_label }}</span>
+                  {% endif %}
+                {% else %}
+                  <span class="text-muted small">全件表示中</span>
                 {% endif %}
-                {% if q_jwoa_code %}
-                  <span class="badge badge-info">会員コード={{ q_jwoa_code }}</span>
-                {% endif %}
-                {% if q_name %}
-                  <span class="badge badge-secondary">会員名={{ q_name }}</span>
-                {% endif %}
-                {% if q_introducer_rank %}
-                  <span class="badge badge-primary">紹介者ランク={{ q_introducer_rank|rank_label }}</span>
-                {% endif %}
-                {% if q_rank %}
-                  <span class="badge badge-primary">ランク={{ q_rank|rank_label }}</span>
-                {% endif %}
-              {% else %}
-                <span class="text-muted small">全件表示中</span>
-              {% endif %}
-            </div>
+              </div>
 
-            <div class="bonus-calc-action-row">
-              <button type="submit" form="introducerTreeSearchForm" class="btn btn-primary">検索</button>
-              <a class="btn btn-outline-secondary" href="{% url 'connect:introducer_tree' %}">
-                リセット
-              </a>
+              <div class="bonus-calc-action-row">
+                <button type="submit" form="introducerTreeSearchForm" class="btn btn-primary">検索</button>
+                <a class="btn btn-outline-secondary" href="{% url 'connect:introducer_tree' %}">
+                  リセット
+                </a>
 
-              {% if user_access.can_execute %}
-                <form method="post"
-                      class="mb-0"
-                      data-loading-message="登録中..."
-                      data-loading-target="#introducerTreeRebuildOverlay">
-                  {% csrf_token %}
-                  <input type="hidden" name="action" value="copy">
-                  <button type="submit"
-                          class="btn btn-primary"
-                          data-loading-button
-                          data-confirm-submit="既存データを全削除して、紹介者Treeテーブルを再作成します。よろしいですか？">
-                    再作成
-                  </button>
-                </form>
-              {% endif %}
+                {% if user_access.can_execute %}
+                  <form method="post"
+                        class="mb-0"
+                        data-loading-message="登録中..."
+                        data-loading-target="#introducerTreeRebuildOverlay">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="copy">
+                    <button type="submit"
+                            class="btn btn-primary"
+                            data-loading-button
+                            data-confirm-submit="既存データを全削除して、紹介者Treeテーブルを再作成します。よろしいですか？">
+                      再作成
+                    </button>
+                  </form>
+                {% endif %}
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="card shadow-sm flex-grow-1" style="min-height: 0;">
+      <div class="card shadow-sm flex-grow-1" style="min-height: 0;" data-placement-tree-scope>
         <div class="card-body d-flex flex-column" style="min-height: 0; overflow: hidden;">
 
           <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
@@ -247,11 +383,29 @@
                 Tree
               </a>
             </div>
-            {% if view_mode == "tree" and tree_node_count %}
-              <div class="text-muted small">表示ノード数：{{ tree_node_count }} 件</div>
-            {% endif %}
             {% if view_mode == "tree" and not tree_unavailable_reason %}
-              <div class="d-flex gap-2 flex-wrap">
+              <div class="d-flex gap-2 flex-wrap align-items-center">
+                {% if tree_node_count %}
+                  <div class="text-muted small">表示ノード数：{{ tree_node_count }} 件</div>
+                {% endif %}
+                <div class="placement-tree-search">
+                  <input type="text"
+                         class="form-control form-control-sm"
+                         data-tree-search-input
+                         value="{{ tree_search|default:'' }}"
+                         placeholder="下位会員コード・会員名">
+                  <button type="button"
+                          class="btn btn-sm btn-outline-primary"
+                          data-tree-search-button>
+                    検索
+                  </button>
+                  <button type="button"
+                          class="btn btn-sm btn-outline-secondary"
+                          data-tree-path-button>
+                    経路表示
+                  </button>
+                  <span class="placement-tree-search__message text-muted" data-tree-search-message></span>
+                </div>
                 <button type="button" class="btn btn-sm btn-outline-secondary js-tree-collapse-all">全て閉じる</button>
                 <button type="button" class="btn btn-sm btn-outline-secondary js-tree-expand-all">全て開く</button>
                 <button type="button" class="btn btn-sm btn-outline-primary js-tree-fullscreen">全画面表示</button>
@@ -260,63 +414,7 @@
           </div>
 
           {% if view_mode == "tree" %}
-            <div class="placement-tree-panel" id="introducerTreePanel">
-              <div class="placement-tree-fullscreen-header">
-                <div class="font-weight-bold">紹介者 Tree</div>
-                <button type="button" class="btn btn-sm btn-outline-secondary js-tree-exit-fullscreen">全画面を閉じる</button>
-              </div>
-              {% if tree_unavailable_reason %}
-                <p class="mb-0 text-muted">{{ tree_unavailable_reason }}</p>
-              {% else %}
-                {% if tree_truncated %}
-                  <div class="alert alert-warning py-2 small">
-                    表示件数が上限（{{ tree_node_count }} 件）に達したため、一部のみ表示しています。
-                  </div>
-                {% endif %}
-
-                {% for node in tree_ancestors %}
-                  <div class="placement-tree-node placement-tree-node--ancestor" style="padding-left: {{ forloop.counter0 }}rem;">
-                    <div class="placement-tree-node__row">
-                      <span class="placement-tree-toggle-spacer mr-1"></span>
-                      <span class="font-weight-bold">{{ node.jwoa_code }}</span>
-                      <span class="text-muted mx-1">{{ node.jwoa_name|default:"-" }}</span>
-                      <span class="badge {{ node.rank|rank_badge_class }}">{{ node.rank|rank_label }}</span>
-                      <span class="badge badge-secondary ml-1">紹介上位</span>
-                    </div>
-                  </div>
-                {% endfor %}
-
-                {% if tree_focus %}
-                  <div class="placement-tree-node placement-tree-node--focus" style="padding-left: 0;">
-                    <div class="placement-tree-node__row">
-                      {% if tree_children %}
-                        <button type="button"
-                                class="btn btn-sm btn-link placement-tree-toggle p-0 mr-1"
-                                aria-expanded="false"
-                                aria-label="下位を展開">
-                          ▶
-                        </button>
-                      {% else %}
-                        <span class="placement-tree-toggle-spacer mr-1"></span>
-                      {% endif %}
-                      <span class="font-weight-bold">{{ tree_focus.jwoa_code }}</span>
-                      <span class="text-muted mx-1">{{ tree_focus.jwoa_name|default:"-" }}</span>
-                      <span class="badge {{ tree_focus.rank|rank_badge_class }}">{{ tree_focus.rank|rank_label }}</span>
-                      <span class="badge badge-primary ml-1">起点</span>
-                    </div>
-                    {% if tree_children %}
-                      <div class="placement-tree-children is-collapsed">
-                        {% include "com/_introducer_tree_nodes.html" with nodes=tree_children indent=1 %}
-                      </div>
-                    {% endif %}
-                  </div>
-                {% endif %}
-
-                {% if not tree_focus and not tree_ancestors %}
-                  <p class="mb-0 text-muted">表示するTreeデータがありません。</p>
-                {% endif %}
-              {% endif %}
-            </div>
+            {% include "com/_placement_tree_panel.html" with tree_panel_id="introducerTreePanel" tree_panel_title="紹介者 Tree" tree_search=tree_search tree_unavailable_reason=tree_unavailable_reason tree_truncated=tree_truncated tree_node_count=tree_node_count tree_search_path_rows=tree_search_path_rows tree_search_target=tree_search_target tree_search_not_found=tree_search_not_found tree_ancestors=tree_ancestors tree_focus=tree_focus tree_children=tree_children tree_ancestor_title="紹介上位者" tree_ancestor_badge_label="紹介上位" direct_badge_label="直紹介" %}
 
           {% elif rows %}
             {% include "com/_list_summary.html" %}
@@ -377,69 +475,13 @@
 {% endblock %}
 
 {% block script %}
-<script>
-(function () {
-  function setToggleState(button, collapsed) {
-    button.textContent = collapsed ? "▶" : "▼";
-    button.setAttribute("aria-expanded", collapsed ? "false" : "true");
-    button.setAttribute("aria-label", collapsed ? "下位を展開" : "下位を折りたたむ");
-  }
-
-  function toggleNode(button) {
-    var node = button.closest(".placement-tree-node");
-    if (!node) return;
-
-    var children = node.querySelector(":scope > .placement-tree-children");
-    if (!children) return;
-
-    var collapsed = children.classList.toggle("is-collapsed");
-    setToggleState(button, collapsed);
-  }
-
-  document.querySelectorAll(".placement-tree-toggle").forEach(function (button) {
-    button.addEventListener("click", function () {
-      toggleNode(button);
-    });
-  });
-
-  document.querySelectorAll(".js-tree-collapse-all").forEach(function (button) {
-    button.addEventListener("click", function () {
-      document.querySelectorAll(".placement-tree-children").forEach(function (children) {
-        children.classList.add("is-collapsed");
-      });
-      document.querySelectorAll(".placement-tree-toggle").forEach(function (toggle) {
-        setToggleState(toggle, true);
-      });
-    });
-  });
-
-  document.querySelectorAll(".js-tree-expand-all").forEach(function (button) {
-    button.addEventListener("click", function () {
-      document.querySelectorAll(".placement-tree-children").forEach(function (children) {
-        children.classList.remove("is-collapsed");
-      });
-      document.querySelectorAll(".placement-tree-toggle").forEach(function (toggle) {
-        setToggleState(toggle, false);
-      });
-    });
-  });
-
-  document.querySelectorAll(".js-tree-fullscreen").forEach(function (button) {
-    button.addEventListener("click", function () {
-      var panel = document.getElementById("introducerTreePanel");
-      if (panel && panel.requestFullscreen) {
-        panel.requestFullscreen();
-      }
-    });
-  });
-
-  document.querySelectorAll(".js-tree-exit-fullscreen").forEach(function (button) {
-    button.addEventListener("click", function () {
-      if (document.fullscreenElement && document.exitFullscreen) {
-        document.exitFullscreen();
-      }
-    });
-  });
-})();
-</script>
+{% if view_mode == "tree" %}
+<div id="introducerTreeScriptConfig"
+     data-tree-panel-id="introducerTreePanel"
+     data-tree-root-param="q_jwoa_code"
+     data-tree-root-param-alt="q_introducer_code"
+     data-tree-set-view="1"
+     hidden></div>
+{% include "com/_placement_tree_scripts.html" with tree_script_config_id="introducerTreeScriptConfig" %}
+{% endif %}
 {% endblock %}

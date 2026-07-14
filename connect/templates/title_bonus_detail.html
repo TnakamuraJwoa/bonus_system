@@ -39,6 +39,36 @@
       overflow: visible;
     }
 
+    .badge-title-orange {
+      background-color: #ea580c;
+      color: #fff;
+    }
+
+    .badge-title-purple {
+      background-color: #7c3aed;
+      color: #fff;
+    }
+
+    .badge-title-rose {
+      background-color: #e11d48;
+      color: #fff;
+    }
+
+    .badge-title-amber {
+      background-color: #d97706;
+      color: #fff;
+    }
+
+    .badge-title-fuchsia {
+      background-color: #c026d3;
+      color: #fff;
+    }
+
+    .badge-title-slate {
+      background-color: #475569;
+      color: #fff;
+    }
+
     .title-bonus-detail-filter-card {
       position: sticky;
       top: 0.75rem;
@@ -561,7 +591,11 @@
                           <span class="badge {{ r.status_badge_class|default:'badge-light text-muted' }}">{{ r.status_name|default:"-" }}</span>
                         </td>
                         <td class="text-center">
-                          <span class="badge {{ r.title_id|rank_badge_class }}">{{ r.title_name }}</span>
+                          {% if r.title_id|is_three_star_title %}
+                            <span class="badge {{ r.title_id|title_badge_class }}">{{ r.title_name }}</span>
+                          {% else %}
+                            {{ r.title_name }}
+                          {% endif %}
                         </td>
                       </tr>
                     {% endfor %}
@@ -618,7 +652,11 @@
                           <span class="badge {{ r.rank|rank_badge_class }}">{{ r.rank|rank_label }}</span>
                         </td>
                         <td class="text-center">
-                          <span class="badge {{ r.achiever_title_id|rank_badge_class }}">{{ r.achiever_title_name }}</span>
+                          {% if r.achiever_title_id|is_three_star_title %}
+                            <span class="badge {{ r.achiever_title_id|title_badge_class }}">{{ r.achiever_title_name }}</span>
+                          {% else %}
+                            {{ r.achiever_title_name }}
+                          {% endif %}
                         </td>
                         <td class="text-end">{{ r.tree_level }}</td>
                         <td class="text-end">{{ r.match_level }}</td>
@@ -827,12 +865,10 @@
                         <button type="button" class="btn btn-sm btn-outline-secondary js-tree-collapse-all">全て閉じる</button>
                         <button type="button" class="btn btn-sm btn-outline-secondary js-tree-expand-all">全て開く</button>
                         <button type="button" class="btn btn-sm btn-outline-primary js-tree-fullscreen">全画面表示</button>
-                        {% if team_type == team_type_introducer %}
-                          <a class="btn btn-sm btn-outline-success"
-                             href="{% url 'connect:title_bonus_detail_tree_export' %}?{{ purchase_base_qs }}">
-                            Excel出力
-                          </a>
-                        {% endif %}
+                        <a class="btn btn-sm btn-outline-success"
+                           href="{% url 'connect:title_bonus_detail_tree_export' %}?{{ purchase_base_qs }}">
+                          Excel出力
+                        </a>
                       {% endif %}
                     </div>
                   </div>
@@ -897,7 +933,11 @@
                         <td>{{ r.down_jwoa_code }}</td>
                         <td>{{ r.down_name }}</td>
                         <td class="text-center">
-                          <span class="badge {{ r.title_id|rank_badge_class }}">{{ r.title_name }}</span>
+                          {% if r.title_id|is_three_star_title %}
+                            <span class="badge {{ r.title_id|title_badge_class }}">{{ r.title_name }}</span>
+                          {% else %}
+                            {{ r.title_name }}
+                          {% endif %}
                         </td>
                         <td class="text-end">{{ r.tree_level }}</td>
                         <td>{{ r.order_code }}</td>

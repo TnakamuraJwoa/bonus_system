@@ -7,6 +7,7 @@
 
   var panelId = configEl.getAttribute("data-tree-panel-id") || "";
   var rootParam = configEl.getAttribute("data-tree-root-param") || "q_jwoa_code";
+  var rootParamAlt = configEl.getAttribute("data-tree-root-param-alt") || "";
   var treeType = configEl.getAttribute("data-tree-type") || "";
   var treeTypeParam = configEl.getAttribute("data-tree-type-param") || "tree_type";
   var setViewTree = configEl.getAttribute("data-tree-set-view") === "1";
@@ -24,6 +25,31 @@
     button.setAttribute("aria-label", collapsed ? targetLabel + "を展開" : targetLabel + "を折りたたむ");
   }
 
+  function syncAncestorStateBadge(ancestorGroup, collapsed) {
+    if (!ancestorGroup) {
+      return;
+    }
+    var badge = ancestorGroup.querySelector("[data-tree-ancestor-state-badge]");
+    if (badge) {
+      badge.textContent = collapsed ? "閉じています" : "開いています";
+    }
+  }
+
+  function setAncestorGroupCollapsed(ancestorGroup, collapsed) {
+    if (!ancestorGroup) {
+      return;
+    }
+    var children = ancestorGroup.querySelector(":scope > .placement-tree-children--ancestors");
+    var toggle = ancestorGroup.querySelector(":scope > .placement-tree-node__row .placement-tree-toggle");
+    if (children) {
+      children.classList.toggle("is-collapsed", collapsed);
+    }
+    if (toggle) {
+      setToggleState(toggle, collapsed);
+    }
+    syncAncestorStateBadge(ancestorGroup, collapsed);
+  }
+
   function toggleNode(button) {
     var node = button.closest(".placement-tree-node");
     if (!node) return;
@@ -33,6 +59,9 @@
 
     var collapsed = children.classList.toggle("is-collapsed");
     setToggleState(button, collapsed);
+    if (node.classList.contains("placement-tree-node--ancestor-group")) {
+      syncAncestorStateBadge(node, collapsed);
+    }
   }
 
   panel.querySelectorAll(".placement-tree-toggle").forEach(function (button) {
@@ -48,14 +77,27 @@
     panel.querySelectorAll(".placement-tree-toggle").forEach(function (toggle) {
       setToggleState(toggle, true);
     });
+    panel.querySelectorAll(".placement-tree-node--ancestor-group").forEach(function (group) {
+      syncAncestorStateBadge(group, true);
+    });
   }
 
   function expandAllTreeNodes() {
     panel.querySelectorAll(".placement-tree-children").forEach(function (children) {
+      if (children.classList.contains("placement-tree-children--ancestors")) {
+        return;
+      }
       children.classList.remove("is-collapsed");
     });
     panel.querySelectorAll(".placement-tree-toggle").forEach(function (toggle) {
+      var ancestorGroup = toggle.closest(".placement-tree-node--ancestor-group");
+      if (ancestorGroup && ancestorGroup.querySelector(":scope > .placement-tree-node__row .placement-tree-toggle") === toggle) {
+        return;
+      }
       setToggleState(toggle, false);
+    });
+    panel.querySelectorAll(".placement-tree-node--ancestor-group").forEach(function (group) {
+      setAncestorGroupCollapsed(group, true);
     });
   }
 
@@ -75,12 +117,19 @@
     button.addEventListener("click", expandAllTreeNodes);
   });
 
+  panel.querySelectorAll(".placement-tree-node--ancestor-group").forEach(function (group) {
+    setAncestorGroupCollapsed(group, true);
+  });
+
   function normalizeTreeSearchText(text) {
     return (text || "").toString().trim().toLowerCase();
   }
 
   function openTreeChildren(children) {
     if (!children) {
+      return;
+    }
+    if (children.classList.contains("placement-tree-children--ancestors")) {
       return;
     }
     children.classList.remove("is-collapsed");
@@ -136,7 +185,8 @@
   }
 
   function hasTreeRootCode() {
-    return Boolean(new URLSearchParams(window.location.search).get(rootParam));
+    var params = new URLSearchParams(window.location.search);
+    return Boolean(params.get(rootParam) || (rootParamAlt && params.get(rootParamAlt)));
   }
 
   function redirectToDbTreeSearch(keyword) {

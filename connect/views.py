@@ -11492,11 +11492,23 @@ class CoolingOffView(generic.TemplateView):
         detail_order_code = self.request.GET.get("detail_order_code")
         q_order_code = (self.request.GET.get("q_order_code") or "").strip()
         q_active_flag = (self.request.GET.get("q_active_flag") or "").strip()
+        q_register_year = (self.request.GET.get("q_register_year") or "").strip()
+        q_register_month = (self.request.GET.get("q_register_month") or "").strip()
+        q_jwoa_code = (self.request.GET.get("q_jwoa_code") or "").strip()
 
-        ctx["rows"] = self._get_rows(q_order_code=q_order_code, q_active_flag=q_active_flag)
+        ctx["rows"] = self._get_rows(
+            q_order_code=q_order_code,
+            q_active_flag=q_active_flag,
+            q_register_year=q_register_year,
+            q_register_month=q_register_month,
+            q_jwoa_code=q_jwoa_code,
+        )
         ctx["detail_order"] = None
         ctx["q_order_code"] = q_order_code
         ctx["q_active_flag"] = q_active_flag
+        ctx["q_register_year"] = q_register_year
+        ctx["q_register_month"] = q_register_month
+        ctx["q_jwoa_code"] = q_jwoa_code
 
         if detail_order_code:
             ctx["detail_order"] = self._get_order_detail(detail_order_code)
@@ -11516,6 +11528,9 @@ class CoolingOffView(generic.TemplateView):
             elif action == "update":
                 if self._update(request):
                     messages.success(request, "クーリングオフを更新しました。")
+            elif action == "bulk_update":
+                if self._bulk_update(request):
+                    pass
             elif action == "delete":
                 if self._delete(request):
                     messages.success(request, "クーリングオフを削除しました。")
@@ -11533,7 +11548,14 @@ class CoolingOffView(generic.TemplateView):
 
         return redirect(redirect_target)
 
-    def _get_rows(self, q_order_code="", q_active_flag=""):
+    def _get_rows(
+        self,
+        q_order_code="",
+        q_active_flag="",
+        q_register_year="",
+        q_register_month="",
+        q_jwoa_code="",
+    ):
         where = []
         params = []
 
@@ -11545,20 +11567,46 @@ class CoolingOffView(generic.TemplateView):
             where.append("c.active_flag = %s")
             params.append(int(q_active_flag))
 
+        if q_register_year.isdigit():
+            where.append("p.register_year = %s")
+            params.append(int(q_register_year))
+
+        if q_register_month.isdigit():
+            where.append("p.register_month = %s")
+            params.append(int(q_register_month))
+
+        if q_jwoa_code:
+            where.append("o.jwoa_code LIKE %s")
+            params.append(f"%{q_jwoa_code}%")
+
         where_sql = f"WHERE {' AND '.join(where)}" if where else ""
         sql = """
             SELECT
                 c.id,
+                p.register_year,
+                p.register_month,
                 c.order_code,
                 c.active_flag,
                 c.remarks,
                 c.registered_by,
                 c.created_at,
                 o.jwoa_code,
-                o.order_name
+                o.order_name,
+                o.order_type,
+                p.bv
             FROM bonus_db.cooling_off c
             LEFT JOIN bonus_db.orders o
                 ON c.order_code = o.order_code
+            LEFT JOIN (
+                SELECT
+                    order_code,
+                    MIN(register_year) AS register_year,
+                    MIN(register_month) AS register_month,
+                    SUM(IFNULL(bv, 0)) AS bv
+                FROM bonus_db.purchase_info_list
+                GROUP BY order_code
+            ) p
+                ON c.order_code = p.order_code
             {where_sql}
             ORDER BY c.created_at DESC
         """.format(where_sql=where_sql)
@@ -11785,6 +11833,71 @@ class CoolingOffView(generic.TemplateView):
                 else:
                     self._restore_purchase_info_order_type(cursor, order_code)
 
+        return True
+
+    def _bulk_update(self, request):
+        raw_ids = request.POST.getlist("ids")
+        try:
+            active_flag = int(request.POST.get("active_flag", 1))
+            row_ids = sorted({int(x) for x in raw_ids if str(x).strip().isdigit()})
+        except (TypeError, ValueError):
+            messages.error(request, "一括更新内容が不正です。")
+            return False
+
+        if active_flag not in (0, 1):
+            messages.error(request, "状態の値が不正です。")
+            return False
+
+        if not row_ids:
+            messages.error(request, "一括編集する行を選択してください。")
+            return False
+
+        remarks = request.POST.get("remarks")
+        update_sql = """
+            UPDATE bonus_db.cooling_off
+            SET
+                active_flag = %s,
+                remarks = %s,
+                registered_by = %s
+            WHERE id = %s
+        """
+
+        with transaction.atomic(using="rds"):
+            with connections["rds"].cursor() as cursor:
+                placeholders = ", ".join(["%s"] * len(row_ids))
+                cursor.execute(
+                    f"""
+                    SELECT id, order_code
+                    FROM bonus_db.cooling_off
+                    WHERE id IN ({placeholders})
+                    FOR UPDATE
+                    """,
+                    row_ids,
+                )
+                targets = cursor.fetchall()
+                if not targets:
+                    messages.error(request, "一括更新対象データがありません。")
+                    return False
+
+                for row_id, order_code in targets:
+                    cursor.execute(
+                        update_sql,
+                        [
+                            active_flag,
+                            remarks,
+                            request.user.username,
+                            row_id,
+                        ],
+                    )
+                    if active_flag == 1:
+                        self._set_purchase_info_cooling_off(cursor, order_code)
+                    else:
+                        self._restore_purchase_info_order_type(cursor, order_code)
+
+        messages.success(
+            request,
+            f"{len(targets)}件のクーリングオフを一括更新しました。",
+        )
         return True
 
     def _delete(self, request):

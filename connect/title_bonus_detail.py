@@ -478,30 +478,27 @@ class TitleBonusDetailView(generic.TemplateView):
         sql = f"""
             SELECT
                 p.jwoa_code,
-                p.order_type,
-                CASE p.order_type
-                    WHEN 101 THEN '再購入品'
-                    WHEN 102 THEN '初回購入品'
-                    WHEN 103 THEN 'ランクアップ購入品'
-                    WHEN 105 THEN '特別対応購入品'
+                CASE
+                    WHEN p.order_type IN (101, 105) THEN 101105
+                    ELSE p.order_type
+                END AS order_type,
+                CASE
+                    WHEN p.order_type IN (101, 105) THEN '再購入・特別対応'
+                    WHEN p.order_type = 102 THEN '初回購入品'
+                    WHEN p.order_type = 103 THEN 'ランクアップ購入品'
                     ELSE '対象外'
                 END AS order_type_name,
-                CASE p.order_type
-                    WHEN 101 THEN 'badge-info'
-                    WHEN 102 THEN 'badge-success'
-                    WHEN 103 THEN 'badge-warning'
-                    WHEN 105 THEN 'badge-danger'
+                CASE
+                    WHEN p.order_type IN (101, 105) THEN 'badge-info'
+                    WHEN p.order_type = 102 THEN 'badge-success'
+                    WHEN p.order_type = 103 THEN 'badge-warning'
                     ELSE 'badge-secondary'
                 END AS badge_class,
-                SUM(
-                    CASE
-                        WHEN p.order_type IN (101, 105)
-                        THEN LEAST(IFNULL(p.bv, 0), 50)
-                        WHEN p.order_type IN (102, 103)
-                        THEN IFNULL(p.bv, 0)
-                        ELSE 0
-                    END
-                ) AS bv_max50
+                CASE
+                    WHEN p.order_type IN (101, 105)
+                    THEN LEAST(SUM(IFNULL(p.bv, 0)), 50)
+                    ELSE SUM(IFNULL(p.bv, 0))
+                END AS bv_max50
             FROM bonus_db.purchase_info_list AS p
             WHERE p.jwoa_code IN ({placeholders})
               AND p.order_type IN (101, 102, 103, 105)
@@ -509,11 +506,26 @@ class TitleBonusDetailView(generic.TemplateView):
               AND p.register_month = %s
             GROUP BY
                 p.jwoa_code,
-                p.order_type
+                CASE
+                    WHEN p.order_type IN (101, 105) THEN 101105
+                    ELSE p.order_type
+                END,
+                CASE
+                    WHEN p.order_type IN (101, 105) THEN '再購入・特別対応'
+                    WHEN p.order_type = 102 THEN '初回購入品'
+                    WHEN p.order_type = 103 THEN 'ランクアップ購入品'
+                    ELSE '対象外'
+                END,
+                CASE
+                    WHEN p.order_type IN (101, 105) THEN 'badge-info'
+                    WHEN p.order_type = 102 THEN 'badge-success'
+                    WHEN p.order_type = 103 THEN 'badge-warning'
+                    ELSE 'badge-secondary'
+                END
             HAVING bv_max50 > 0
             ORDER BY
                 p.jwoa_code,
-                p.order_type
+                order_type
         """
         params = [*member_codes, period.year, period.month]
         with connections["rds"].cursor() as cursor:
@@ -530,6 +542,50 @@ class TitleBonusDetailView(generic.TemplateView):
     def _apply_tree_purchase_badges(self, tree_context, badge_map):
         def apply_node(node):
             node["purchase_badges"] = badge_map.get(node.get("jwoa_code"), [])
+
+        def walk(nodes):
+            for node in nodes or []:
+                apply_node(node)
+                walk(node.get("children") or [])
+
+        for node in tree_context.get("tree_ancestors") or []:
+            apply_node(node)
+        if tree_context.get("tree_focus"):
+            apply_node(tree_context["tree_focus"])
+        walk(tree_context.get("tree_children") or [])
+        for node in tree_context.get("tree_search_path_rows") or []:
+            apply_node(node)
+
+    def _fetch_tree_title_map(self, period, member_codes):
+        if not member_codes:
+            return {}
+
+        placeholders = ", ".join(["%s"] * len(member_codes))
+        sql = f"""
+            SELECT
+                mt.jwoa_code,
+                mt.title_id,
+                COALESCE(tm.title_name, 'タイトルなし') AS title_name
+            FROM bonus_db.month_title AS mt
+            LEFT JOIN bonus_db.title_master AS tm
+              ON tm.title_id = mt.title_id
+            WHERE mt.kibetu = %s
+              AND mt.jwoa_code IN ({placeholders})
+        """
+        params = [period.kibetu, *member_codes]
+        with connections["rds"].cursor() as cursor:
+            logger.info("タイトルボーナス詳細 TreeタイトルSQLを実行します。")
+            cursor.execute(sql, params)
+            columns = [col[0] for col in cursor.description]
+            rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+        return {row["jwoa_code"]: row for row in rows}
+
+    def _apply_tree_title_badges(self, tree_context, title_map):
+        def apply_node(node):
+            title_row = title_map.get(node.get("jwoa_code")) or {}
+            node["title_id"] = title_row.get("title_id")
+            node["title_name"] = title_row.get("title_name") or ""
 
         def walk(nodes):
             for node in nodes or []:
@@ -945,21 +1001,45 @@ class TitleBonusDetailView(generic.TemplateView):
             return None
 
         purchase_sql, filter_params = self._build_purchase_detail_sql(filters)
-        team_cte_sql = self._get_purchase_team_cte_sql(filters["team_type"])
+        team_cte_sql = self._get_purchase_team_cte_sql(filters["team_type"]).rstrip()
         sql = f"""
-            {team_cte_sql}
+            {team_cte_sql},
+            purchase_rows AS (
+                {purchase_sql}
+            ),
+            member_caps AS (
+                SELECT
+                    pr.down_jwoa_code,
+                    (
+                        LEAST(
+                            SUM(
+                                CASE
+                                    WHEN pr.order_type IN (101, 105)
+                                    THEN pr.original_bv
+                                    ELSE 0
+                                END
+                            ),
+                            50
+                        )
+                        + SUM(
+                            CASE
+                                WHEN pr.order_type IN (102, 103)
+                                THEN pr.original_bv
+                                ELSE 0
+                            END
+                        )
+                    ) AS bv_max50
+                FROM purchase_rows AS pr
+                GROUP BY pr.down_jwoa_code
+            )
             SELECT
                 COUNT(*) AS row_count,
                 COUNT(DISTINCT purchase_rows.down_jwoa_code) AS buyer_count,
                 COALESCE(SUM(purchase_rows.original_bv), 0) AS original_bv_total,
-                COALESCE(SUM(purchase_rows.bv_max50), 0) AS bv_max50_total,
-                COALESCE(
-                    SUM(purchase_rows.original_bv - purchase_rows.bv_max50),
-                    0
-                ) AS bv_limit_diff
-            FROM (
-                {purchase_sql}
-            ) AS purchase_rows
+                COALESCE((SELECT SUM(member_caps.bv_max50) FROM member_caps), 0) AS bv_max50_total,
+                COALESCE(SUM(purchase_rows.original_bv), 0)
+                    - COALESCE((SELECT SUM(member_caps.bv_max50) FROM member_caps), 0) AS bv_limit_diff
+            FROM purchase_rows
         """
         params = [
             filters["purchase_line_jwoa_code"],
@@ -1176,6 +1256,14 @@ class TitleBonusDetailView(generic.TemplateView):
                         ctx["purchase_tree"],
                         purchase_badge_map,
                     )
+                    title_map = self._fetch_tree_title_map(
+                        purchase_period,
+                        tree_codes,
+                    )
+                    self._apply_tree_title_badges(
+                        ctx["purchase_tree"],
+                        title_map,
+                    )
 
                 purchase_calc_params = self._build_calc_params(
                     purchase_kibetu,
@@ -1339,17 +1427,29 @@ class TitleBonusDetailTreeExportView(TitleBonusDetailView):
             or request.GET.get("kibetu")
             or ""
         ).strip()
+        team_type = self._normalize_team_type()
+        is_placement = team_type == self.TEAM_TYPE_PLACEMENT
+        parent_column = self._tree_parent_column(team_type)
+        sheet_name = "上位者チーム業績Tree" if is_placement else "紹介者チーム業績Tree"
+        parent_id_header = "上位者ID" if is_placement else "紹介者ID"
+        parent_name_header = "上位者名" if is_placement else "紹介者名"
+        child_row_type = "配下" if is_placement else "紹介配下"
+        empty_filename = (
+            "title_bonus_placement_team_tree.xlsx"
+            if is_placement
+            else "title_bonus_introducer_team_tree.xlsx"
+        )
 
         wb = openpyxl.Workbook(write_only=True)
-        ws = wb.create_sheet("紹介者チーム業績Tree")
+        ws = wb.create_sheet(sheet_name)
         ws.append([
             "区分",
             "階層",
             "会員ID",
             "会員名",
             "rank",
-            "紹介者ID",
-            "紹介者名",
+            parent_id_header,
+            parent_name_header,
             "タイトルID",
             "タイトル",
             "order_type",
@@ -1359,53 +1459,19 @@ class TitleBonusDetailTreeExportView(TitleBonusDetailView):
         ])
 
         if not root_code or not purchase_kibetu:
-            return self._excel_response(
-                wb,
-                "title_bonus_introducer_team_tree.xlsx",
-            )
+            return self._excel_response(wb, empty_filename)
 
         period = MonthlyPeriod.objects.using("rds").filter(kibetu=purchase_kibetu).first()
         if not period:
-            return self._excel_response(
-                wb,
-                "title_bonus_introducer_team_tree.xlsx",
-            )
+            return self._excel_response(wb, empty_filename)
 
-        sql = """
-            WITH RECURSIVE ancestors AS (
+        sql = f"""
+            WITH RECURSIVE descendants AS (
                 SELECT
                     u.jmoa_code AS jwoa_code,
                     u.send_bv_name,
                     u.`rank`,
-                    u.introducer_code,
-                    0 AS rel_level,
-                    CAST(u.jmoa_code AS CHAR(20000)) AS path_codes
-                FROM bonus_db.users AS u
-                WHERE u.jmoa_code = %s
-
-                UNION ALL
-
-                SELECT
-                    up.jmoa_code AS jwoa_code,
-                    up.send_bv_name,
-                    up.`rank`,
-                    up.introducer_code,
-                    a.rel_level - 1 AS rel_level,
-                    CONCAT(up.jmoa_code, ',', a.path_codes) AS path_codes
-                FROM ancestors AS a
-                JOIN bonus_db.users AS up
-                  ON up.jmoa_code = a.introducer_code
-                WHERE a.rel_level > -%s
-                  AND a.introducer_code IS NOT NULL
-                  AND a.introducer_code <> ''
-                  AND FIND_IN_SET(up.jmoa_code, a.path_codes) = 0
-            ),
-            descendants AS (
-                SELECT
-                    u.jmoa_code AS jwoa_code,
-                    u.send_bv_name,
-                    u.`rank`,
-                    u.introducer_code,
+                    u.{parent_column} AS parent_code,
                     0 AS rel_level,
                     CAST(u.jmoa_code AS CHAR(20000)) AS path_codes
                 FROM bonus_db.users AS u
@@ -1417,38 +1483,25 @@ class TitleBonusDetailTreeExportView(TitleBonusDetailView):
                     child.jmoa_code AS jwoa_code,
                     child.send_bv_name,
                     child.`rank`,
-                    child.introducer_code,
+                    child.{parent_column} AS parent_code,
                     d.rel_level + 1 AS rel_level,
                     CONCAT(d.path_codes, ',', child.jmoa_code) AS path_codes
                 FROM descendants AS d
                 JOIN bonus_db.users AS child
-                  ON child.introducer_code = d.jwoa_code
+                  ON child.{parent_column} = d.jwoa_code
                 WHERE d.rel_level < %s
                   AND FIND_IN_SET(child.jmoa_code, d.path_codes) = 0
             ),
             tree_nodes AS (
                 SELECT
-                    '紹介上位者' AS row_type,
-                    jwoa_code,
-                    send_bv_name,
-                    `rank`,
-                    introducer_code,
-                    rel_level,
-                    path_codes
-                FROM ancestors
-                WHERE rel_level < 0
-
-                UNION ALL
-
-                SELECT
                     CASE
                         WHEN rel_level = 0 THEN '起点'
-                        ELSE '紹介配下'
+                        ELSE %s
                     END AS row_type,
                     jwoa_code,
                     send_bv_name,
                     `rank`,
-                    introducer_code,
+                    parent_code,
                     rel_level,
                     path_codes
                 FROM descendants
@@ -1456,21 +1509,21 @@ class TitleBonusDetailTreeExportView(TitleBonusDetailView):
             purchase_summary AS (
                 SELECT
                     p.jwoa_code,
-                    p.order_type,
-                    CASE p.order_type
-                        WHEN 101 THEN '再購入品'
-                        WHEN 102 THEN '初回購入品'
-                        WHEN 103 THEN 'ランクアップ購入品'
-                        WHEN 105 THEN '特別対応購入品'
+                    CASE
+                        WHEN p.order_type IN (101, 105) THEN 101105
+                        ELSE p.order_type
+                    END AS order_type,
+                    CASE
+                        WHEN p.order_type IN (101, 105) THEN '再購入・特別対応'
+                        WHEN p.order_type = 102 THEN '初回購入品'
+                        WHEN p.order_type = 103 THEN 'ランクアップ購入品'
                         ELSE '対象外'
                     END AS order_type_name,
                     SUM(IFNULL(p.bv, 0)) AS original_bv,
                     CASE
                         WHEN p.order_type IN (101, 105)
                         THEN LEAST(SUM(IFNULL(p.bv, 0)), 50)
-                        WHEN p.order_type IN (102, 103)
-                        THEN SUM(IFNULL(p.bv, 0))
-                        ELSE 0
+                        ELSE SUM(IFNULL(p.bv, 0))
                     END AS bv_max50
                 FROM bonus_db.purchase_info_list AS p
                 WHERE p.order_type IN (101, 102, 103, 105)
@@ -1478,7 +1531,16 @@ class TitleBonusDetailTreeExportView(TitleBonusDetailView):
                   AND p.register_month = %s
                 GROUP BY
                     p.jwoa_code,
-                    p.order_type
+                    CASE
+                        WHEN p.order_type IN (101, 105) THEN 101105
+                        ELSE p.order_type
+                    END,
+                    CASE
+                        WHEN p.order_type IN (101, 105) THEN '再購入・特別対応'
+                        WHEN p.order_type = 102 THEN '初回購入品'
+                        WHEN p.order_type = 103 THEN 'ランクアップ購入品'
+                        ELSE '対象外'
+                    END
                 HAVING bv_max50 > 0
             )
             SELECT
@@ -1487,8 +1549,8 @@ class TitleBonusDetailTreeExportView(TitleBonusDetailView):
                 n.jwoa_code,
                 n.send_bv_name,
                 n.`rank`,
-                n.introducer_code,
-                parent.send_bv_name AS introducer_name,
+                n.parent_code,
+                parent.send_bv_name AS parent_name,
                 mt.title_id,
                 COALESCE(tm.title_name, 'タイトルなし') AS title_name,
                 ps.order_type,
@@ -1498,7 +1560,7 @@ class TitleBonusDetailTreeExportView(TitleBonusDetailView):
                 n.path_codes
             FROM tree_nodes AS n
             LEFT JOIN bonus_db.users AS parent
-              ON parent.jmoa_code = n.introducer_code
+              ON parent.jmoa_code = n.parent_code
             LEFT JOIN bonus_db.month_title AS mt
               ON mt.kibetu = %s
              AND mt.jwoa_code = n.jwoa_code
@@ -1508,9 +1570,8 @@ class TitleBonusDetailTreeExportView(TitleBonusDetailView):
               ON ps.jwoa_code = n.jwoa_code
             ORDER BY
                 CASE n.row_type
-                    WHEN '紹介上位者' THEN 1
-                    WHEN '起点' THEN 2
-                    ELSE 3
+                    WHEN '起点' THEN 1
+                    ELSE 2
                 END,
                 n.rel_level,
                 n.path_codes,
@@ -1519,15 +1580,17 @@ class TitleBonusDetailTreeExportView(TitleBonusDetailView):
         params = [
             root_code,
             self.TREE_SEARCH_MAX_DEPTH,
-            root_code,
-            self.TREE_SEARCH_MAX_DEPTH,
+            child_row_type,
             period.year,
             period.month,
             period.kibetu,
         ]
 
         with connections["rds"].cursor() as cursor:
-            logger.info("タイトルボーナス詳細 紹介者チーム業績Tree Excel出力SQLを実行します。")
+            logger.info(
+                "タイトルボーナス詳細 %s Excel出力SQLを実行します。",
+                sheet_name,
+            )
             cursor.execute(sql, params)
             while True:
                 rows = cursor.fetchmany(self.EXPORT_FETCH_SIZE)
@@ -1550,7 +1613,12 @@ class TitleBonusDetailTreeExportView(TitleBonusDetailView):
                         row[12] or 0,
                     ])
 
-        filename = f"title_bonus_introducer_team_tree_{purchase_kibetu}_{root_code}.xlsx"
+        prefix = (
+            "title_bonus_placement_team_tree"
+            if is_placement
+            else "title_bonus_introducer_team_tree"
+        )
+        filename = f"{prefix}_{purchase_kibetu}_{root_code}.xlsx"
         return self._excel_response(wb, filename)
 
     @staticmethod

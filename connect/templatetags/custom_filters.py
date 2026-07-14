@@ -147,6 +147,39 @@ def rank_badge_class(value):
 
 
 @register.filter
+def title_badge_class(value):
+    """3スターダイヤ(title_id>=6)以上だけ色分けする（青・緑以外）。"""
+    classes = {
+        "6": "badge-title-orange",
+        "7": "badge-title-purple",
+        "8": "badge-title-rose",
+        "9": "badge-title-amber",
+        "10": "badge-title-fuchsia",
+        "11": "badge-title-slate",
+    }
+    if value in (None, ""):
+        return ""
+    key = str(value).strip()
+    try:
+        title_id = int(key)
+    except (TypeError, ValueError):
+        return ""
+    if title_id < 6:
+        return ""
+    return classes.get(key, "badge-title-slate")
+
+
+@register.filter
+def is_three_star_title(value):
+    if value in (None, ""):
+        return False
+    try:
+        return int(value) >= 6
+    except (TypeError, ValueError):
+        return False
+
+
+@register.filter
 def jp_date(value):
     parsed = _to_date(value)
     if not parsed:

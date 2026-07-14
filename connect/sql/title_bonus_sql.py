@@ -3,20 +3,28 @@ TITLE_BONUS_SQL = """
 WITH RECURSIVE
 
 -- タイトルボーナス対象売上 x
--- 初回購入BV + ランクアップ購入BV + 50BV再購入 + 50BV特別対応
+-- 初回購入BV + ランクアップ購入BV + 再購入・特別対応（合算して上限50BV）
 title_bonus_target_purchase_list as (
 SELECT
     p.jwoa_code,
-    SUM(
-        CASE
-            WHEN p.order_type IN (101, 105)
-            THEN LEAST(IFNULL(p.bv, 0), 50)
-
-            WHEN p.order_type IN (102, 103)
-            THEN IFNULL(p.bv, 0)
-
-            ELSE 0
-        END
+    (
+        LEAST(
+            SUM(
+                CASE
+                    WHEN p.order_type IN (101, 105)
+                    THEN IFNULL(p.bv, 0)
+                    ELSE 0
+                END
+            ),
+            50
+        )
+        + SUM(
+            CASE
+                WHEN p.order_type IN (102, 103)
+                THEN IFNULL(p.bv, 0)
+                ELSE 0
+            END
+        )
     ) AS sum_bv
 FROM bonus_db.purchase_info_list AS p
 WHERE p.order_type IN (101, 102, 103, 105)
@@ -24,17 +32,25 @@ WHERE p.order_type IN (101, 102, 103, 105)
   AND p.register_month = %s
 GROUP BY
     p.jwoa_code
-HAVING SUM(
-    CASE
-        WHEN p.order_type IN (101, 105)
-        THEN LEAST(IFNULL(p.bv, 0), 50)
-
-        WHEN p.order_type IN (102, 103)
-        THEN IFNULL(p.bv, 0)
-
-        ELSE 0
-    END
-) > 0
+HAVING (
+        LEAST(
+            SUM(
+                CASE
+                    WHEN p.order_type IN (101, 105)
+                    THEN IFNULL(p.bv, 0)
+                    ELSE 0
+                END
+            ),
+            50
+        )
+        + SUM(
+            CASE
+                WHEN p.order_type IN (102, 103)
+                THEN IFNULL(p.bv, 0)
+                ELSE 0
+            END
+        )
+    ) > 0
 ),
 
 -- タイトル結果（月タイトル登録済みデータを参照）
