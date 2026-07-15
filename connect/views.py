@@ -996,6 +996,18 @@ SEARCH_EXPORT_COLUMNS = {
         ("created_at", "created_at"),
         ("updated_at", "updated_at"),
     ],
+    "global_bonus": [
+        ("kibetu", "kibetu"),
+        ("jwoa_code", "jwoa_code"),
+        ("jwoa_name", "jwoa_name"),
+        ("title_name", "title_name"),
+        ("score", "score", "int"),
+        ("total_score", "total_score", "int"),
+        ("total_bv", "total_bv", "decimal2"),
+        ("bonus_amount", "bonus_amount", "decimal2"),
+        ("created_at", "created_at"),
+        ("updated_at", "updated_at"),
+    ],
     "week_bonus": [
         ("期別", "kibetu"),
         ("会員コード", "jwoa_code"),
@@ -1079,6 +1091,13 @@ BONUS_RESULT_DELETE_CONFIG = {
         "history_names": ["three_star_global_bonus"],
         "period_model": MonthlyPeriod,
         "redirect_name": "connect:three_star_global_bonus",
+    },
+    "global_bonus": {
+        "label": "グローバル配当",
+        "result_tables": ["bonus_db.B_global_bonus_result"],
+        "history_names": ["global_bonus"],
+        "period_model": MonthlyPeriod,
+        "redirect_name": "connect:global_bonus",
     },
     "week_bonus": {
         "label": "週間ボーナス",
@@ -8958,6 +8977,361 @@ class S_ThreeStarGlobalBonusView(generic.ListView):
             {
                 "jwoa_code": "tsgbr.jwoa_code",
                 "jwoa_name": "tsgbr.jwoa_name",
+            },
+        )
+        ctx.update(filter_values)
+        sql += "\n            ORDER BY " + sort_ctx["order_sql"]
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            logger.info(f"Executed SQL: {cursor._executed}")
+
+            cols = [c[0] for c in cursor.description]
+            rows = [
+                dict(zip(cols, r))
+                for r in cursor.fetchall()
+            ]
+
+        ctx["rows"] = rows
+
+        return ctx
+
+
+class GlobalBonusView(generic.ListView):
+    template_name = "global_bonus.html"
+    context_object_name = "object_list"
+    model = MonthlyPeriod
+
+    def get_queryset(self):
+        return (
+            MonthlyPeriod.objects.using("rds")
+            .all()
+            .order_by("-year", "-month")
+        )
+
+    def get(self, request, *args, **kwargs):
+        self.object_list = self.get_queryset()
+        context = self.get_context_data()
+        return self.render_to_response(context)
+
+    def post(self, request, *args, **kwargs):
+        action = request.POST.get("action", "")
+        selected_kibetu = request.POST.get("kibetu", "").strip()
+
+        if action == "delete":
+            return delete_bonus_result_for_kibetu(request, "global_bonus")
+
+        if action != "global_bonus":
+            messages.error(request, "不正な操作です。")
+            return redirect("connect:global_bonus")
+
+        if not selected_kibetu:
+            messages.error(request, "期別を選択してください。")
+            return redirect("connect:global_bonus")
+
+        period = (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu=selected_kibetu)
+            .first()
+        )
+
+        if not period:
+            messages.error(request, "選択された期別が存在しません。")
+            return redirect("connect:global_bonus")
+
+        if not has_month_title_rows(selected_kibetu):
+            warn_month_title_required(request, "登録")
+            return redirect(f"/global_bonus/?kibetu={selected_kibetu}")
+
+        try:
+            global_bonus_rows = self._get_global_bonus_rows(
+                selected_kibetu=selected_kibetu,
+                period=period,
+            )
+
+            if not global_bonus_rows:
+                with transaction.atomic(using="rds"):
+                    insert_bonus_register_history(
+                        "global_bonus",
+                        selected_kibetu,
+                        request.user.username,
+                        "0件登録（対象データなし）",
+                    )
+                messages.warning(request, "登録対象データはありませんが、登録履歴を残しました。")
+                return redirect(
+                    f"/global_bonus_rows/?kibetu={selected_kibetu}"
+                )
+
+            insert_sql, insert_params = (
+                register_sql.get_global_bonus_insert_data(
+                    selected_kibetu,
+                    global_bonus_rows,
+                )
+            )
+
+            if not insert_params:
+                with transaction.atomic(using="rds"):
+                    insert_bonus_register_history(
+                        "global_bonus",
+                        selected_kibetu,
+                        request.user.username,
+                        "0件登録（登録対象なし）",
+                    )
+                messages.warning(request, "登録対象データはありませんが、登録履歴を残しました。")
+                return redirect(
+                    f"/global_bonus/?kibetu={selected_kibetu}"
+                )
+
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    # グローバル配当登録
+                    cursor.executemany(insert_sql, insert_params)
+
+                    # 登録履歴
+                    history_sql = """
+                        INSERT INTO bonus_db.bonus_register_history (
+                            bonus_name,
+                            kibetu,
+                            registered_at,
+                            registered_by,
+                            comment_text
+                        )
+                        VALUES (
+                            %s,
+                            %s,
+                            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'),
+                            %s,
+                            %s
+                        )
+                    """
+
+                    cursor.execute(
+                        history_sql,
+                        [
+                            "global_bonus",
+                            selected_kibetu,
+                            request.user.username,
+                            f"{len(insert_params)}件登録",
+                        ],
+                    )
+
+            messages.success(
+                request,
+                f"{len(insert_params)}件をグローバル配当結果に登録しました。"
+            )
+
+        except Exception as e:
+            logger.exception("グローバル配当結果登録エラー")
+            messages.error(request, f"登録中にエラーが発生しました: {e}")
+
+        return redirect(
+            f"/global_bonus/?kibetu={selected_kibetu}"
+        )
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
+
+        ctx["selected_kibetu"] = selected_kibetu
+        ctx["history_rows"] = get_month_bonus_history_rows()
+        ctx["history_target_url_name"] = "connect:global_bonus"
+        ctx["rows"] = []
+        ctx["selected_period"] = None
+
+        if not selected_kibetu:
+            return ctx
+
+        period = (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu=selected_kibetu)
+            .first()
+        )
+
+        if not period:
+            return ctx
+
+        ctx["selected_period"] = period
+
+        if not has_month_title_rows(selected_kibetu):
+            warn_month_title_required(self.request)
+            return ctx
+
+        ctx["rows"] = self._get_global_bonus_rows(
+            selected_kibetu=selected_kibetu,
+            period=period,
+        )
+        if not ctx["rows"]:
+            insert_empty_bonus_history_on_display(
+                self.request,
+                "global_bonus",
+                selected_kibetu,
+            )
+
+        return ctx
+
+    def _get_global_bonus_rows(self, selected_kibetu, period):
+
+        # 今月
+        kibetu_year = period.year
+        kibetu_month = period.month
+
+        # 当月1日を作成
+        current_date = date(kibetu_year, kibetu_month, 1)
+
+        # 先月
+        prev_month_period = current_date - relativedelta(months=1)
+
+        prev_year = prev_month_period.year
+        prev_month = prev_month_period.month
+
+        params = [
+            prev_year,
+            prev_month,
+            prev_year,
+            prev_month,
+            selected_kibetu,
+            kibetu_year,
+            kibetu_month,
+        ]
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(
+                CROWN_DIAMOND_GLOBAL_BONUS_Y_SQL,
+                params
+            )
+
+            logger.info(f"Executed SQL: {cursor._executed}")
+
+            cols = [c[0] for c in cursor.description]
+
+            rows = [
+                dict(zip(cols, r))
+                for r in cursor.fetchall()
+            ]
+
+        return rows
+
+
+class S_GlobalBonusView(generic.ListView):
+    template_name = "s_global_bonus.html"
+    context_object_name = "object_list"
+    model = MonthlyPeriod
+
+    def get_queryset(self):
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute("""
+                SELECT DISTINCT kibetu
+                FROM bonus_db.B_global_bonus_result
+                ORDER BY kibetu DESC
+            """)
+
+            registered_kibetu_list = [
+                row[0]
+                for row in cursor.fetchall()
+            ]
+
+        if not registered_kibetu_list:
+            return MonthlyPeriod.objects.using("rds").none()
+
+        return (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu__in=registered_kibetu_list)
+            .order_by("-year", "-month")
+        )
+
+    def get(self, request, *args, **kwargs):
+        self.object_list = self.get_queryset()
+        context = self.get_context_data()
+
+        if request.GET.get("export") == "excel":
+            rows = context.get("rows", [])
+            kibetu = context.get("selected_kibetu", "")
+            filename = build_bonus_export_filename("global_bonus_result", kibetu=kibetu)
+            return export_search_rows_to_excel(
+                rows,
+                SEARCH_EXPORT_COLUMNS["global_bonus"],
+                "GlobalBonus",
+                filename,
+            )
+
+        return self.render_to_response(context)
+
+    def get_context_data(self, **kwargs):
+
+        ctx = super().get_context_data(**kwargs)
+
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
+
+        if not selected_kibetu and self.object_list:
+            selected_kibetu = self.object_list[0].kibetu
+
+        ctx["selected_kibetu"] = selected_kibetu
+        ctx["rows"] = []
+        ctx["selected_period"] = None
+
+        if not selected_kibetu:
+            return ctx
+
+        period = (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu=selected_kibetu)
+            .first()
+        )
+
+        if not period:
+            return ctx
+
+        ctx["selected_period"] = period
+
+        sort_ctx = get_bonus_sort_context(
+            self.request,
+            {
+                "kibetu": "gbr.kibetu",
+                "jwoa_code": "gbr.jwoa_code",
+                "jwoa_name": "gbr.jwoa_name",
+                "title_name": "title_name",
+                "score": "gbr.score",
+                "total_score": "gbr.total_score",
+                "total_bv": "gbr.total_bv",
+                "bonus_amount": "gbr.bonus_amount",
+                "created_at": "gbr.created_at",
+                "updated_at": "gbr.updated_at",
+            },
+            default_sort="bonus_amount",
+            default_direction="desc",
+        )
+        ctx.update(sort_ctx)
+
+        sql = """
+            SELECT
+                gbr.id,
+                gbr.kibetu,
+                gbr.jwoa_code,
+                gbr.jwoa_name,
+                gbr.title_id,
+                COALESCE(tm.title_name, 'タイトルなし') AS title_name,
+                gbr.score,
+                gbr.total_score,
+                gbr.total_bv,
+                gbr.bonus_amount,
+                gbr.created_at,
+                gbr.updated_at
+            FROM bonus_db.B_global_bonus_result AS gbr
+            LEFT JOIN bonus_db.title_master AS tm
+              ON gbr.title_id = tm.title_id
+            WHERE gbr.kibetu = %s
+        """
+
+        params = [selected_kibetu]
+        sql, filter_values = apply_like_filters(
+            sql,
+            params,
+            self.request,
+            {
+                "jwoa_code": "gbr.jwoa_code",
+                "jwoa_name": "gbr.jwoa_name",
             },
         )
         ctx.update(filter_values)

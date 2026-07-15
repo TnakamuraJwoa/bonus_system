@@ -1,0 +1,130 @@
+{% extends 'base.html' %}
+{% load static custom_filters %}
+
+{% block head %}
+    <link href="{% static 'css/common.css' %}?v=51" rel="stylesheet">
+{% endblock %}
+
+{% block contents %}
+<div class="container-fluid mt-3 app-page-viewport">
+  <div class="row g-1 h-100">
+
+
+    {% include "com/_sidebar_bonus_keisan.html" with active_menu="global_bonus" %}
+
+    <main class="col-12 col-md-9 col-lg-10 app-page-main">
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          {% include "com/_bonus_calc_help.html" with title="【ボーナス計算 - グローバル配当】" help_title="グローバル配当" help_key="global_bonus" history_modal_id="globalBonusHistoryModal" history_title="登録履歴を表示" %}
+
+          <div class="bonus-calc-form">
+
+            <form method="get" id="globalBonusSearchForm" class="mb-0">
+              {% bonus_calc_kibetu_input selected_kibetu period_type="monthly" %}
+            </form>
+
+            <div class="bonus-calc-selection-status">
+              {% bonus_calc_period_status empty_message="期別を選択してください" %}
+            </div>
+
+            <div class="bonus-calc-action-row">
+              <button type="submit" form="globalBonusSearchForm" class="btn btn-primary" data-bonus-calc-submit="globalBonusSearchForm">計算</button>
+              <a class="btn btn-outline-secondary" href="{% url 'connect:global_bonus' %}">
+                リセット
+              </a>
+
+              {% if user_access.can_execute and selected_period and rows %}
+              <form method="post"
+                    class="mb-0"
+                    data-confirm="表示中のグローバル配当結果を登録しますか？すでに登録済みの場合は上書き更新されます。"
+                    data-loading-message="登録中..."
+                    data-loading-target="#bonusCalcRegisterOverlay">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="global_bonus">
+                <input type="hidden" name="kibetu" value="{{ selected_kibetu }}">
+
+                <button type="submit" class="btn btn-warning" data-loading-button>
+                  この期別の結果を登録
+                </button>
+              </form>
+              {% endif %}
+
+              {% if user_access.can_delete %}
+              <form method="post"
+                    class="mb-0"
+                    data-confirm="選択中の期別のグローバル配当登録済み結果データと登録履歴を削除します。よろしいですか？">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="delete">
+                <input type="hidden" name="kibetu" value="{{ selected_kibetu }}">
+
+                <button type="submit" class="btn btn-outline-danger" {% if not selected_kibetu %}disabled{% endif %}>
+                  この期別の登録データを削除
+                </button>
+              </form>
+              {% endif %}
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm flex-grow-1" style="min-height: 0;">
+        <div class="card-body d-flex flex-column" style="min-height: 0; overflow: hidden;">
+
+          {% if rows %}
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="fw-bold">一覧</div>
+              <div class="text-end"><strong>件数：{{ rows|length }} 件</strong></div>
+            </div>
+
+            <div class="table-responsive flex-grow-1" style="min-height: 0; overflow-x: auto; overflow-y: auto;">
+              <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                  <tr>
+                    <th>jwoa_code</th>
+                    <th>jwoa_name</th>
+                    <th>title_name</th>
+                    <th>score</th>
+                    <th>total_score</th>
+                    <th>total_bv</th>
+                    <th>bonus_amount</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {% for r in rows %}
+                    <tr>
+                      <td>{{ r.jwoa_code }}</td>
+                      <td>{{ r.jwoa_name }}</td>
+                      <td>{{ r.title_name }}</td>
+                      <td>{{ r.score }}</td>
+                      <td>{{ r.total_score }}</td>
+                      <td>{{ r.total_bv }}</td>
+                      <td class="fw-bold text-primary text-end">
+                        {{ r.bonus_amount }}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+          {% else %}
+            {% if selected_kibetu %}
+              <p class="mb-0">この期間のデータはありません。</p>
+            {% else %}
+              <p class="mb-0 text-muted">期別を選択して「計算」を押してください。</p>
+            {% endif %}
+          {% endif %}
+
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+{% include "com/_bonus_histry_month_modal.html" with modal_id="globalBonusHistoryModal" %}
+{% include "com/_bonus_calc_progress_overlay.html" with form_id="globalBonusSearchForm" overlay_id="globalBonusProgressOverlay" progress_bar_id="globalBonusProgressBar" progress_text_id="globalBonusProgressText" %}
+{% include "com/_bonus_calc_register_overlay.html" %}
+{% endblock %}

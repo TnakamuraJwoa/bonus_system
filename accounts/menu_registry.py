@@ -111,6 +111,12 @@ MENU_FEATURES = (
         "bonus_search",
         ("s_three_star_global_bonus",),
     ),
+    MenuFeature(
+        "s_global_bonus",
+        "グローバル配当（検索）",
+        "bonus_search",
+        ("s_global_bonus",),
+    ),
     # --- ボーナス検索（合計） ---
     MenuFeature("s_week_bonus", "週間ボーナス（検索）", "bonus_search", ("s_week_bonus",)),
     MenuFeature("s_month_bonus", "月間ボーナス（検索）", "bonus_search", ("s_month_bonus",)),
@@ -136,6 +142,12 @@ MENU_FEATURES = (
         "3スターダイヤグローバル配当（計算）",
         "bonus_calc",
         ("three_star_global_bonus",),
+    ),
+    MenuFeature(
+        "global_bonus",
+        "グローバル配当（計算）",
+        "bonus_calc",
+        ("global_bonus",),
     ),
     # --- ボーナス計算（合計・履歴） ---
     MenuFeature("week_bonus", "週間ボーナス（計算）", "bonus_calc", ("week_bonus",)),

@@ -1,0 +1,233 @@
+{% extends 'base.html' %}
+{% load static custom_filters %}
+
+{% block head %}
+    <link href="{% static 'css/common.css' %}?v=48" rel="stylesheet">
+{% endblock %}
+
+{% block contents %}
+<div class="container-fluid mt-3 app-page-viewport">
+  <div class="row g-1 h-100">
+
+
+    {% include "com/_sidebar_bonus_kensaku.html" with active_menu="global_bonus" %}
+
+    <main class="col-12 col-md-9 col-lg-10 app-page-main">
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+
+          <form method="get" class="bonus-search-form">
+            <div class="bonus-search-header">
+              <h5 class="page-title mb-0">
+                【ボーナス検索 - グローバル配当】
+              </h5>
+              {% if user_access.can_export %}
+                {% include "com/_excel_export_icon_button.html" %}
+              {% endif %}
+            </div>
+
+            <div class="bonus-search-filters">
+            <input type="hidden" name="sort" value="{{ sort|default:'' }}">
+            <input type="hidden" name="direction" value="{{ direction|default:'' }}">
+
+            <div>
+              <label class="form-label mb-0 small text-muted">
+                期別
+              </label>
+
+              <select name="kibetu" class="form-select">
+
+                {% for obj in object_list %}
+
+                  <option value="{{ obj.kibetu }}"
+                          {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
+
+                    【{{ obj.kibetu }}】
+                    {{ obj.payment_date }}
+
+                  </option>
+
+                {% endfor %}
+
+              </select>
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">
+                会員コード
+              </label>
+              <input type="text"
+                     name="jwoa_code"
+                     class="form-control"
+                     value="{{ jwoa_code }}"
+                     placeholder="例：JP00000000">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">
+                会員名
+              </label>
+              <input type="text"
+                     name="jwoa_name"
+                     class="form-control"
+                     value="{{ jwoa_name }}"
+                     placeholder="部分一致">
+            </div>
+
+            <div class="bonus-search-actions">
+              <button type="submit" class="btn btn-primary">
+                表示
+              </button>
+
+              <a class="btn btn-outline-secondary"
+                 href="{% url 'connect:s_global_bonus' %}">
+                リセット
+              </a>
+
+            </div>
+            </div>
+
+          </form>
+
+          <div class="selection-indicator-group mt-3">
+          {% selection_from_period selected_period empty_message="期別を選択してください" %}
+          {% if jwoa_code or jwoa_name %}
+          <div class="selection-indicator">
+            {% if jwoa_code %}
+              <span class="selection-indicator__badge selection-indicator__badge--member-code badge badge-pill">会員コード：{{ jwoa_code }}</span>
+            {% endif %}
+            {% if jwoa_name %}
+              <span class="selection-indicator__badge selection-indicator__badge--member-name badge badge-pill">会員名：{{ jwoa_name }}</span>
+            {% endif %}
+          </div>
+          {% endif %}
+          </div>
+
+        </div>
+      </div>
+
+      <div class="card shadow-sm flex-grow-1"
+           data-bonus-search-fullscreen-card
+           style="min-height: 0;">
+
+        <div class="card-body d-flex flex-column"
+             style="min-height: 0; overflow: hidden;">
+
+          {% if rows %}
+
+            <div class="d-flex justify-content-between align-items-center mb-2">
+
+              <div class="fw-bold">
+                一覧
+              </div>
+
+              <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+                <div class="text-end">
+                  <strong>件数：{{ rows|length }} 件</strong>
+                </div>
+                <button type="button"
+                        class="btn btn-sm btn-outline-primary bonus-search-fullscreen-enter"
+                        data-bonus-search-fullscreen-enter>
+                  全画面表示
+                </button>
+                <button type="button"
+                        class="btn btn-sm btn-outline-secondary bonus-search-fullscreen-exit"
+                        data-bonus-search-fullscreen-exit>
+                  全画面を閉じる
+                </button>
+              </div>
+
+            </div>
+
+            <div class="table-responsive flex-grow-1"
+                 style="min-height: 0; overflow-x: auto; overflow-y: auto;">
+
+              <table class="table table-bordered table-sm align-middle mb-0"
+                     style="white-space: nowrap;">
+
+                <thead class="table-light"
+                       style="position: sticky; top: 0; z-index: 1;">
+
+                  <tr>
+                    {% sortable_th "kibetu" "kibetu" %}
+                    {% sortable_th "jwoa_code" "jwoa_code" %}
+                    {% sortable_th "jwoa_name" "jwoa_name" %}
+                    {% sortable_th "title_name" "title_name" %}
+                    {% sortable_th "score" "score" %}
+                    {% sortable_th "total_score" "total_score" %}
+                    {% sortable_th "total_bv" "total_bv" %}
+                    {% sortable_th "bonus_amount" "bonus_amount" %}
+                    {% sortable_th "created_at" "created_at" %}
+                    {% sortable_th "updated_at" "updated_at" %}
+                  </tr>
+
+                </thead>
+
+                <tbody>
+                  {% for r in rows %}
+                    <tr>
+
+                      <td>{{ r.kibetu }}</td>
+
+                      <td>{{ r.jwoa_code }}</td>
+
+                      <td>{{ r.jwoa_name }}</td>
+
+                      <td>
+                        {{ r.title_name }}
+                      </td>
+
+                      <td class="text-end">
+                        {{ r.score }}
+                      </td>
+
+                      <td class="text-end">
+                        {{ r.total_score }}
+                      </td>
+
+                      <td class="text-end">
+                        {{ r.total_bv }}
+                      </td>
+
+                      <td class="fw-bold text-primary text-end">
+                        {{ r.bonus_amount }}
+                      </td>
+
+                      <td>{{ r.created_at }}</td>
+
+                      <td>{{ r.updated_at }}</td>
+
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+
+            </div>
+
+          {% else %}
+
+            {% if selected_kibetu %}
+
+              <p class="mb-0">
+                この期間のデータはありません。
+              </p>
+
+            {% else %}
+
+              <p class="mb-0 text-muted">
+                期別を選択して「表示」を押してください。
+              </p>
+
+            {% endif %}
+
+          {% endif %}
+
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+{% include "com/_bonus_search_fullscreen_assets.html" %}
+{% endblock %}

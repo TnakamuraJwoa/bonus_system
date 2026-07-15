@@ -51,6 +51,8 @@ INDIVIDUAL_BONUS_URL_PAIRS = {
     "s_repurchase_over_bonus": ("repurchase_over_bonus", "s_repurchase_over_bonus"),
     "three_star_global_bonus": ("three_star_global_bonus", "s_three_star_global_bonus"),
     "s_three_star_global_bonus": ("three_star_global_bonus", "s_three_star_global_bonus"),
+    "global_bonus": ("global_bonus", "s_global_bonus"),
+    "s_global_bonus": ("global_bonus", "s_global_bonus"),
 }
 
 TOTAL_BONUS_URL_PAIRS = {
@@ -70,6 +72,7 @@ BONUS_HISTORY_FIELD_BY_URL_NAME = {
     "title_diff_bonus": "title_diff_bonus",
     "repurchase_over_bonus": "repurchase_over_bonus",
     "three_star_global_bonus": "three_star_global_bonus",
+    "global_bonus": "global_bonus",
     "month_bonus": "month_bonus",
     "title_registration": "title_registration",
 }

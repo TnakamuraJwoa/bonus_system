@@ -197,6 +197,23 @@ MONTH_BONUS_HISTORY_SQL = """
 
         MAX(
             CASE
+                WHEN h.bonus_name = 'global_bonus'
+                THEN DATE(h.registered_at)
+            END
+        ) AS global_bonus,
+        MAX(
+            CASE
+                WHEN h.bonus_name = 'global_bonus'
+                 AND (
+                    h.comment_text LIKE '0件%%'
+                    OR h.comment_text LIKE '%%: 0件登録'
+                 )
+                THEN 1
+            END
+        ) AS global_bonus_is_empty,
+
+        MAX(
+            CASE
                 WHEN h.bonus_name = 'month_bonus'
                 THEN DATE(h.registered_at)
             END
@@ -246,6 +263,7 @@ MONTH_BONUS_HISTORY_SQL = """
                 'title_diff_bonus',
                 'repurchase_over_bonus',
                 'three_star_global_bonus',
+                'global_bonus',
                 'month_bonus',
                 'title_registration'
             )
