@@ -1,34 +1,56 @@
 TITLE_BONUS_SQL = """
+
 WITH RECURSIVE
 
--- (taitle 当月購入情報)
-T_this_month_purchase_info_list as (
+-- タイトルボーナス対象売上 x
+-- 初回購入BV + ランクアップ購入BV + 再購入・特別対応（合算して上限50BV）
+title_bonus_target_purchase_list as (
 SELECT
-    p.*,
-
-    CASE
-        WHEN p.order_type = 101
-        THEN LEAST(IFNULL(p.bv, 0), 50)
-
-        ELSE IFNULL(p.bv, 0)
-    END AS custom_bv
-
+    p.jwoa_code,
+    (
+        LEAST(
+            SUM(
+                CASE
+                    WHEN p.order_type IN (101, 105)
+                    THEN IFNULL(p.bv, 0)
+                    ELSE 0
+                END
+            ),
+            50
+        )
+        + SUM(
+            CASE
+                WHEN p.order_type IN (102, 103)
+                THEN IFNULL(p.bv, 0)
+                ELSE 0
+            END
+        )
+    ) AS sum_bv
 FROM bonus_db.purchase_info_list AS p
-WHERE p.register_year = %s
+WHERE p.order_type IN (101, 102, 103, 105)
+  AND p.register_year = %s
   AND p.register_month = %s
-),
-
--- (taitle 当月購入情報)合計
-T_sum_this_month_purchase_info_list as (
-SELECT
-    jwoa_code,
-    send_bv_name,
-    SUM(custom_bv) AS sum_bv
-FROM T_this_month_purchase_info_list
 GROUP BY
-    jwoa_code,
-    send_bv_name
-HAVING SUM(custom_bv) > 0
+    p.jwoa_code
+HAVING (
+        LEAST(
+            SUM(
+                CASE
+                    WHEN p.order_type IN (101, 105)
+                    THEN IFNULL(p.bv, 0)
+                    ELSE 0
+                END
+            ),
+            50
+        )
+        + SUM(
+            CASE
+                WHEN p.order_type IN (102, 103)
+                THEN IFNULL(p.bv, 0)
+                ELSE 0
+            END
+        )
+    ) > 0
 ),
 
 -- タイトル結果（月タイトル登録済みデータを参照）
@@ -53,7 +75,7 @@ where title_id >= 6
 ),
 
 
--- 当月アクティブ会員
+-- 当月アクティブ設定会員
 this_month_active_users as (
 SELECT
     id,
@@ -67,7 +89,7 @@ WHERE year = %s AND month = %s
 ),
 
 
--- 前月アクティブ会員
+-- 前月アクティブ設定会員
 prev_month_active_users as (
 SELECT
     id,
@@ -167,190 +189,256 @@ JOIN purchase_active  AS b
   ON a.jwoa_code = b.jwoa_code
 ),
 
--- ３スターダイヤ以上でアクティブ + 紹介者
-active_three_star_dia_with_intro as (
+-- 紹介者tree
+placement_tree AS (
+    -- 1階層目
     SELECT
-        ats.jwoa_code AS root_jmoa_code,
-        ats.jwoa_name AS root_name,
-        u.introducer_code,
+        a.jwoa_code AS root_jmoa_code,
+        a.jwoa_name AS root_name,
+        a.jwoa_code AS up_jwoa_code,
+        a.jwoa_name AS up_name,
         u.jmoa_code AS down_jwoa_code,
         u.send_bv_name AS down_name,
+
+        CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM active_three_star_dia AS ats
+                WHERE ats.jwoa_code = u.jmoa_code
+            )
+            THEN 1
+            ELSE 0
+        END AS down_star_dia_flg,
+        
+        CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM active_three_star_dia AS ats
+                WHERE ats.jwoa_code = u.jmoa_code
+            )
+            THEN 1
+            ELSE 0
+        END AS down_match_level,
+
         1 AS tree_level
-    FROM active_three_star_dia AS ats
+
+    FROM active_three_star_dia AS a
+
     JOIN bonus_db.users AS u
-      ON u.introducer_code = ats.jwoa_code
-),
-
--- active_three_star_dia_with_intro を起点に上位者で下を見る
-introducer_down_tree AS (
-
-    -- 1階層目：直紹介
-    SELECT
-        root_jmoa_code,
-        root_name,
-        introducer_code AS up_jwoa_code,
-        down_jwoa_code,
-        down_name,
-        tree_level,
-
-        0 AS match_level,
-        0 AS matched_flg
-
-    FROM active_three_star_dia_with_intro
+      ON a.jwoa_code = u.introducer_code
 
     UNION ALL
 
-    -- 2階層目以降：下は全員見る。一致したら match_level を +1
+    -- 2階層目以降
     SELECT
-        t.root_jmoa_code,
-        t.root_name,
-        t.down_jwoa_code AS up_jwoa_code,
+        a.root_jmoa_code,
+        a.root_name,
+        a.down_jwoa_code AS up_jwoa_code,
+        a.down_name AS up_name,
         u.jmoa_code AS down_jwoa_code,
         u.send_bv_name AS down_name,
-        t.tree_level + 1 AS tree_level,
-
-        t.match_level +
-        CASE
-            WHEN ats.jwoa_code IS NOT NULL THEN 1
-            ELSE 0
-        END AS match_level,
 
         CASE
-            WHEN ats.jwoa_code IS NOT NULL THEN 1
+            WHEN EXISTS (
+                SELECT 1
+                FROM active_three_star_dia AS ats
+                WHERE ats.jwoa_code = u.jmoa_code
+            )
+            THEN 1
             ELSE 0
-        END AS matched_flg
+        END AS down_star_dia_flg,
+        
+        
+        CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM active_three_star_dia AS ats
+                WHERE ats.jwoa_code = u.jmoa_code
+            )
+            THEN a.down_match_level + 1
+            ELSE a.down_match_level
+        END AS down_match_level,
 
-    FROM introducer_down_tree AS t
+        a.tree_level + 1 AS tree_level
+
+    FROM placement_tree AS a
 
     JOIN bonus_db.users AS u
-      ON u.introducer_code = t.down_jwoa_code
-
-    LEFT JOIN active_three_star_dia AS ats
-      ON ats.jwoa_code = u.jmoa_code
-
-    WHERE t.tree_level < 10000
-      AND t.match_level < 6
+      ON a.down_jwoa_code = u.introducer_code
 ),
 
--- マッチングレベル
-match_level AS (
-SELECT
-    root_jmoa_code,
-    root_name,
-    up_jwoa_code,
-    down_jwoa_code,
-    down_name,
-    tree_level,
-    match_level,
-    matched_flg
-FROM introducer_down_tree
-WHERE
-    tree_level = 1
-    OR
-    (
-        tree_level >= 2
-        AND matched_flg = 1
-    )
-ORDER BY
-    root_jmoa_code,
-    match_level,
-    tree_level,
-    down_jwoa_code
+-- treeの絞込
+-- 傘下に3スター達成してる
+down_star_dia AS (
+    SELECT 
+     t.title_id as root_title_id,
+     a.*
+     
+    FROM placement_tree as a
+    
+    left join title_result as t
+    on a.root_jmoa_code = t.jwoa_code
+    
+    WHERE down_star_dia_flg = 1
+    ORDER BY root_jmoa_code, down_match_level
+),
+
+-- - - - - - - - - - -傘下のBVの合計 - - - - - - - - - - - -
+
+-- downの会員
+down_users as (
+select
+ down_jwoa_code,
+ down_name
+from down_star_dia
+group by down_jwoa_code, down_name
+),
+
+-- 傘下のBV
+down_users_bv as (
+
+select 
+ a.down_jwoa_code as root_jwoa_code,
+ a.down_name as root_name,
+ a.down_jwoa_code as up_jwoa_code,
+ a.down_name as up_name,
+ a.down_jwoa_code as down_code,
+ a.down_name as down_name,
+ 1 as level,
+ b.sum_bv as bv
+from down_users as a
+
+left join title_bonus_target_purchase_list as b
+on a.down_jwoa_code = b.jwoa_code
+
+union all
+
+select
+ a.root_jwoa_code,
+ a.root_name,
+ a.down_code as up_jwoa_code,
+ a.down_name as up_name,
+ u.jmoa_code as down_code,
+ u.send_bv_name as down_name,
+ a.level + 1 as level,
+ IFNULL(b.sum_bv, 0) as bv
+from down_users_bv as a
+
+JOIN bonus_db.users AS u
+on a.down_code = u.introducer_code
+
+left join title_bonus_target_purchase_list as b
+on u.jmoa_code = b.jwoa_code
+
+),
+
+-- 傘下のBVの合計
+sum_down_users_bv as (
+select
+ root_jwoa_code,
+ sum(bv) as sum_bv
+from down_users_bv
+group by root_jwoa_code
 ),
 
 
--- マッチングレベル + bv
-match_level_add_bv as (
+-- - - - - - - - - - -↑傘下のBVの合計 - - - - - - - - - - - -
+-- title_result
+title_bonus_result as (
 SELECT
-    a.root_jmoa_code as root_jmoa_code,
-    a.root_name,
-    a.up_jwoa_code,
-    a.down_jwoa_code,
-    a.down_name,
-    a.tree_level,
-    a.match_level,
-    b.sum_bv,
-    c.title_id,
+ a.*,
+ b.sum_bv
+FROM down_star_dia as a
 
+left join sum_down_users_bv as b
+on a.down_jwoa_code = b.root_jwoa_code
+
+),
+
+
+title_bonus_result1 as (
+select
+ root_jmoa_code,
+ root_name,
+ up_jwoa_code,
+ down_jwoa_code,
+ down_name,
+ tree_level,
+ down_match_level as match_level,
+ root_title_id as title_id,
+ sum_bv,
+ 
     CASE
-        WHEN c.title_id = 6 AND a.match_level <= 1
+        WHEN root_title_id = 6 AND down_match_level <= 1
         THEN 0.02
 
-        WHEN c.title_id = 7 AND a.match_level <= 2
+        WHEN root_title_id = 7 AND down_match_level <= 2
         THEN 0.02
 
-        WHEN c.title_id = 8 AND a.match_level <= 3
+        WHEN root_title_id = 8 AND down_match_level <= 3
         THEN 0.02
 
-        WHEN c.title_id = 9 AND a.match_level <= 3
+        WHEN root_title_id = 9 AND down_match_level <= 3
         THEN 0.02
 
-        WHEN c.title_id = 9 AND a.match_level = 4
+        WHEN root_title_id = 9 AND down_match_level = 4
         THEN 0.01
 
-        WHEN c.title_id IN (10, 11) AND a.match_level <= 3
+        WHEN root_title_id IN (10, 11) AND down_match_level <= 3
         THEN 0.02
 
-        WHEN c.title_id IN (10, 11) AND a.match_level IN (4, 5)
+        WHEN root_title_id IN (10, 11) AND down_match_level IN (4, 5)
         THEN 0.01
 
         ELSE 0
     END AS rate,
-
+    
     CASE
-        WHEN c.title_id = 6 AND a.match_level <= 1
-        THEN b.sum_bv * 0.02
+        WHEN root_title_id = 6 AND down_match_level <= 1
+        THEN sum_bv * 0.02
 
-        WHEN c.title_id = 7 AND a.match_level <= 2
-        THEN b.sum_bv * 0.02
+        WHEN root_title_id = 7 AND down_match_level <= 2
+        THEN sum_bv * 0.02
 
-        WHEN c.title_id = 8 AND a.match_level <= 3
-        THEN b.sum_bv * 0.02
+        WHEN root_title_id = 8 AND down_match_level <= 3
+        THEN sum_bv * 0.02
 
-        WHEN c.title_id = 9 AND a.match_level <= 3
-        THEN b.sum_bv * 0.02
+        WHEN root_title_id = 9 AND down_match_level <= 3
+        THEN sum_bv * 0.02
 
-        WHEN c.title_id = 9 AND a.match_level = 4
-        THEN b.sum_bv * 0.01
+        WHEN root_title_id = 9 AND down_match_level = 4
+        THEN sum_bv * 0.01
 
-        WHEN c.title_id IN (10, 11) AND a.match_level <= 3
-        THEN b.sum_bv * 0.02
+        WHEN root_title_id IN (10, 11) AND down_match_level <= 3
+        THEN sum_bv * 0.02
 
-        WHEN c.title_id IN (10, 11) AND a.match_level IN (4, 5)
-        THEN b.sum_bv * 0.01
+        WHEN root_title_id IN (10, 11) AND down_match_level IN (4, 5)
+        THEN sum_bv * 0.01
 
         ELSE 0
     END AS bonus_amount
 
-FROM match_level AS a
-
-LEFT JOIN T_sum_this_month_purchase_info_list AS b
-  ON a.down_jwoa_code = b.jwoa_code
-
-LEFT JOIN title_result AS c
-  ON a.root_jmoa_code = c.jwoa_code
-
-  where a.matched_flg = 1
+from title_bonus_result
+order by root_jmoa_code, match_level
 )
 
-
 SELECT
-    m.root_jmoa_code,
-    m.root_name,
-    m.up_jwoa_code,
-    m.down_jwoa_code,
-    m.down_name,
-    m.tree_level,
-    m.match_level,
-    m.sum_bv,
-    m.title_id,
+    tbr.root_jmoa_code,
+    tbr.root_name,
+    tbr.up_jwoa_code,
+    tbr.down_jwoa_code,
+    tbr.down_name,
+    tbr.tree_level,
+    tbr.match_level,
+    tbr.sum_bv,
+    tbr.title_id,
     COALESCE(tm.title_name, 'タイトルなし') AS title_name,
-    m.rate,
-    m.bonus_amount
-FROM match_level_add_bv AS m
+    tbr.rate,
+    tbr.bonus_amount
+FROM title_bonus_result1 AS tbr
 LEFT JOIN bonus_db.title_master AS tm
-  ON m.title_id = tm.title_id
-WHERE m.bonus_amount > 0
-ORDER BY m.root_jmoa_code, m.tree_level, m.match_level
+  ON tbr.title_id = tm.title_id
+WHERE tbr.bonus_amount > 0
+ORDER BY tbr.root_jmoa_code, tbr.match_level
 
 """

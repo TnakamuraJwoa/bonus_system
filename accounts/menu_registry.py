@@ -87,7 +87,12 @@ MENU_FEATURES = (
         ("matching_bonus_tree",),
     ),
     MenuFeature("s_month_title", "月タイトル（検索）", "bonus_search", ("s_month_title", "month_title_detail")),
-    MenuFeature("s_title_bonus", "タイトルボーナス（検索）", "bonus_search", ("s_title_bonus",)),
+    MenuFeature(
+        "s_title_bonus",
+        "タイトルボーナス（検索）",
+        "bonus_search",
+        ("s_title_bonus", "title_bonus_detail"),
+    ),
     MenuFeature(
         "s_title_diff_bonus",
         "タイトル差額ボーナス（検索）",
@@ -105,6 +110,12 @@ MENU_FEATURES = (
         "3スターダイヤグローバル配当（検索）",
         "bonus_search",
         ("s_three_star_global_bonus",),
+    ),
+    MenuFeature(
+        "s_global_bonus",
+        "グローバル配当（検索）",
+        "bonus_search",
+        ("s_global_bonus",),
     ),
     # --- ボーナス検索（合計） ---
     MenuFeature("s_week_bonus", "週間ボーナス（検索）", "bonus_search", ("s_week_bonus",)),
@@ -131,6 +142,12 @@ MENU_FEATURES = (
         "3スターダイヤグローバル配当（計算）",
         "bonus_calc",
         ("three_star_global_bonus",),
+    ),
+    MenuFeature(
+        "global_bonus",
+        "グローバル配当（計算）",
+        "bonus_calc",
+        ("global_bonus",),
     ),
     # --- ボーナス計算（合計・履歴） ---
     MenuFeature("week_bonus", "週間ボーナス（計算）", "bonus_calc", ("week_bonus",)),

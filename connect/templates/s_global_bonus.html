@@ -1,4 +1,4 @@
-﻿{% extends 'base.html' %}
+{% extends 'base.html' %}
 {% load static custom_filters %}
 
 {% block head %}
@@ -10,7 +10,7 @@
   <div class="row g-1 h-100">
 
 
-    {% include "com/_sidebar_bonus_kensaku.html" with active_menu="three_star_global_bonus" %}
+    {% include "com/_sidebar_bonus_kensaku.html" with active_menu="global_bonus" %}
 
     <main class="col-12 col-md-9 col-lg-10 app-page-main">
 
@@ -20,7 +20,7 @@
           <form method="get" class="bonus-search-form">
             <div class="bonus-search-header">
               <h5 class="page-title mb-0">
-                【ボーナス検索 - 3スターダイヤグローバル配当】
+                【ボーナス検索 - グローバル配当】
               </h5>
               {% if user_access.can_export %}
                 {% include "com/_excel_export_icon_button.html" %}
@@ -81,7 +81,7 @@
               </button>
 
               <a class="btn btn-outline-secondary"
-                 href="{% url 'connect:s_three_star_global_bonus' %}">
+                 href="{% url 'connect:s_global_bonus' %}">
                 リセット
               </a>
 
@@ -156,7 +156,7 @@
                     {% sortable_th "title_name" "title_name" %}
                     {% sortable_th "score" "score" %}
                     {% sortable_th "total_score" "total_score" %}
-                    {% sortable_th "total_over_bv" "total_over_bv" %}
+                    {% sortable_th "total_bv" "total_bv" %}
                     {% sortable_th "bonus_amount" "bonus_amount" %}
                     {% sortable_th "created_at" "created_at" %}
                     {% sortable_th "updated_at" "updated_at" %}
@@ -187,7 +187,7 @@
                       </td>
 
                       <td class="text-end">
-                        {{ r.total_over_bv }}
+                        {{ r.total_bv }}
                       </td>
 
                       <td class="fw-bold text-primary text-end">

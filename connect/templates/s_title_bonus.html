@@ -1,5 +1,5 @@
-﻿{% extends 'base.html' %}
-{% load static custom_filters %}
+{% extends 'base.html' %}
+{% load humanize static custom_filters %}
 
 {% block head %}
     <link href="{% static 'css/common.css' %}?v=48" rel="stylesheet">
@@ -163,6 +163,7 @@
                     {% sortable_th "rate" "rate" %}
                     {% sortable_th "bonus_amount" "bonus_amount" %}
                     {% sortable_th "created_at" "created_at" %}
+                    <th class="text-center">詳細</th>
                   </tr>
                 </thead>
 
@@ -191,7 +192,7 @@
                       </td>
 
                       <td class="text-end">
-                        {{ r.sum_bv }}
+                        {{ r.sum_bv|intcomma }}
                       </td>
 
                       <td class="text-end">
@@ -204,6 +205,13 @@
 
                       <td>
                         {{ r.created_at }}
+                      </td>
+
+                      <td class="text-center">
+                        <a class="btn btn-sm btn-outline-primary"
+                           href="{% url 'connect:title_bonus_detail' %}?kibetu={{ r.kibetu }}&root_jwoa_code={{ r.root_jwoa_code }}&down_jwoa_code={{ r.down_jwoa_code }}">
+                          詳細
+                        </a>
                       </td>
                     </tr>
 

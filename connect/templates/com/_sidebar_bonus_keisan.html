@@ -26,7 +26,7 @@
     </div>
     {% endif %}
 
-    {% if user_access|can_menu:"title_bonus" or user_access|can_menu:"title_diff_bonus" or user_access|can_menu:"repurchase_over_bonus" or user_access|can_menu:"three_star_global_bonus" %}
+    {% if user_access|can_menu:"title_bonus" or user_access|can_menu:"title_diff_bonus" or user_access|can_menu:"repurchase_over_bonus" or user_access|can_menu:"three_star_global_bonus" or user_access|can_menu:"global_bonus" %}
     <div class="card-body">
       <div class="fw-bold mb-2">■ 月ボーナス</div>
 
@@ -49,6 +49,11 @@
         {% if user_access|can_menu:"three_star_global_bonus" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'three_star_global_bonus' %}active{% endif %}"
            href="{% url 'connect:three_star_global_bonus' %}">3スター配当</a>
+        {% endif %}
+
+        {% if user_access|can_menu:"global_bonus" %}
+        <a class="list-group-item list-group-item-action {% if active_menu == 'global_bonus' %}active{% endif %}"
+           href="{% url 'connect:global_bonus' %}">グローバル配当</a>
         {% endif %}
       </div>
     </div>

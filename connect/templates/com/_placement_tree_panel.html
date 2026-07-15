@@ -67,9 +67,19 @@
               <span class="font-weight-bold">{{ node.jwoa_code }}</span>
               <span>{{ node.send_bv_name|default:"-" }}</span>
               <span class="badge {{ node.rank|rank_badge_class }}">{{ node.rank|rank_label }}</span>
+              {% if node.title_id|is_three_star_title %}
+                <span class="badge {{ node.title_id|title_badge_class }}">{{ node.title_name }}</span>
+              {% elif node.title_name and node.title_name != "タイトルなし" %}
+                <span class="badge badge-light text-muted">{{ node.title_name }}</span>
+              {% endif %}
               {% if node.is_direct_introducer %}
                 <span class="badge badge-warning">{{ direct_badge_label|default:"紹介者" }}</span>
               {% endif %}
+              {% for badge in node.purchase_badges %}
+                <span class="badge {{ badge.badge_class|default:'badge-secondary' }}">
+                  {{ badge.order_type_name }} / {{ badge.bv_max50|floatformat:0 }}BV
+                </span>
+              {% endfor %}
               {% if node.show_tree_bonus_badges %}
                 {% if node.basic_acquired_flg %}
                   <span class="badge badge-danger">ベーシック取得</span>
@@ -110,9 +120,9 @@
           </button>
           <span class="font-weight-bold">{{ tree_ancestor_title|default:"上位者" }}</span>
           <span class="text-muted mx-1">{{ tree_ancestors|length }}件</span>
-          <span class="badge badge-secondary ml-1">閉じています</span>
+          <span class="badge badge-secondary ml-1" data-tree-ancestor-state-badge>閉じています</span>
         </div>
-        <div class="placement-tree-children is-collapsed">
+        <div class="placement-tree-children placement-tree-children--ancestors is-collapsed">
           {% for node in tree_ancestors %}
             <div class="placement-tree-node placement-tree-node--ancestor" style="padding-left: {{ forloop.counter0 }}rem;">
               <div class="placement-tree-node__row">
@@ -120,10 +130,20 @@
                 <span class="font-weight-bold">{{ node.jwoa_code }}</span>
                 <span class="text-muted mx-1">{{ node.send_bv_name|default:"-" }}</span>
                 <span class="badge {{ node.rank|rank_badge_class }}">{{ node.rank|rank_label }}</span>
+                {% if node.title_id|is_three_star_title %}
+                  <span class="badge {{ node.title_id|title_badge_class }} ml-1">{{ node.title_name }}</span>
+                {% elif node.title_name and node.title_name != "タイトルなし" %}
+                  <span class="badge badge-light text-muted ml-1">{{ node.title_name }}</span>
+                {% endif %}
                 <span class="badge badge-secondary ml-1">{{ tree_ancestor_badge_label|default:"上位" }}</span>
                 {% if node.is_direct_introducer %}
                   <span class="badge badge-warning ml-1">{{ direct_badge_label|default:"紹介者" }}</span>
                 {% endif %}
+                {% for badge in node.purchase_badges %}
+                  <span class="badge {{ badge.badge_class|default:'badge-secondary' }} ml-1">
+                    {{ badge.order_type_name }} / {{ badge.bv_max50|floatformat:0 }}BV
+                  </span>
+                {% endfor %}
                 {% if node.show_tree_bonus_badges %}
                   {% if node.basic_acquired_flg %}
                     <span class="badge badge-danger ml-1">ベーシック取得</span>
@@ -162,10 +182,20 @@
           <span class="font-weight-bold">{{ tree_focus.jwoa_code }}</span>
           <span class="text-muted mx-1">{{ tree_focus.send_bv_name|default:"-" }}</span>
           <span class="badge {{ tree_focus.rank|rank_badge_class }}">{{ tree_focus.rank|rank_label }}</span>
+          {% if tree_focus.title_id|is_three_star_title %}
+            <span class="badge {{ tree_focus.title_id|title_badge_class }} ml-1">{{ tree_focus.title_name }}</span>
+          {% elif tree_focus.title_name and tree_focus.title_name != "タイトルなし" %}
+            <span class="badge badge-light text-muted ml-1">{{ tree_focus.title_name }}</span>
+          {% endif %}
           <span class="badge badge-primary ml-1">起点</span>
           {% if tree_focus.is_direct_introducer %}
             <span class="badge badge-warning ml-1">{{ direct_badge_label|default:"紹介者" }}</span>
           {% endif %}
+          {% for badge in tree_focus.purchase_badges %}
+            <span class="badge {{ badge.badge_class|default:'badge-secondary' }} ml-1">
+              {{ badge.order_type_name }} / {{ badge.bv_max50|floatformat:0 }}BV
+            </span>
+          {% endfor %}
           {% if tree_focus.show_tree_bonus_badges %}
             {% if tree_focus.basic_acquired_flg %}
               <span class="badge badge-danger ml-1">ベーシック取得</span>

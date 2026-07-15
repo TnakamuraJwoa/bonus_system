@@ -1,5 +1,5 @@
 ﻿{% extends 'base.html' %}
-{% load static custom_filters %}
+{% load humanize static custom_filters %}
 
 {% block head %}
     <link href="{% static 'css/common.css' %}?v=51" rel="stylesheet">
@@ -106,7 +106,7 @@
                       <td>{{ r.down_name }}</td>
                       <td class="text-end">{{ r.tree_level }}</td>
                       <td class="text-end">{{ r.match_level }}</td>
-                      <td class="text-end">{{ r.sum_bv }}</td>
+                      <td class="text-end">{{ r.sum_bv|intcomma }}</td>
                       <td>{{ r.title_name }}</td>
                       <td class="text-end">{{ r.rate }}</td>
                       <td class="fw-bold text-primary text-end">{{ r.bonus_amount }}</td>

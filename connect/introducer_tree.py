@@ -11,7 +11,10 @@ from django.shortcuts import redirect
 from django.views import generic
 
 from connect.audit import record_change_audit
-from connect.introducer_tree_builder import build_introducer_tree_view
+from connect.introducer_tree_builder import (
+    build_introducer_tree_view,
+    fetch_introducer_tree_search_path,
+)
 from connect.sql.introducer_tree_sql import INTRODUCER_TREE_REBUILD_CACHE_SQL
 from connect.views import KeysetPaginationMixin
 
@@ -202,6 +205,7 @@ LIMIT %s OFFSET %s
             self.request.GET.get("q_introducer_rank") or ""
         ).strip()
         q_rank = (self.request.GET.get("q_rank") or "").strip()
+        tree_search = (self.request.GET.get("tree_search") or "").strip()
 
         try:
             per_page = int(
@@ -243,6 +247,8 @@ LIMIT %s OFFSET %s
             base_params["q_introducer_rank"] = q_introducer_rank
         if q_rank:
             base_params["q_rank"] = q_rank
+        if tree_search:
+            base_params["tree_search"] = tree_search
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
 
@@ -251,6 +257,7 @@ LIMIT %s OFFSET %s
         ctx["q_introducer_code"] = q_introducer_code
         ctx["q_introducer_rank"] = q_introducer_rank
         ctx["q_rank"] = q_rank
+        ctx["tree_search"] = tree_search
 
         view_mode = (self.request.GET.get("view") or "list").strip()
         if view_mode not in ("list", "tree"):
@@ -266,6 +273,23 @@ LIMIT %s OFFSET %s
         tree_root_code = q_jwoa_code or q_introducer_code
         tree_context = build_introducer_tree_view(tree_root_code)
         ctx.update(tree_context)
+        tree_search_path_rows = (
+            fetch_introducer_tree_search_path(tree_root_code, tree_search)
+            if view_mode == "tree" and tree_root_code and tree_search
+            else []
+        )
+        ctx["tree_search_path_rows"] = tree_search_path_rows
+        ctx["tree_search_target"] = (
+            next((row for row in tree_search_path_rows if row.get("is_target")), None)
+            if tree_search_path_rows
+            else None
+        )
+        ctx["tree_search_not_found"] = bool(
+            view_mode == "tree"
+            and tree_root_code
+            and tree_search
+            and not tree_search_path_rows
+        )
 
         return self.set_page_context(
             ctx=ctx,

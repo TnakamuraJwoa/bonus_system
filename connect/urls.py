@@ -15,6 +15,7 @@ from .introducer_tree import IntroducerTreeExportView, IntroducerTreeView
 from .matching_bonus_detail import MatchingBonusTreeView
 from .member_month_title_search import MemberMonthTitleSearchView
 from .month_title_detail import MonthTitleDetailView
+from .title_bonus_detail import TitleBonusDetailTreeExportView, TitleBonusDetailView
 
 
 
@@ -122,6 +123,7 @@ urlpatterns = [
     path('title_diff_bonus/', views.TitleDiffBonusView.as_view(), name = "title_diff_bonus"),
     path('repurchase_over_bonus/', views.RepurchaseOverBonusView.as_view(), name = "repurchase_over_bonus"),
     path('three_star_global_bonus/', views.ThreeStarGlobalBonusView.as_view(), name = "three_star_global_bonus"),
+    path('global_bonus/', views.GlobalBonusView.as_view(), name = "global_bonus"),
 
     path('week_bonus/', views.WeekBonusView.as_view(), name = "week_bonus"),
     path('month_title/', views.MonthTitleView.as_view(), name = "month_title"),
@@ -137,9 +139,16 @@ urlpatterns = [
     path('s_month_title/', views.S_MonthTitleView.as_view(), name = "s_month_title"),
     path("month_title_detail/", MonthTitleDetailView.as_view(), name="month_title_detail"),
     path('s_title_bonus/', views.S_TitleBonusView.as_view(), name = "s_title_bonus"),
+    path("title_bonus_detail/", TitleBonusDetailView.as_view(), name="title_bonus_detail"),
+    path(
+        "title_bonus_detail/tree_export/",
+        TitleBonusDetailTreeExportView.as_view(),
+        name="title_bonus_detail_tree_export",
+    ),
     path('s_title_diff_bonus/', views.S_TitleDiffBonusView.as_view(), name = "s_title_diff_bonus"),
     path('s_repurchase_over_bonus/', views.S_RepurchaseOverBonusView.as_view(), name = "s_repurchase_over_bonus"),
     path('s_three_star_global_bonus/', views.S_ThreeStarGlobalBonusView.as_view(), name = "s_three_star_global_bonus"),
+    path('s_global_bonus/', views.S_GlobalBonusView.as_view(), name = "s_global_bonus"),
 
     path('s_week_bonus/', views.S_WeekBonusView.as_view(), name = "s_week_bonus"),
     path('s_month_bonus/', views.S_MonthBonusView.as_view(), name = "s_month_bonus"),

@@ -131,14 +131,32 @@
     </div>
     {% endif %}
 
-    {% if user_access|can_menu:"s_title_bonus" or user_access|can_menu:"s_title_diff_bonus" or user_access|can_menu:"s_repurchase_over_bonus" or user_access|can_menu:"s_three_star_global_bonus" %}
+    {% if user_access|can_menu:"s_title_bonus" or user_access|can_menu:"s_title_diff_bonus" or user_access|can_menu:"s_repurchase_over_bonus" or user_access|can_menu:"s_three_star_global_bonus" or user_access|can_menu:"s_global_bonus" %}
     <div class="card-body">
       <div class="fw-bold mb-2">■ 月ボーナス</div>
 
       <div class="list-group">
         {% if user_access|can_menu:"s_title_bonus" %}
-          <a class="list-group-item list-group-item-action {% if active_menu == 'title_bonus' %}active{% endif %}"
-             href="{% url 'connect:s_title_bonus' %}">タイトルボーナス</a>
+          <div class="list-group-item sidebar-menu-parent p-0 {% if active_menu == 'title_bonus' %}active{% endif %}">
+            <div class="d-flex align-items-center sidebar-menu-parent__row">
+              <button type="button"
+                      class="btn btn-link sidebar-submenu-toggle"
+                      data-sidebar-submenu-toggle
+                      data-target="titleBonusSubmenu"
+                      data-label="タイトルボーナス詳細"
+                      aria-expanded="{% if active_menu == 'title_bonus_detail' %}true{% else %}false{% endif %}"
+                      aria-label="{% if active_menu == 'title_bonus_detail' %}タイトルボーナス詳細を折りたたむ{% else %}タイトルボーナス詳細を展開{% endif %}">
+                {% if active_menu == 'title_bonus_detail' %}−{% else %}+{% endif %}
+              </button>
+              <a class="flex-grow-1 text-decoration-none {% if active_menu == 'title_bonus' %}text-white{% else %}text-body{% endif %} py-2 pr-3"
+                 href="{% url 'connect:s_title_bonus' %}">タイトルボーナス</a>
+            </div>
+          </div>
+          <div id="titleBonusSubmenu"
+               class="sidebar-submenu {% if active_menu != 'title_bonus_detail' %}is-collapsed{% endif %}">
+            <a class="list-group-item list-group-item-action sidebar-submenu-item {% if active_menu == 'title_bonus_detail' %}active{% endif %}"
+               href="{% url 'connect:title_bonus_detail' %}">　タイトルボーナス詳細</a>
+          </div>
         {% endif %}
 
         {% if user_access|can_menu:"s_title_diff_bonus" %}
@@ -154,6 +172,11 @@
         {% if user_access|can_menu:"s_three_star_global_bonus" %}
         <a class="list-group-item list-group-item-action {% if active_menu == 'three_star_global_bonus' %}active{% endif %}"
            href="{% url 'connect:s_three_star_global_bonus' %}">3スター配当</a>
+        {% endif %}
+
+        {% if user_access|can_menu:"s_global_bonus" %}
+        <a class="list-group-item list-group-item-action {% if active_menu == 'global_bonus' %}active{% endif %}"
+           href="{% url 'connect:s_global_bonus' %}">グローバル配当</a>
         {% endif %}
       </div>
     </div>

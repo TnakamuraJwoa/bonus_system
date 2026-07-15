@@ -51,6 +51,8 @@ INDIVIDUAL_BONUS_URL_PAIRS = {
     "s_repurchase_over_bonus": ("repurchase_over_bonus", "s_repurchase_over_bonus"),
     "three_star_global_bonus": ("three_star_global_bonus", "s_three_star_global_bonus"),
     "s_three_star_global_bonus": ("three_star_global_bonus", "s_three_star_global_bonus"),
+    "global_bonus": ("global_bonus", "s_global_bonus"),
+    "s_global_bonus": ("global_bonus", "s_global_bonus"),
 }
 
 TOTAL_BONUS_URL_PAIRS = {
@@ -70,6 +72,7 @@ BONUS_HISTORY_FIELD_BY_URL_NAME = {
     "title_diff_bonus": "title_diff_bonus",
     "repurchase_over_bonus": "repurchase_over_bonus",
     "three_star_global_bonus": "three_star_global_bonus",
+    "global_bonus": "global_bonus",
     "month_bonus": "month_bonus",
     "title_registration": "title_registration",
 }
@@ -144,6 +147,39 @@ def rank_badge_class(value):
         return "badge-light"
     key = str(value).strip()
     return classes.get(key, "badge-light")
+
+
+@register.filter
+def title_badge_class(value):
+    """3スターダイヤ(title_id>=6)以上だけ色分けする（青・緑以外）。"""
+    classes = {
+        "6": "badge-title-orange",
+        "7": "badge-title-purple",
+        "8": "badge-title-rose",
+        "9": "badge-title-amber",
+        "10": "badge-title-fuchsia",
+        "11": "badge-title-slate",
+    }
+    if value in (None, ""):
+        return ""
+    key = str(value).strip()
+    try:
+        title_id = int(key)
+    except (TypeError, ValueError):
+        return ""
+    if title_id < 6:
+        return ""
+    return classes.get(key, "badge-title-slate")
+
+
+@register.filter
+def is_three_star_title(value):
+    if value in (None, ""):
+        return False
+    try:
+        return int(value) >= 6
+    except (TypeError, ValueError):
+        return False
 
 
 @register.filter

@@ -30,6 +30,8 @@ EXECUTE_ACTIONS = {
     "repurchase_over_bonus",
     "register_three_star_global_bonus",
     "three_star_global_bonus",
+    "register_global_bonus",
+    "global_bonus",
     "register_week_bonus",
     "register_month_title",
     "register_month_bonus",

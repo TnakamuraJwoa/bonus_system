@@ -17,6 +17,19 @@
     line-height: 1.1;
   }
 
+  .repurchase-last-month-page {
+    height: auto !important;
+    max-height: none !important;
+    min-height: calc(100vh - var(--app-navbar-height) - var(--app-footer-height) - 2rem);
+    overflow-y: visible !important;
+    padding-bottom: 1rem;
+  }
+
+  .repurchase-last-month-page .list-page-main {
+    height: auto;
+    overflow: visible;
+  }
+
   .repurchase-register-sections {
     display: grid;
     grid-template-columns: minmax(520px, 1.4fr) minmax(280px, 0.8fr);
@@ -63,6 +76,12 @@
     border-left: 4px solid #0ea5e9;
   }
 
+  .repurchase-registered-table-wrap {
+    max-height: 28vh !important;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+  }
+
   .repurchase-registered-table {
     white-space: nowrap;
     min-width: max-content;
@@ -90,7 +109,7 @@
 {% endblock %}
 
 {% block contents %}
-<div class="container-fluid mt-3 list-page-viewport">
+<div class="container-fluid mt-3 list-page-viewport repurchase-last-month-page">
 
   <div class="row g-1 h-100">
 
@@ -277,6 +296,14 @@
               <label class="form-label mb-1 small text-muted">登録月</label>
               <input type="text" name="edit_register_month" class="form-control" value="{{ edit_register_month }}">
             </div>
+            <div style="width: 110px;">
+              <label class="form-label mb-1 small text-muted">注文年</label>
+              <input type="text" name="edit_order_year" class="form-control" value="{{ edit_order_year }}">
+            </div>
+            <div style="width: 90px;">
+              <label class="form-label mb-1 small text-muted">注文月</label>
+              <input type="text" name="edit_order_month" class="form-control" value="{{ edit_order_month }}">
+            </div>
             <div style="width: 180px;">
               <label class="form-label mb-1 small text-muted">注文番号</label>
               <input type="text" name="edit_order_code" class="form-control" value="{{ edit_order_code }}">
@@ -289,19 +316,39 @@
               <label class="form-label mb-1 small text-muted">会員名</label>
               <input type="text" name="edit_name" class="form-control" value="{{ edit_name }}">
             </div>
+            <div style="width: 155px;">
+              <label class="form-label mb-1 small text-muted">ボーナス支払日From</label>
+              <input type="date"
+                     name="edit_bonus_payment_date_from"
+                     class="form-control js-date-paste-normalize"
+                     value="{{ edit_bonus_payment_date_from }}">
+            </div>
+            <div style="width: 155px;">
+              <label class="form-label mb-1 small text-muted">ボーナス支払日To</label>
+              <input type="date"
+                     name="edit_bonus_payment_date_to"
+                     class="form-control js-date-paste-normalize"
+                     value="{{ edit_bonus_payment_date_to }}">
+            </div>
             <button type="submit" class="btn btn-primary" data-loading-button>検索</button>
             <a class="btn btn-outline-secondary" href="{% url 'connect:repurchase_last_month' %}?edit_panel=1">クリア</a>
           </form>
 
           {% if registered_edit_searched %}
             {% if registered_edit_rows %}
-              <div class="table-responsive">
+              <div class="table-responsive repurchase-registered-table-wrap">
                 <table class="table table-bordered table-sm align-middle mb-0 repurchase-registered-table">
                   <thead class="table-light">
                     <tr>
-                      <th>ID</th>
+                      <th class="text-center">
+                        <input type="checkbox"
+                               class="js-registered-copy-select-all"
+                               aria-label="表示中の行をすべて選択">
+                      </th>
                       <th>登録年</th>
                       <th>登録月</th>
+                      <th>注文年</th>
+                      <th>注文月</th>
                       <th>注文番号</th>
                       <th>注文区分</th>
                       <th>会員番号</th>
@@ -316,9 +363,16 @@
                   <tbody>
                     {% for r in registered_edit_rows %}
                       <tr>
-                        <td class="text-right">{{ r.id }}</td>
+                        <td class="text-center">
+                          <input type="checkbox"
+                                 class="js-registered-copy-target"
+                                 value="{{ r.id }}"
+                                 aria-label="ID {{ r.id }} を日付データ反映対象にする">
+                        </td>
                         <td>{{ r.register_year }}</td>
                         <td>{{ r.register_month }}</td>
+                        <td>{{ r.order_year }}</td>
+                        <td>{{ r.order_month }}</td>
                         <td>{{ r.order_code }}</td>
                         <td>{{ r.order_type }}</td>
                         <td>{{ r.jwoa_code }}</td>
@@ -611,6 +665,7 @@
         <input type="hidden" name="action" value="manual_update">
         <input type="hidden" name="manual_row_id" id="manualEditRowId">
         <input type="hidden" name="next_query" value="{{ registered_edit_query }}">
+        <input type="hidden" name="manual_date_copy_target_ids" id="manualDateCopyTargetIds">
         <div class="modal-header">
           <div>
             <h5 class="modal-title" id="repurchaseManualEditModalLabel">購入情報の編集</h5>
@@ -691,6 +746,22 @@
             <div class="form-group col-md-3">
               <label class="form-label small text-muted">注文日時</label>
               <input type="datetime-local" name="manual_order_at" id="manualEditOrderAt" class="form-control js-datetime-paste-normalize">
+            </div>
+          </div>
+
+          <div class="alert alert-info py-2 mb-0">
+            <div class="custom-control custom-checkbox">
+              <input type="checkbox"
+                     class="custom-control-input"
+                     name="manual_apply_date_to_selected"
+                     value="1"
+                     id="manualApplyDateToSelected">
+              <label class="custom-control-label" for="manualApplyDateToSelected">
+                一覧でチェックした行にも、登録年・登録月・ボーナス支払日を反映する
+              </label>
+            </div>
+            <div class="small text-muted mt-1 js-date-copy-selected-summary">
+              反映対象: 0件
             </div>
           </div>
         </div>
@@ -991,9 +1062,37 @@
     }
   }
 
+  function getCheckedCopyTargetIds(excludeId) {
+    return Array.prototype.slice.call(document.querySelectorAll(".js-registered-copy-target:checked"))
+      .map(function (checkbox) {
+        return checkbox.value;
+      })
+      .filter(function (value) {
+        return value && value !== excludeId;
+      });
+  }
+
+  function updateDateCopySummary(count) {
+    var summary = document.querySelector(".js-date-copy-selected-summary");
+    if (summary) {
+      summary.textContent = "反映対象: " + count + "件";
+    }
+  }
+
+  var selectAll = document.querySelector(".js-registered-copy-select-all");
+  if (selectAll) {
+    selectAll.addEventListener("change", function () {
+      document.querySelectorAll(".js-registered-copy-target").forEach(function (checkbox) {
+        checkbox.checked = selectAll.checked;
+      });
+    });
+  }
+
   document.querySelectorAll("[data-manual-edit-button]").forEach(function (button) {
     button.addEventListener("click", function () {
+      var copyTargetIds = getCheckedCopyTargetIds(button.dataset.rowId || "");
       setValue("manualEditRowId", button.dataset.rowId);
+      setValue("manualDateCopyTargetIds", copyTargetIds.join(","));
       setValue("manualEditRegisterYear", button.dataset.registerYear);
       setValue("manualEditRegisterMonth", button.dataset.registerMonth);
       setValue("manualEditOrderYear", button.dataset.orderYear);
@@ -1007,6 +1106,13 @@
       setValue("manualEditBonusPaymentDate", button.dataset.bonusPaymentDate);
       setValue("manualEditDepositAt", button.dataset.depositAt);
       setValue("manualEditOrderAt", button.dataset.orderAt);
+      updateDateCopySummary(copyTargetIds.length);
+
+      var applyDateToSelected = document.getElementById("manualApplyDateToSelected");
+      if (applyDateToSelected) {
+        applyDateToSelected.checked = copyTargetIds.length > 0;
+        applyDateToSelected.disabled = copyTargetIds.length === 0;
+      }
 
       var editForm = document.getElementById("manualEditRowId").closest("form");
       if (editForm) {

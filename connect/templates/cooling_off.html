@@ -1,4 +1,4 @@
-﻿{% extends 'base.html' %}
+{% extends 'base.html' %}
 {% load static %}
 
 {% block head %}
@@ -6,7 +6,7 @@
 <style>
     .cooling-off-top {
         display: grid;
-        grid-template-columns: minmax(480px, 1.2fr) minmax(360px, 0.8fr);
+        grid-template-columns: minmax(420px, 1fr) minmax(480px, 1.2fr);
         gap: 0.75rem;
         align-items: stretch;
     }
@@ -16,6 +16,9 @@
         border-radius: 10px;
         padding: 0.65rem 0.75rem;
         background: #fff;
+        display: flex;
+        flex-direction: column;
+        min-height: 100%;
     }
 
     .cooling-off-section--create {
@@ -31,6 +34,21 @@
         font-weight: 700;
         color: #475569;
         margin-bottom: 0.35rem;
+    }
+
+    .cooling-off-section__fields {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: flex-end;
+    }
+
+    .cooling-off-section__actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        margin-top: auto;
+        padding-top: 0.5rem;
     }
 
     @media (max-width: 991.98px) {
@@ -62,7 +80,7 @@
                             <input type="hidden" name="next_query" value="{{ request.GET.urlencode }}">
 
                             <div class="cooling-off-section__title">登録</div>
-                            <div class="d-flex gap-2 align-items-end flex-wrap">
+                            <div class="cooling-off-section__fields">
                                 <div style="width: 230px;">
                                     <label class="form-label mb-1 small text-muted">注文番号</label>
                                     <input type="text"
@@ -83,15 +101,44 @@
                                     <label class="form-label mb-1 small text-muted">備考</label>
                                     <input type="text" name="remarks" class="form-control">
                                 </div>
-
+                            </div>
+                            <div class="cooling-off-section__actions">
                                 <button type="submit" class="btn btn-primary">登録</button>
                             </div>
                         </form>
 
                         <form method="get" class="cooling-off-section cooling-off-section--search mb-0">
                             <div class="cooling-off-section__title">検索</div>
-                            <div class="d-flex gap-2 align-items-end flex-wrap">
-                                <div style="width: 210px;">
+                            <div class="cooling-off-section__fields">
+                                <div style="width: 90px;">
+                                    <label class="form-label mb-1 small text-muted">登録年</label>
+                                    <input type="text"
+                                           name="q_register_year"
+                                           class="form-control"
+                                           inputmode="numeric"
+                                           placeholder="例: 2025"
+                                           value="{{ q_register_year|default:'' }}">
+                                </div>
+
+                                <div style="width: 80px;">
+                                    <label class="form-label mb-1 small text-muted">登録月</label>
+                                    <input type="text"
+                                           name="q_register_month"
+                                           class="form-control"
+                                           inputmode="numeric"
+                                           placeholder="例: 3"
+                                           value="{{ q_register_month|default:'' }}">
+                                </div>
+
+                                <div style="width: 140px;">
+                                    <label class="form-label mb-1 small text-muted">会員番号</label>
+                                    <input type="text"
+                                           name="q_jwoa_code"
+                                           class="form-control"
+                                           value="{{ q_jwoa_code|default:'' }}">
+                                </div>
+
+                                <div style="width: 180px;">
                                     <label class="form-label mb-1 small text-muted">注文番号</label>
                                     <input type="text"
                                            name="q_order_code"
@@ -99,7 +146,7 @@
                                            value="{{ q_order_code|default:'' }}">
                                 </div>
 
-                                <div style="width: 120px;">
+                                <div style="width: 110px;">
                                     <label class="form-label mb-1 small text-muted">状態</label>
                                     <select name="q_active_flag" class="form-control">
                                         <option value="" {% if not q_active_flag %}selected{% endif %}>全件</option>
@@ -107,7 +154,8 @@
                                         <option value="0" {% if q_active_flag == "0" %}selected{% endif %}>無効</option>
                                     </select>
                                 </div>
-
+                            </div>
+                            <div class="cooling-off-section__actions">
                                 <button type="submit" class="btn btn-success">検索</button>
                                 <a href="{% url 'connect:cooling_off' %}" class="btn btn-outline-secondary">リセット</a>
                             </div>
@@ -215,18 +263,33 @@
             <div class="card shadow-sm flex-grow-1">
                 <div class="card-body d-flex flex-column">
 
-                    <h5>クーリングオフ一覧</h5>
+                    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap">
+                        <h5 class="mb-0">クーリングオフ一覧</h5>
+                        <button type="button"
+                                class="btn btn-sm btn-warning"
+                                id="coolingOffBulkEditBtn">
+                            一括編集
+                        </button>
+                    </div>
 
                     <div class="table-responsive flex-grow-1">
 
-                        <table class="table table-bordered table-sm">
+                        <table class="table table-bordered table-sm" style="white-space: nowrap;">
                             <thead>
                                 <tr>
-                                    <th width="70">ID</th>
+                                    <th class="text-center" width="40">
+                                        <input type="checkbox"
+                                               class="js-cooling-off-select-all"
+                                               aria-label="表示中の行をすべて選択">
+                                    </th>
+                                    <th width="80">登録年</th>
+                                    <th width="80">登録月</th>
                                     <th width="180">注文番号</th>
                                     <th width="100">状態</th>
                                     <th width="150">会員番号</th>
                                     <th>注文者名</th>
+                                    <th width="140">order_type</th>
+                                    <th width="100">bv</th>
                                     <th width="250">備考</th>
                                     <th width="150">登録者</th>
                                     <th width="180">登録日時</th>
@@ -237,10 +300,17 @@
                             <tbody>
                                 {% for row in rows %}
                                 <tr>
-                                    <td>{{ row.id }}</td>
+                                    <td class="text-center">
+                                        <input type="checkbox"
+                                               class="js-cooling-off-row"
+                                               value="{{ row.id }}"
+                                               aria-label="ID {{ row.id }} を一括編集対象にする">
+                                    </td>
+                                    <td class="text-end">{{ row.register_year }}</td>
+                                    <td class="text-end">{{ row.register_month }}</td>
                                     <td>{{ row.order_code }}</td>
 
-                                    <td>
+                                    <td class="text-center">
                                         {% if row.active_flag == 1 %}
                                             <span class="badge bg-success">有効</span>
                                         {% else %}
@@ -250,11 +320,27 @@
 
                                     <td>{{ row.jwoa_code }}</td>
                                     <td>{{ row.order_name }}</td>
+                                    <td class="text-center">
+                                        {% if row.order_type == 101 %}
+                                            再購入品
+                                        {% elif row.order_type == 102 %}
+                                            初回購入品
+                                        {% elif row.order_type == 103 %}
+                                            ランクアップ購入品
+                                        {% elif row.order_type == 105 %}
+                                            特別対応購入品
+                                        {% elif row.order_type == 200 %}
+                                            <span class="text-danger fw-bold">クーリングオフ</span>
+                                        {% elif row.order_type %}
+                                            {{ row.order_type }}
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">{{ row.bv }}</td>
                                     <td>{{ row.remarks|default:'' }}</td>
                                     <td>{{ row.registered_by }}</td>
                                     <td>{{ row.created_at|date:"Y/m/d H:i:s" }}</td>
 
-                                    <td>
+                                    <td class="text-center">
                                         <a href="?detail_order_code={{ row.order_code }}"
                                            class="btn btn-sm btn-info">
                                             詳細
@@ -285,7 +371,7 @@
 
                                 {% empty %}
                                 <tr>
-                                    <td colspan="9" class="text-center table-empty-cell text-muted py-4">
+                                    <td colspan="13" class="text-center table-empty-cell text-muted py-4">
                                         データがありません
                                     </td>
                                 </tr>
@@ -351,8 +437,122 @@
             </div>
             {% endfor %}
 
+            <div class="modal fade" id="coolingOffBulkEditModal" tabindex="-1" role="dialog" aria-labelledby="coolingOffBulkEditModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered" role="document">
+                    <div class="modal-content">
+                        <form method="post"
+                              class="mb-0"
+                              id="coolingOffBulkEditForm"
+                              data-confirm="選択した行を同じ内容で更新しますか？">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="bulk_update">
+                            <input type="hidden" name="next_query" value="{{ request.GET.urlencode }}">
+                            <div id="coolingOffBulkSelectedIds"></div>
+
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="coolingOffBulkEditModalLabel">クーリングオフ一括編集</h5>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                            </div>
+
+                            <div class="modal-body">
+                                <p class="small text-muted mb-3">
+                                    選択中: <span class="font-weight-bold" id="coolingOffBulkSelectedCount">0</span>件に同じ内容を反映します。注文番号は変更しません。
+                                </p>
+
+                                <div class="form-group">
+                                    <label class="form-label small text-muted">状態</label>
+                                    <select name="active_flag" class="form-control">
+                                        <option value="1" selected>有効</option>
+                                        <option value="0">無効</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group mb-0">
+                                    <label class="form-label small text-muted">備考</label>
+                                    <textarea name="remarks"
+                                              rows="3"
+                                              class="form-control"></textarea>
+                                </div>
+                            </div>
+
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
+                                <button type="submit" class="btn btn-warning">
+                                    一括更新
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
         </main>
 
     </div>
 </div>
+<script>
+(function () {
+  var selectAll = document.querySelector(".js-cooling-off-select-all");
+  var rowCheckboxes = function () {
+    return Array.prototype.slice.call(document.querySelectorAll(".js-cooling-off-row"));
+  };
+
+  if (selectAll) {
+    selectAll.addEventListener("change", function () {
+      rowCheckboxes().forEach(function (checkbox) {
+        checkbox.checked = selectAll.checked;
+      });
+    });
+  }
+
+  document.addEventListener("change", function (event) {
+    if (!event.target.classList.contains("js-cooling-off-row") || !selectAll) {
+      return;
+    }
+    var rows = rowCheckboxes();
+    selectAll.checked = rows.length > 0 && rows.every(function (checkbox) {
+      return checkbox.checked;
+    });
+  });
+
+  var bulkEditBtn = document.getElementById("coolingOffBulkEditBtn");
+  if (!bulkEditBtn) {
+    return;
+  }
+
+  bulkEditBtn.addEventListener("click", function () {
+    var selected = rowCheckboxes().filter(function (checkbox) {
+      return checkbox.checked;
+    });
+    if (!selected.length) {
+      window.alert("一括編集する行を選択してください。");
+      return;
+    }
+
+    var container = document.getElementById("coolingOffBulkSelectedIds");
+    var countLabel = document.getElementById("coolingOffBulkSelectedCount");
+    if (!container) {
+      return;
+    }
+
+    container.innerHTML = "";
+    selected.forEach(function (checkbox) {
+      var input = document.createElement("input");
+      input.type = "hidden";
+      input.name = "ids";
+      input.value = checkbox.value;
+      container.appendChild(input);
+    });
+    if (countLabel) {
+      countLabel.textContent = String(selected.length);
+    }
+
+    if (window.jQuery) {
+      window.jQuery("#coolingOffBulkEditModal").modal("show");
+    }
+  });
+})();
+</script>
 {% endblock %}

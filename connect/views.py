@@ -990,8 +990,20 @@ SEARCH_EXPORT_COLUMNS = {
         ("jwoa_name", "jwoa_name"),
         ("title_name", "title_name"),
         ("score", "score", "int"),
-        ("total_over_bv", "total_over_bv", "int"),
-        ("one_score_bonus", "one_score_bonus", "decimal2"),
+        ("total_score", "total_score", "int"),
+        ("total_over_bv", "total_over_bv", "decimal2"),
+        ("bonus_amount", "bonus_amount", "decimal2"),
+        ("created_at", "created_at"),
+        ("updated_at", "updated_at"),
+    ],
+    "global_bonus": [
+        ("kibetu", "kibetu"),
+        ("jwoa_code", "jwoa_code"),
+        ("jwoa_name", "jwoa_name"),
+        ("title_name", "title_name"),
+        ("score", "score", "int"),
+        ("total_score", "total_score", "int"),
+        ("total_bv", "total_bv", "decimal2"),
         ("bonus_amount", "bonus_amount", "decimal2"),
         ("created_at", "created_at"),
         ("updated_at", "updated_at"),
@@ -1079,6 +1091,13 @@ BONUS_RESULT_DELETE_CONFIG = {
         "history_names": ["three_star_global_bonus"],
         "period_model": MonthlyPeriod,
         "redirect_name": "connect:three_star_global_bonus",
+    },
+    "global_bonus": {
+        "label": "グローバル配当",
+        "result_tables": ["bonus_db.B_global_bonus_result"],
+        "history_names": ["global_bonus"],
+        "period_model": MonthlyPeriod,
+        "redirect_name": "connect:global_bonus",
     },
     "week_bonus": {
         "label": "週間ボーナス",
@@ -3729,9 +3748,17 @@ VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         filters = {
             "edit_register_year": (self.request.GET.get("edit_register_year") or selected_year or "").strip(),
             "edit_register_month": (self.request.GET.get("edit_register_month") or selected_month or "").strip(),
+            "edit_order_year": (self.request.GET.get("edit_order_year") or "").strip(),
+            "edit_order_month": (self.request.GET.get("edit_order_month") or "").strip(),
             "edit_order_code": (self.request.GET.get("edit_order_code") or "").strip(),
             "edit_jwoa_code": (self.request.GET.get("edit_jwoa_code") or "").strip(),
             "edit_name": (self.request.GET.get("edit_name") or "").strip(),
+            "edit_bonus_payment_date_from": (
+                self.request.GET.get("edit_bonus_payment_date_from") or ""
+            ).strip(),
+            "edit_bonus_payment_date_to": (
+                self.request.GET.get("edit_bonus_payment_date_to") or ""
+            ).strip(),
         }
         panel_opened = self.request.GET.get("edit_panel") == "1"
         submitted = any(key in self.request.GET for key in filters)
@@ -3739,7 +3766,11 @@ VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ctx.update(filters)
         ctx["registered_edit_panel_open"] = panel_opened or submitted
         ctx["registered_edit_searched"] = submitted
-        ctx["registered_edit_rows"] = self._fetch_registered_edit_rows(filters) if submitted else []
+        try:
+            ctx["registered_edit_rows"] = self._fetch_registered_edit_rows(filters) if submitted else []
+        except ValueError as e:
+            messages.error(self.request, str(e))
+            ctx["registered_edit_rows"] = []
         keep_params = {}
         for key in ("target_year", "target_month", "per_page"):
             value = ctx.get(key)
@@ -3763,6 +3794,12 @@ VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         if filters["edit_register_month"]:
             where.append("register_month = %s")
             params.append(filters["edit_register_month"])
+        if filters["edit_order_year"]:
+            where.append("order_year = %s")
+            params.append(filters["edit_order_year"])
+        if filters["edit_order_month"]:
+            where.append("order_month = %s")
+            params.append(filters["edit_order_month"])
         if filters["edit_order_code"]:
             where.append("order_code LIKE %s")
             params.append(f"%{filters['edit_order_code']}%")
@@ -3772,6 +3809,18 @@ VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         if filters["edit_name"]:
             where.append("send_bv_name LIKE %s")
             params.append(f"%{filters['edit_name']}%")
+        payment_date_from = None
+        payment_date_to = None
+        if filters["edit_bonus_payment_date_from"]:
+            payment_date_from = parse_input_date(filters["edit_bonus_payment_date_from"])
+            where.append("bonus_payment_date >= %s")
+            params.append(payment_date_from)
+        if filters["edit_bonus_payment_date_to"]:
+            payment_date_to = parse_input_date(filters["edit_bonus_payment_date_to"])
+            where.append("bonus_payment_date <= %s")
+            params.append(payment_date_to)
+        if payment_date_from and payment_date_to and payment_date_from > payment_date_to:
+            raise ValueError("ボーナス支払日のFromはTo以前の日付を指定してください。")
 
         if not where:
             return []
@@ -3872,6 +3921,83 @@ VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 row["order_at"],
                 row["payment_date"],
                 row_id,
+            ],
+        )
+        return cursor.rowcount
+
+    def _parse_manual_date_copy_target_ids(self, request, current_row_id):
+        if request.POST.get("manual_apply_date_to_selected") != "1":
+            return []
+
+        raw_ids = (request.POST.get("manual_date_copy_target_ids") or "").strip()
+        if not raw_ids:
+            return []
+
+        target_ids = []
+        for raw_id in raw_ids.split(","):
+            raw_id = raw_id.strip()
+            if not raw_id:
+                continue
+            try:
+                target_id = int(raw_id)
+            except ValueError as exc:
+                raise ValueError("日付データ反映対象IDが不正です。") from exc
+            if target_id != current_row_id and target_id not in target_ids:
+                target_ids.append(target_id)
+        return target_ids
+
+    def _fetch_manual_purchase_rows_for_update(self, cursor, row_ids):
+        if not row_ids:
+            return []
+
+        placeholders = ", ".join(["%s"] * len(row_ids))
+        sql = f"""
+            SELECT
+                id,
+                register_year,
+                register_month,
+                order_year,
+                order_month,
+                order_code,
+                order_type,
+                jwoa_code,
+                send_bv_name,
+                total_bv,
+                bv,
+                deposit_at,
+                order_at,
+                bonus_payment_date,
+                created_at,
+                updated_at
+            FROM bonus_db.purchase_info_list
+            WHERE id IN ({placeholders})
+            FOR UPDATE
+        """
+        cursor.execute(sql, row_ids)
+        columns = [col[0] for col in cursor.description]
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+    def _update_manual_purchase_date_fields(self, cursor, row_ids, row):
+        if not row_ids:
+            return 0
+
+        placeholders = ", ".join(["%s"] * len(row_ids))
+        update_sql = f"""
+            UPDATE bonus_db.purchase_info_list
+            SET
+                register_year = %s,
+                register_month = %s,
+                bonus_payment_date = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id IN ({placeholders})
+        """
+        cursor.execute(
+            update_sql,
+            [
+                row["register_year"],
+                row["register_month"],
+                row["payment_date"],
+                *row_ids,
             ],
         )
         return cursor.rowcount
@@ -4002,6 +4128,7 @@ WHERE name = 'set_title'
 
             try:
                 row = self._build_manual_purchase_row(request)
+                date_copy_target_ids = self._parse_manual_date_copy_target_ids(request, row_id)
             except ValueError as e:
                 messages.error(request, str(e))
                 return redirect(self._redirect_url())
@@ -4011,6 +4138,7 @@ WHERE name = 'set_title'
             else:
                 redirect_url = self._redirect_url(row["register_year"], row["register_month"])
 
+            date_copy_count = 0
             try:
                 with transaction.atomic(using="rds"):
                     with connections["rds"].cursor() as cursor:
@@ -4018,6 +4146,17 @@ WHERE name = 'set_title'
                         if not before_row:
                             messages.error(request, "更新対象データが見つかりませんでした。")
                             return redirect(redirect_url)
+
+                        before_copy_rows = []
+                        if date_copy_target_ids:
+                            before_copy_rows = self._fetch_manual_purchase_rows_for_update(
+                                cursor,
+                                date_copy_target_ids,
+                            )
+                            found_ids = {int(r["id"]) for r in before_copy_rows}
+                            if len(found_ids) != len(date_copy_target_ids):
+                                messages.error(request, "日付データ反映対象に存在しないデータが含まれています。")
+                                return redirect(redirect_url)
 
                         updated_count = self._update_manual_purchase_row(cursor, row_id, row)
                         if updated_count:
@@ -4036,6 +4175,33 @@ WHERE name = 'set_title'
                                 before_values=before_row,
                                 after_values=after_values,
                             )
+
+                        if date_copy_target_ids:
+                            date_copy_count = self._update_manual_purchase_date_fields(
+                                cursor,
+                                date_copy_target_ids,
+                                row,
+                            )
+                            if date_copy_count:
+                                record_change_audit(
+                                    request,
+                                    screen_name="ボーナス購入情報(登録/削除)",
+                                    action_type="bulk_update",
+                                    target_table="purchase_info_list",
+                                    target_pk=",".join(str(i) for i in date_copy_target_ids),
+                                    summary=(
+                                        "選択行へ日付データを反映: "
+                                        f"登録年月 {row['register_year']}年{row['register_month']}月 / "
+                                        f"ボーナス支払日 {row['payment_date']} / {date_copy_count}件"
+                                    ),
+                                    before_values={"rows": before_copy_rows},
+                                    after_values={
+                                        "ids": date_copy_target_ids,
+                                        "register_year": row["register_year"],
+                                        "register_month": row["register_month"],
+                                        "bonus_payment_date": row["payment_date"],
+                                    },
+                                )
             except IntegrityError:
                 logger.exception("ボーナス購入情報の手入力編集重複エラー")
                 messages.error(request, "同じ登録年月・会員番号・注文番号のデータは既に登録されています。")
@@ -4045,7 +4211,10 @@ WHERE name = 'set_title'
                 messages.error(request, f"更新中にエラーが発生しました: {e}")
                 return redirect(redirect_url)
 
-            messages.success(request, "購入情報を更新しました。")
+            if date_copy_count:
+                messages.success(request, f"購入情報を更新しました。選択行 {date_copy_count}件へ日付データを反映しました。")
+            else:
+                messages.success(request, "購入情報を更新しました。")
             return redirect(redirect_url)
 
         if action == "manual_delete":
@@ -8663,7 +8832,12 @@ class ThreeStarGlobalBonusView(generic.ListView):
         params = [
             prev_year,
             prev_month,
+            prev_year,
+            prev_month,
             selected_kibetu,
+            kibetu_year,
+            kibetu_month,
+            
         ]
 
         with connections["rds"].cursor() as cursor:
@@ -8764,8 +8938,8 @@ class S_ThreeStarGlobalBonusView(generic.ListView):
                 "jwoa_name": "tsgbr.jwoa_name",
                 "title_name": "title_name",
                 "score": "tsgbr.score",
+                "total_score": "tsgbr.total_score",
                 "total_over_bv": "tsgbr.total_over_bv",
-                "one_score_bonus": "tsgbr.one_score_bonus",
                 "bonus_amount": "tsgbr.bonus_amount",
                 "created_at": "tsgbr.created_at",
                 "updated_at": "tsgbr.updated_at",
@@ -8784,8 +8958,8 @@ class S_ThreeStarGlobalBonusView(generic.ListView):
                 tsgbr.title_id,
                 COALESCE(tm.title_name, 'タイトルなし') AS title_name,
                 tsgbr.score,
+                tsgbr.total_score,
                 tsgbr.total_over_bv,
-                tsgbr.one_score_bonus,
                 tsgbr.bonus_amount,
                 tsgbr.created_at,
                 tsgbr.updated_at
@@ -8803,6 +8977,361 @@ class S_ThreeStarGlobalBonusView(generic.ListView):
             {
                 "jwoa_code": "tsgbr.jwoa_code",
                 "jwoa_name": "tsgbr.jwoa_name",
+            },
+        )
+        ctx.update(filter_values)
+        sql += "\n            ORDER BY " + sort_ctx["order_sql"]
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            logger.info(f"Executed SQL: {cursor._executed}")
+
+            cols = [c[0] for c in cursor.description]
+            rows = [
+                dict(zip(cols, r))
+                for r in cursor.fetchall()
+            ]
+
+        ctx["rows"] = rows
+
+        return ctx
+
+
+class GlobalBonusView(generic.ListView):
+    template_name = "global_bonus.html"
+    context_object_name = "object_list"
+    model = MonthlyPeriod
+
+    def get_queryset(self):
+        return (
+            MonthlyPeriod.objects.using("rds")
+            .all()
+            .order_by("-year", "-month")
+        )
+
+    def get(self, request, *args, **kwargs):
+        self.object_list = self.get_queryset()
+        context = self.get_context_data()
+        return self.render_to_response(context)
+
+    def post(self, request, *args, **kwargs):
+        action = request.POST.get("action", "")
+        selected_kibetu = request.POST.get("kibetu", "").strip()
+
+        if action == "delete":
+            return delete_bonus_result_for_kibetu(request, "global_bonus")
+
+        if action != "global_bonus":
+            messages.error(request, "不正な操作です。")
+            return redirect("connect:global_bonus")
+
+        if not selected_kibetu:
+            messages.error(request, "期別を選択してください。")
+            return redirect("connect:global_bonus")
+
+        period = (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu=selected_kibetu)
+            .first()
+        )
+
+        if not period:
+            messages.error(request, "選択された期別が存在しません。")
+            return redirect("connect:global_bonus")
+
+        if not has_month_title_rows(selected_kibetu):
+            warn_month_title_required(request, "登録")
+            return redirect(f"/global_bonus/?kibetu={selected_kibetu}")
+
+        try:
+            global_bonus_rows = self._get_global_bonus_rows(
+                selected_kibetu=selected_kibetu,
+                period=period,
+            )
+
+            if not global_bonus_rows:
+                with transaction.atomic(using="rds"):
+                    insert_bonus_register_history(
+                        "global_bonus",
+                        selected_kibetu,
+                        request.user.username,
+                        "0件登録（対象データなし）",
+                    )
+                messages.warning(request, "登録対象データはありませんが、登録履歴を残しました。")
+                return redirect(
+                    f"/global_bonus_rows/?kibetu={selected_kibetu}"
+                )
+
+            insert_sql, insert_params = (
+                register_sql.get_global_bonus_insert_data(
+                    selected_kibetu,
+                    global_bonus_rows,
+                )
+            )
+
+            if not insert_params:
+                with transaction.atomic(using="rds"):
+                    insert_bonus_register_history(
+                        "global_bonus",
+                        selected_kibetu,
+                        request.user.username,
+                        "0件登録（登録対象なし）",
+                    )
+                messages.warning(request, "登録対象データはありませんが、登録履歴を残しました。")
+                return redirect(
+                    f"/global_bonus/?kibetu={selected_kibetu}"
+                )
+
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    # グローバル配当登録
+                    cursor.executemany(insert_sql, insert_params)
+
+                    # 登録履歴
+                    history_sql = """
+                        INSERT INTO bonus_db.bonus_register_history (
+                            bonus_name,
+                            kibetu,
+                            registered_at,
+                            registered_by,
+                            comment_text
+                        )
+                        VALUES (
+                            %s,
+                            %s,
+                            CONVERT_TZ(NOW(), 'UTC', 'Asia/Tokyo'),
+                            %s,
+                            %s
+                        )
+                    """
+
+                    cursor.execute(
+                        history_sql,
+                        [
+                            "global_bonus",
+                            selected_kibetu,
+                            request.user.username,
+                            f"{len(insert_params)}件登録",
+                        ],
+                    )
+
+            messages.success(
+                request,
+                f"{len(insert_params)}件をグローバル配当結果に登録しました。"
+            )
+
+        except Exception as e:
+            logger.exception("グローバル配当結果登録エラー")
+            messages.error(request, f"登録中にエラーが発生しました: {e}")
+
+        return redirect(
+            f"/global_bonus/?kibetu={selected_kibetu}"
+        )
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
+
+        ctx["selected_kibetu"] = selected_kibetu
+        ctx["history_rows"] = get_month_bonus_history_rows()
+        ctx["history_target_url_name"] = "connect:global_bonus"
+        ctx["rows"] = []
+        ctx["selected_period"] = None
+
+        if not selected_kibetu:
+            return ctx
+
+        period = (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu=selected_kibetu)
+            .first()
+        )
+
+        if not period:
+            return ctx
+
+        ctx["selected_period"] = period
+
+        if not has_month_title_rows(selected_kibetu):
+            warn_month_title_required(self.request)
+            return ctx
+
+        ctx["rows"] = self._get_global_bonus_rows(
+            selected_kibetu=selected_kibetu,
+            period=period,
+        )
+        if not ctx["rows"]:
+            insert_empty_bonus_history_on_display(
+                self.request,
+                "global_bonus",
+                selected_kibetu,
+            )
+
+        return ctx
+
+    def _get_global_bonus_rows(self, selected_kibetu, period):
+
+        # 今月
+        kibetu_year = period.year
+        kibetu_month = period.month
+
+        # 当月1日を作成
+        current_date = date(kibetu_year, kibetu_month, 1)
+
+        # 先月
+        prev_month_period = current_date - relativedelta(months=1)
+
+        prev_year = prev_month_period.year
+        prev_month = prev_month_period.month
+
+        params = [
+            prev_year,
+            prev_month,
+            prev_year,
+            prev_month,
+            selected_kibetu,
+            kibetu_year,
+            kibetu_month,
+        ]
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(
+                CROWN_DIAMOND_GLOBAL_BONUS_Y_SQL,
+                params
+            )
+
+            logger.info(f"Executed SQL: {cursor._executed}")
+
+            cols = [c[0] for c in cursor.description]
+
+            rows = [
+                dict(zip(cols, r))
+                for r in cursor.fetchall()
+            ]
+
+        return rows
+
+
+class S_GlobalBonusView(generic.ListView):
+    template_name = "s_global_bonus.html"
+    context_object_name = "object_list"
+    model = MonthlyPeriod
+
+    def get_queryset(self):
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute("""
+                SELECT DISTINCT kibetu
+                FROM bonus_db.B_global_bonus_result
+                ORDER BY kibetu DESC
+            """)
+
+            registered_kibetu_list = [
+                row[0]
+                for row in cursor.fetchall()
+            ]
+
+        if not registered_kibetu_list:
+            return MonthlyPeriod.objects.using("rds").none()
+
+        return (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu__in=registered_kibetu_list)
+            .order_by("-year", "-month")
+        )
+
+    def get(self, request, *args, **kwargs):
+        self.object_list = self.get_queryset()
+        context = self.get_context_data()
+
+        if request.GET.get("export") == "excel":
+            rows = context.get("rows", [])
+            kibetu = context.get("selected_kibetu", "")
+            filename = build_bonus_export_filename("global_bonus_result", kibetu=kibetu)
+            return export_search_rows_to_excel(
+                rows,
+                SEARCH_EXPORT_COLUMNS["global_bonus"],
+                "GlobalBonus",
+                filename,
+            )
+
+        return self.render_to_response(context)
+
+    def get_context_data(self, **kwargs):
+
+        ctx = super().get_context_data(**kwargs)
+
+        selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
+
+        if not selected_kibetu and self.object_list:
+            selected_kibetu = self.object_list[0].kibetu
+
+        ctx["selected_kibetu"] = selected_kibetu
+        ctx["rows"] = []
+        ctx["selected_period"] = None
+
+        if not selected_kibetu:
+            return ctx
+
+        period = (
+            MonthlyPeriod.objects.using("rds")
+            .filter(kibetu=selected_kibetu)
+            .first()
+        )
+
+        if not period:
+            return ctx
+
+        ctx["selected_period"] = period
+
+        sort_ctx = get_bonus_sort_context(
+            self.request,
+            {
+                "kibetu": "gbr.kibetu",
+                "jwoa_code": "gbr.jwoa_code",
+                "jwoa_name": "gbr.jwoa_name",
+                "title_name": "title_name",
+                "score": "gbr.score",
+                "total_score": "gbr.total_score",
+                "total_bv": "gbr.total_bv",
+                "bonus_amount": "gbr.bonus_amount",
+                "created_at": "gbr.created_at",
+                "updated_at": "gbr.updated_at",
+            },
+            default_sort="bonus_amount",
+            default_direction="desc",
+        )
+        ctx.update(sort_ctx)
+
+        sql = """
+            SELECT
+                gbr.id,
+                gbr.kibetu,
+                gbr.jwoa_code,
+                gbr.jwoa_name,
+                gbr.title_id,
+                COALESCE(tm.title_name, 'タイトルなし') AS title_name,
+                gbr.score,
+                gbr.total_score,
+                gbr.total_bv,
+                gbr.bonus_amount,
+                gbr.created_at,
+                gbr.updated_at
+            FROM bonus_db.B_global_bonus_result AS gbr
+            LEFT JOIN bonus_db.title_master AS tm
+              ON gbr.title_id = tm.title_id
+            WHERE gbr.kibetu = %s
+        """
+
+        params = [selected_kibetu]
+        sql, filter_values = apply_like_filters(
+            sql,
+            params,
+            self.request,
+            {
+                "jwoa_code": "gbr.jwoa_code",
+                "jwoa_name": "gbr.jwoa_name",
             },
         )
         ctx.update(filter_values)
@@ -10270,15 +10799,36 @@ class S_MonthTitleView(generic.ListView):
         )
 
     def get_title_options(self):
-        title_options = [{"title_id": "0", "title_name": "タイトルなし"}]
-        title_options.extend(
-            {
-                "title_id": str(title.title_id),
-                "title_name": title.title_name,
-            }
-            for title in TitleMaster.objects.using("rds").order_by("title_id")
-        )
+        title_options = []
+        seen_ids = set()
+        for title in TitleMaster.objects.using("rds").order_by("title_id"):
+            title_id = str(title.title_id)
+            if title_id in seen_ids:
+                continue
+            seen_ids.add(title_id)
+            title_options.append(
+                {
+                    "title_id": title_id,
+                    "title_name": title.title_name or "タイトルなし",
+                }
+            )
+        if "0" not in seen_ids:
+            title_options.insert(0, {"title_id": "0", "title_name": "タイトルなし"})
         return title_options
+
+    def _parse_selected_title_ids(self):
+        raw_ids = [
+            (value or "").strip()
+            for value in self.request.GET.getlist("title_id")
+        ]
+        selected = []
+        seen = set()
+        for value in raw_ids:
+            if not value or not value.isdigit() or value in seen:
+                continue
+            seen.add(value)
+            selected.append(value)
+        return selected
 
     def get(self, request, *args, **kwargs):
         self.object_list = self.get_queryset()
@@ -10301,15 +10851,25 @@ class S_MonthTitleView(generic.ListView):
         ctx = super().get_context_data(**kwargs)
 
         selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
-        selected_title_id = (self.request.GET.get("title_id") or "").strip()
+        selected_title_ids = self._parse_selected_title_ids()
         if not selected_kibetu and self.object_list:
             selected_kibetu = self.object_list[0].kibetu
 
         ctx["selected_kibetu"] = selected_kibetu
-        ctx["selected_title_id"] = selected_title_id
+        ctx["selected_title_ids"] = selected_title_ids
+        # 後方互換（テンプレート・旧URL）
+        ctx["selected_title_id"] = (
+            selected_title_ids[0] if len(selected_title_ids) == 1 else ""
+        )
         ctx["title_options"] = self.get_title_options()
         ctx["rows"] = []
         ctx["selected_period"] = None
+        ctx["selected_title_labels"] = [
+            option["title_name"]
+            for option in ctx["title_options"]
+            if option["title_id"] in selected_title_ids
+        ]
+        ctx["selected_title_label"] = "、".join(ctx["selected_title_labels"])
 
         if not selected_kibetu:
             return ctx
@@ -10355,9 +10915,10 @@ class S_MonthTitleView(generic.ListView):
         """
 
         params = [selected_kibetu]
-        if selected_title_id:
-            sql += "\n            AND mt.title_id = %s"
-            params.append(selected_title_id)
+        if selected_title_ids:
+            placeholders = ", ".join(["%s"] * len(selected_title_ids))
+            sql += f"\n            AND mt.title_id IN ({placeholders})"
+            params.extend(selected_title_ids)
 
         sql, filter_values = apply_like_filters(
             sql,
@@ -10369,11 +10930,6 @@ class S_MonthTitleView(generic.ListView):
             },
         )
         ctx.update(filter_values)
-        ctx["selected_title_label"] = ""
-        for option in ctx["title_options"]:
-            if option["title_id"] == selected_title_id:
-                ctx["selected_title_label"] = option["title_name"]
-                break
         sql += "\n            ORDER BY " + sort_ctx["order_sql"]
 
         with connections["rds"].cursor() as cursor:
@@ -10524,7 +11080,7 @@ class MonthTitleView(generic.ListView):
             elif title_registration_status == "skipped":
                 messages.success(
                     request,
-                    f"{len(rows)}件を月タイトル結果に登録しました。タイトルユーザー登録は登録済みのためスキップしました。",
+                    f"{len(rows)}件を月タイトル結果に登録しました。最高ピンタイトルの登録は登録済みのためスキップしました。",
                 )
             else:
                 messages.success(
@@ -11342,11 +11898,23 @@ class CoolingOffView(generic.TemplateView):
         detail_order_code = self.request.GET.get("detail_order_code")
         q_order_code = (self.request.GET.get("q_order_code") or "").strip()
         q_active_flag = (self.request.GET.get("q_active_flag") or "").strip()
+        q_register_year = (self.request.GET.get("q_register_year") or "").strip()
+        q_register_month = (self.request.GET.get("q_register_month") or "").strip()
+        q_jwoa_code = (self.request.GET.get("q_jwoa_code") or "").strip()
 
-        ctx["rows"] = self._get_rows(q_order_code=q_order_code, q_active_flag=q_active_flag)
+        ctx["rows"] = self._get_rows(
+            q_order_code=q_order_code,
+            q_active_flag=q_active_flag,
+            q_register_year=q_register_year,
+            q_register_month=q_register_month,
+            q_jwoa_code=q_jwoa_code,
+        )
         ctx["detail_order"] = None
         ctx["q_order_code"] = q_order_code
         ctx["q_active_flag"] = q_active_flag
+        ctx["q_register_year"] = q_register_year
+        ctx["q_register_month"] = q_register_month
+        ctx["q_jwoa_code"] = q_jwoa_code
 
         if detail_order_code:
             ctx["detail_order"] = self._get_order_detail(detail_order_code)
@@ -11366,6 +11934,9 @@ class CoolingOffView(generic.TemplateView):
             elif action == "update":
                 if self._update(request):
                     messages.success(request, "クーリングオフを更新しました。")
+            elif action == "bulk_update":
+                if self._bulk_update(request):
+                    pass
             elif action == "delete":
                 if self._delete(request):
                     messages.success(request, "クーリングオフを削除しました。")
@@ -11383,7 +11954,14 @@ class CoolingOffView(generic.TemplateView):
 
         return redirect(redirect_target)
 
-    def _get_rows(self, q_order_code="", q_active_flag=""):
+    def _get_rows(
+        self,
+        q_order_code="",
+        q_active_flag="",
+        q_register_year="",
+        q_register_month="",
+        q_jwoa_code="",
+    ):
         where = []
         params = []
 
@@ -11395,20 +11973,46 @@ class CoolingOffView(generic.TemplateView):
             where.append("c.active_flag = %s")
             params.append(int(q_active_flag))
 
+        if q_register_year.isdigit():
+            where.append("p.register_year = %s")
+            params.append(int(q_register_year))
+
+        if q_register_month.isdigit():
+            where.append("p.register_month = %s")
+            params.append(int(q_register_month))
+
+        if q_jwoa_code:
+            where.append("o.jwoa_code LIKE %s")
+            params.append(f"%{q_jwoa_code}%")
+
         where_sql = f"WHERE {' AND '.join(where)}" if where else ""
         sql = """
             SELECT
                 c.id,
+                p.register_year,
+                p.register_month,
                 c.order_code,
                 c.active_flag,
                 c.remarks,
                 c.registered_by,
                 c.created_at,
                 o.jwoa_code,
-                o.order_name
+                o.order_name,
+                o.order_type,
+                p.bv
             FROM bonus_db.cooling_off c
             LEFT JOIN bonus_db.orders o
                 ON c.order_code = o.order_code
+            LEFT JOIN (
+                SELECT
+                    order_code,
+                    MIN(register_year) AS register_year,
+                    MIN(register_month) AS register_month,
+                    SUM(IFNULL(bv, 0)) AS bv
+                FROM bonus_db.purchase_info_list
+                GROUP BY order_code
+            ) p
+                ON c.order_code = p.order_code
             {where_sql}
             ORDER BY c.created_at DESC
         """.format(where_sql=where_sql)
@@ -11635,6 +12239,71 @@ class CoolingOffView(generic.TemplateView):
                 else:
                     self._restore_purchase_info_order_type(cursor, order_code)
 
+        return True
+
+    def _bulk_update(self, request):
+        raw_ids = request.POST.getlist("ids")
+        try:
+            active_flag = int(request.POST.get("active_flag", 1))
+            row_ids = sorted({int(x) for x in raw_ids if str(x).strip().isdigit()})
+        except (TypeError, ValueError):
+            messages.error(request, "一括更新内容が不正です。")
+            return False
+
+        if active_flag not in (0, 1):
+            messages.error(request, "状態の値が不正です。")
+            return False
+
+        if not row_ids:
+            messages.error(request, "一括編集する行を選択してください。")
+            return False
+
+        remarks = request.POST.get("remarks")
+        update_sql = """
+            UPDATE bonus_db.cooling_off
+            SET
+                active_flag = %s,
+                remarks = %s,
+                registered_by = %s
+            WHERE id = %s
+        """
+
+        with transaction.atomic(using="rds"):
+            with connections["rds"].cursor() as cursor:
+                placeholders = ", ".join(["%s"] * len(row_ids))
+                cursor.execute(
+                    f"""
+                    SELECT id, order_code
+                    FROM bonus_db.cooling_off
+                    WHERE id IN ({placeholders})
+                    FOR UPDATE
+                    """,
+                    row_ids,
+                )
+                targets = cursor.fetchall()
+                if not targets:
+                    messages.error(request, "一括更新対象データがありません。")
+                    return False
+
+                for row_id, order_code in targets:
+                    cursor.execute(
+                        update_sql,
+                        [
+                            active_flag,
+                            remarks,
+                            request.user.username,
+                            row_id,
+                        ],
+                    )
+                    if active_flag == 1:
+                        self._set_purchase_info_cooling_off(cursor, order_code)
+                    else:
+                        self._restore_purchase_info_order_type(cursor, order_code)
+
+        messages.success(
+            request,
+            f"{len(targets)}件のクーリングオフを一括更新しました。",
+        )
         return True
 
     def _delete(self, request):

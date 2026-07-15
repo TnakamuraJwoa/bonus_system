@@ -1,4 +1,4 @@
-﻿{% extends 'base.html' %}
+{% extends 'base.html' %}
 {% load static custom_filters %}
 
 {% block head %}
@@ -10,17 +10,17 @@
   <div class="row g-1 h-100">
 
 
-    {% include "com/_sidebar_bonus_keisan.html" with active_menu="three_star_global_bonus" %}
+    {% include "com/_sidebar_bonus_keisan.html" with active_menu="global_bonus" %}
 
     <main class="col-12 col-md-9 col-lg-10 app-page-main">
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          {% include "com/_bonus_calc_help.html" with title="【ボーナス計算 - 3スターダイヤグローバル配当】" help_title="3スターダイヤグローバル配当" help_key="three_star_global_bonus" history_modal_id="threeStarGlobalBonusHistoryModal" history_title="登録履歴を表示" %}
+          {% include "com/_bonus_calc_help.html" with title="【ボーナス計算 - グローバル配当】" help_title="グローバル配当" help_key="global_bonus" history_modal_id="globalBonusHistoryModal" history_title="登録履歴を表示" %}
 
           <div class="bonus-calc-form">
 
-            <form method="get" id="threeStarGlobalBonusSearchForm" class="mb-0">
+            <form method="get" id="globalBonusSearchForm" class="mb-0">
               {% bonus_calc_kibetu_input selected_kibetu period_type="monthly" %}
             </form>
 
@@ -29,19 +29,19 @@
             </div>
 
             <div class="bonus-calc-action-row">
-              <button type="submit" form="threeStarGlobalBonusSearchForm" class="btn btn-primary" data-bonus-calc-submit="threeStarGlobalBonusSearchForm">計算</button>
-              <a class="btn btn-outline-secondary" href="{% url 'connect:three_star_global_bonus' %}">
+              <button type="submit" form="globalBonusSearchForm" class="btn btn-primary" data-bonus-calc-submit="globalBonusSearchForm">計算</button>
+              <a class="btn btn-outline-secondary" href="{% url 'connect:global_bonus' %}">
                 リセット
               </a>
 
               {% if user_access.can_execute and selected_period and rows %}
               <form method="post"
                     class="mb-0"
-                    data-confirm="表示中の3スターダイヤグローバル配当結果を登録しますか？すでに登録済みの場合は上書き更新されます。"
+                    data-confirm="表示中のグローバル配当結果を登録しますか？すでに登録済みの場合は上書き更新されます。"
                     data-loading-message="登録中..."
                     data-loading-target="#bonusCalcRegisterOverlay">
                 {% csrf_token %}
-                <input type="hidden" name="action" value="three_star_global_bonus">
+                <input type="hidden" name="action" value="global_bonus">
                 <input type="hidden" name="kibetu" value="{{ selected_kibetu }}">
 
                 <button type="submit" class="btn btn-warning" data-loading-button>
@@ -53,7 +53,7 @@
               {% if user_access.can_delete %}
               <form method="post"
                     class="mb-0"
-                    data-confirm="選択中の期別の3スターダイヤグローバル配当登録済み結果データと登録履歴を削除します。よろしいですか？">
+                    data-confirm="選択中の期別のグローバル配当登録済み結果データと登録履歴を削除します。よろしいですか？">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="kibetu" value="{{ selected_kibetu }}">
@@ -87,7 +87,7 @@
                     <th>title_name</th>
                     <th>score</th>
                     <th>total_score</th>
-                    <th>total_over_bv</th>
+                    <th>total_bv</th>
                     <th>bonus_amount</th>
                   </tr>
                 </thead>
@@ -100,7 +100,7 @@
                       <td>{{ r.title_name }}</td>
                       <td>{{ r.score }}</td>
                       <td>{{ r.total_score }}</td>
-                      <td>{{ r.total_over_bv }}</td>
+                      <td>{{ r.total_bv }}</td>
                       <td class="fw-bold text-primary text-end">
                         {{ r.bonus_amount }}
                       </td>
@@ -124,7 +124,7 @@
     </main>
   </div>
 </div>
-{% include "com/_bonus_histry_month_modal.html" with modal_id="threeStarGlobalBonusHistoryModal" %}
-{% include "com/_bonus_calc_progress_overlay.html" with form_id="threeStarGlobalBonusSearchForm" overlay_id="threeStarGlobalBonusProgressOverlay" progress_bar_id="threeStarGlobalBonusProgressBar" progress_text_id="threeStarGlobalBonusProgressText" %}
+{% include "com/_bonus_histry_month_modal.html" with modal_id="globalBonusHistoryModal" %}
+{% include "com/_bonus_calc_progress_overlay.html" with form_id="globalBonusSearchForm" overlay_id="globalBonusProgressOverlay" progress_bar_id="globalBonusProgressBar" progress_text_id="globalBonusProgressText" %}
 {% include "com/_bonus_calc_register_overlay.html" %}
 {% endblock %}
