@@ -3280,7 +3280,7 @@ class TitleRegistrationView(generic.TemplateView):
 
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql, params)
-            logger.info("タイトルユーザー登録対象取得SQLを実行します。kibetu=%s", kibetu)
+            logger.info(f"Executed SQL: {cursor._executed}")
             cols = [c[0] for c in cursor.description]
             return [dict(zip(cols, r)) for r in cursor.fetchall()]
 
@@ -3294,6 +3294,7 @@ LIMIT 1
         """
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql, [year, month])
+            logger.info(f"Executed SQL: {cursor._executed}")
             return cursor.fetchone() is not None
 
     def _insert_rows(self, year, month, kibetu=None):
@@ -3330,8 +3331,8 @@ LIMIT 1
         params = [year, month, kibetu]
 
         with connections["rds"].cursor() as cursor:
-            logger.info("タイトル更新履歴INSERT SQLを実行します。kibetu=%s", kibetu)
             cursor.execute(sql, params)
+            logger.info(f"Executed SQL: {cursor._executed}")
 
     def _update_title(self, year, month, kibetu=None):
         kibetu = kibetu or self._resolve_kibetu(year, month)
@@ -3351,8 +3352,8 @@ LIMIT 1
         """
 
         with connections["rds"].cursor() as cursor:
-            logger.info("タイトルユーザー更新SQLを実行します。kibetu=%s", kibetu)
             cursor.execute(sql, [kibetu])
+            logger.info(f"Executed SQL: {cursor._executed}")
 
     def _update_setting(self, year, month):
         value = f"{year}{month:02d}"
@@ -3365,6 +3366,7 @@ LIMIT 1
 
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql, [value])
+            logger.info(f"Executed SQL: {cursor._executed}")
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
