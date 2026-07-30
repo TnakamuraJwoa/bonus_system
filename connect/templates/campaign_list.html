@@ -1,0 +1,375 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block head %}
+    <link href="{% static 'css/common.css' %}?v=51" rel="stylesheet">
+<style>
+    .campaign-section {
+        border: 1px solid #e5e7eb;
+        border-left: 4px solid #10b981;
+        border-radius: 10px;
+        padding: 0.65rem 0.75rem;
+        background: #fff;
+    }
+
+    .campaign-section__title {
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: #475569;
+        margin-bottom: 0.35rem;
+    }
+
+    .campaign-section__fields {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: flex-end;
+    }
+
+    .campaign-section__actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-left: auto;
+    }
+
+    .campaign-text-link {
+        color: #1d4ed8;
+        text-decoration: underline;
+        cursor: pointer;
+    }
+
+    .campaign-text-link:hover {
+        color: #1e40af;
+    }
+
+    .campaign-detail-value {
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+</style>
+{% endblock %}
+
+{% block contents %}
+<div class="container-fluid mt-3 app-page-viewport">
+  <div class="row g-1 h-100">
+
+    {% include "com/_sidebar_campaign.html" with active_menu="campaign_list" %}
+
+    <main class="col-12 col-md-9 col-lg-10 app-page-main">
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+
+          <div class="page-header-bar mb-3">
+            <h5 class="page-title mb-0">【キャンペーン - キャンペーン一覧】</h5>
+
+            {% if user_access.can_create %}
+            <div class="page-header-action">
+              <button type="button"
+                      class="btn btn-primary"
+                      data-toggle="modal"
+                      data-target="#campaignCreateModal">
+                <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false" class="mr-1">
+                  <path fill="currentColor" d="M8 2a.75.75 0 0 1 .75.75v4.5h4.5a.75.75 0 0 1 0 1.5h-4.5v4.5a.75.75 0 0 1-1.5 0v-4.5h-4.5a.75.75 0 0 1 0-1.5h4.5v-4.5A.75.75 0 0 1 8 2Z"/>
+                </svg>
+                新規登録
+              </button>
+            </div>
+            {% endif %}
+          </div>
+
+          <form method="get" class="campaign-section mb-0">
+            <div class="campaign-section__title">検索</div>
+            <div class="campaign-section__fields">
+              <div style="width: 170px;">
+                <label class="form-label mb-1 small text-muted">キャンペーンコード</label>
+                <input type="text"
+                       name="q_campaign_code"
+                       class="form-control"
+                       value="{{ q_campaign_code|default:'' }}">
+              </div>
+
+              <div style="width: 240px;">
+                <label class="form-label mb-1 small text-muted">キャンペーン名</label>
+                <input type="text"
+                       name="q_campaign_name"
+                       class="form-control"
+                       value="{{ q_campaign_name|default:'' }}">
+              </div>
+
+              <div style="width: 110px;">
+                <label class="form-label mb-1 small text-muted">状態</label>
+                <select name="q_status" class="form-control">
+                  <option value="" {% if not q_status %}selected{% endif %}>全件</option>
+                  <option value="1" {% if q_status == "1" %}selected{% endif %}>有効</option>
+                  <option value="0" {% if q_status == "0" %}selected{% endif %}>無効</option>
+                </select>
+              </div>
+
+              <div class="campaign-section__actions">
+                <button type="submit" class="btn btn-success">検索</button>
+                <a href="{% url 'connect:campaign_list' %}" class="btn btn-outline-secondary">リセット</a>
+              </div>
+            </div>
+          </form>
+
+        </div>
+      </div>
+
+      <div class="card shadow-sm flex-grow-1" style="min-height: 0;">
+        <div class="card-body d-flex flex-column" style="min-height: 0; overflow: hidden;">
+
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="fw-bold">一覧</div>
+            <div class="text-end"><strong>件数：{{ rows|length }} 件</strong></div>
+          </div>
+
+          <div class="table-responsive flex-grow-1" style="min-height: 0; overflow: auto;">
+            <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
+              <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                <tr>
+                  <th class="text-center" width="70">id</th>
+                  <th class="text-center" width="130">コード</th>
+                  <th class="text-center" width="220">キャンペーン名</th>
+                  <th class="text-center" width="120">開始日</th>
+                  <th class="text-center" width="120">終了日</th>
+                  <th class="text-center" width="80">表示順</th>
+                  <th class="text-center" width="90">状態</th>
+                  <th class="text-center" width="320">概要</th>
+                  <th class="text-center" width="170">登録日時</th>
+                  {% if user_access.can_update or user_access.can_delete %}
+                  <th class="text-center" width="150">操作</th>
+                  {% endif %}
+                </tr>
+              </thead>
+
+              <tbody>
+                {% for row in rows %}
+                <tr>
+                  <td>{{ row.id }}</td>
+                  <td>{{ row.campaign_code }}</td>
+                  <td>
+                    <a href="#"
+                       class="campaign-text-link"
+                       data-toggle="modal"
+                       data-target="#campaignDetailModal"
+                       data-campaign-code="{{ row.campaign_code }}"
+                       data-campaign-name="{{ row.campaign_name }}"
+                       data-campaign-description="{{ row.description|default:'' }}"
+                       data-campaign-start="{{ row.start_date|date:'Y/m/d' }}"
+                       data-campaign-end="{{ row.end_date|date:'Y/m/d' }}"
+                       data-campaign-order="{{ row.display_order }}"
+                       data-campaign-status="{% if row.status == 1 %}有効{% else %}無効{% endif %}"
+                       title="クリックで全文を表示">{{ row.campaign_name|truncatechars:20 }}</a>
+                  </td>
+                  <td>{{ row.start_date|date:"Y/m/d" }}</td>
+                  <td>{{ row.end_date|date:"Y/m/d" }}</td>
+                  <td class="text-end">{{ row.display_order }}</td>
+                  <td class="text-center">
+                    {% if row.status == 1 %}
+                      <span class="badge bg-success">有効</span>
+                    {% else %}
+                      <span class="badge bg-secondary">無効</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if row.description %}
+                    <a href="#"
+                       class="campaign-text-link"
+                       data-toggle="modal"
+                       data-target="#campaignDetailModal"
+                       data-campaign-code="{{ row.campaign_code }}"
+                       data-campaign-name="{{ row.campaign_name }}"
+                       data-campaign-description="{{ row.description }}"
+                       data-campaign-start="{{ row.start_date|date:'Y/m/d' }}"
+                       data-campaign-end="{{ row.end_date|date:'Y/m/d' }}"
+                       data-campaign-order="{{ row.display_order }}"
+                       data-campaign-status="{% if row.status == 1 %}有効{% else %}無効{% endif %}"
+                       title="クリックで全文を表示">{{ row.description|truncatechars:35 }}</a>
+                    {% endif %}
+                  </td>
+                  <td>{{ row.created_at|date:"Y/m/d H:i:s" }}</td>
+
+                  {% if user_access.can_update or user_access.can_delete %}
+                  <td class="text-center">
+                    {% if user_access.can_update %}
+                    <button type="button"
+                            class="btn btn-sm btn-warning"
+                            data-toggle="modal"
+                            data-target="#campaignEditModal{{ row.id }}">
+                      編集
+                    </button>
+                    {% endif %}
+
+                    {% if user_access.can_delete %}
+                    <form method="post" style="display:inline;">
+                      {% csrf_token %}
+
+                      <input type="hidden" name="action" value="delete">
+                      <input type="hidden" name="id" value="{{ row.id }}">
+                      <input type="hidden" name="next_query" value="{{ request.GET.urlencode }}">
+
+                      <button type="submit"
+                              class="btn btn-sm btn-danger"
+                              data-confirm-submit="キャンペーン「{{ row.campaign_name }}」を削除しますか？">
+                        削除
+                      </button>
+                    </form>
+                    {% endif %}
+                  </td>
+                  {% endif %}
+                </tr>
+
+                {% empty %}
+                <tr>
+                  <td colspan="10" class="text-center table-empty-cell text-muted py-4">
+                    データがありません
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="modal fade" id="campaignDetailModal" tabindex="-1" role="dialog" aria-labelledby="campaignDetailModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="campaignDetailModalLabel">キャンペーン詳細</h5>
+              <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+                <span aria-hidden="true">&times;</span>
+              </button>
+            </div>
+
+            <div class="modal-body">
+              <table class="table table-bordered table-sm mb-0">
+                <tr>
+                  <th width="140" class="table-light">コード</th>
+                  <td data-detail="code"></td>
+                </tr>
+                <tr>
+                  <th class="table-light">キャンペーン名</th>
+                  <td class="campaign-detail-value" data-detail="name"></td>
+                </tr>
+                <tr>
+                  <th class="table-light">期間</th>
+                  <td data-detail="period"></td>
+                </tr>
+                <tr>
+                  <th class="table-light">表示順</th>
+                  <td data-detail="order"></td>
+                </tr>
+                <tr>
+                  <th class="table-light">状態</th>
+                  <td data-detail="status"></td>
+                </tr>
+                <tr>
+                  <th class="table-light">概要</th>
+                  <td class="campaign-detail-value" data-detail="description"></td>
+                </tr>
+              </table>
+            </div>
+
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">閉じる</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {% if user_access.can_create %}
+      <div class="modal fade" id="campaignCreateModal" tabindex="-1" role="dialog" aria-labelledby="campaignCreateModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+          <div class="modal-content">
+            <form method="post" class="mb-0">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="create">
+              <input type="hidden" name="next_query" value="{{ request.GET.urlencode }}">
+
+              <div class="modal-header">
+                <h5 class="modal-title" id="campaignCreateModalLabel">キャンペーン登録</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+                  <span aria-hidden="true">&times;</span>
+                </button>
+              </div>
+
+              <div class="modal-body">
+                {% include "com/_campaign_form_fields.html" %}
+              </div>
+
+              <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
+                <button type="submit" class="btn btn-primary">登録</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if user_access.can_update %}
+      {% for row in rows %}
+      <div class="modal fade" id="campaignEditModal{{ row.id }}" tabindex="-1" role="dialog" aria-labelledby="campaignEditModalLabel{{ row.id }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+          <div class="modal-content">
+            <form method="post" class="mb-0">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="update">
+              <input type="hidden" name="id" value="{{ row.id }}">
+              <input type="hidden" name="next_query" value="{{ request.GET.urlencode }}">
+
+              <div class="modal-header">
+                <h5 class="modal-title" id="campaignEditModalLabel{{ row.id }}">キャンペーン編集</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+                  <span aria-hidden="true">&times;</span>
+                </button>
+              </div>
+
+              <div class="modal-body">
+                {% include "com/_campaign_form_fields.html" with row=row %}
+              </div>
+
+              <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
+                <button type="submit" class="btn btn-warning">更新</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+      {% endif %}
+
+    </main>
+  </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+$(function () {
+  $('#campaignDetailModal').on('show.bs.modal', function (event) {
+    var trigger = $(event.relatedTarget);
+    if (!trigger.length) {
+      return;
+    }
+
+    var modal = $(this);
+    var start = trigger.attr('data-campaign-start') || '';
+    var end = trigger.attr('data-campaign-end') || '';
+    var period = (start || end) ? (start + ' 〜 ' + end) : '（未設定）';
+    var description = trigger.attr('data-campaign-description') || '';
+
+    modal.find('[data-detail="code"]').text(trigger.attr('data-campaign-code') || '');
+    modal.find('[data-detail="name"]').text(trigger.attr('data-campaign-name') || '');
+    modal.find('[data-detail="period"]').text(period);
+    modal.find('[data-detail="order"]').text(trigger.attr('data-campaign-order') || '');
+    modal.find('[data-detail="status"]').text(trigger.attr('data-campaign-status') || '');
+    modal.find('[data-detail="description"]').text(description || '（未設定）');
+  });
+});
+</script>
+{% endblock %}

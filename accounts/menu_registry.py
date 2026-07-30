@@ -21,6 +21,7 @@ MENU_GROUPS = (
     ("orders", "注文"),
     ("bonus_search", "ボーナス検索"),
     ("bonus_calc", "ボーナス計算"),
+    ("campaign", "キャンペーン"),
     ("business_search", "業務検索"),
     ("settings", "設定・マスタ"),
 )
@@ -154,6 +155,9 @@ MENU_FEATURES = (
     MenuFeature("month_title", "月タイトル（計算）", "bonus_calc", ("month_title",)),
     MenuFeature("month_bonus", "月間ボーナス（計算）", "bonus_calc", ("month_bonus",)),
     MenuFeature("bonus_histry", "個人実績の登録履歴", "bonus_calc", ("bonus_histry", "bonus_histry_month")),
+    # --- キャンペーン ---
+    MenuFeature("campaign_list", "キャンペーン一覧", "campaign", ("campaign_list",)),
+    MenuFeature("campaign_target", "キャンペーン対象", "campaign", ("campaign_target",)),
     # --- 業務検索 ---
     MenuFeature(
         "business_personal_performance",
@@ -233,6 +237,7 @@ NAV_GROUP_MAP = {
     "orders": "orders",
     "bonus_search": "bonus_search",
     "bonus_calc": "bonus_calc",
+    "campaign": "campaign",
     "business_search": "business_search",
     "settings": "settings",
 }

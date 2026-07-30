@@ -1,0 +1,23 @@
+{% load access_tags %}
+<nav class="col-12 col-md-3 col-lg-2">
+  <div class="card shadow-sm position-sticky" style="top: 1rem;">
+    {% if user_access|any_menu_in_group:"campaign" %}
+    <div class="card-body">
+      <div class="fw-bold mb-2">メニュー</div>
+
+      <div class="list-group">
+        {% if user_access|can_menu:"campaign_list" %}
+        <a class="list-group-item list-group-item-action {% if active_menu == 'campaign_list' %}active{% endif %}"
+           href="{% url 'connect:campaign_list' %}">キャンペーン一覧</a>
+        {% endif %}
+
+        {% if user_access|can_menu:"campaign_target" %}
+        <a class="list-group-item list-group-item-action {% if active_menu == 'campaign_target' %}active{% endif %}"
+           href="{% url 'connect:campaign_target' %}">キャンペーン対象</a>
+        {% endif %}
+
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</nav>

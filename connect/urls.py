@@ -11,6 +11,7 @@ from .business_team_performance import (
 )
 from .active_user_search import ActiveUserSearchExportView, ActiveUserSearchView
 from .basic_income_line_detail import BasicIncomeLineDetailView
+from .campaign import CampaignListView, CampaignTargetView
 from .introducer_tree import IntroducerTreeExportView, IntroducerTreeView
 from .matching_bonus_detail import MatchingBonusTreeView
 from .member_month_title_search import MemberMonthTitleSearchView
@@ -128,6 +129,9 @@ urlpatterns = [
     path('week_bonus/', views.WeekBonusView.as_view(), name = "week_bonus"),
     path('month_title/', views.MonthTitleView.as_view(), name = "month_title"),
     path('month_bonus/', views.MonthBonusView.as_view(), name = "month_bonus"),
+    path("campaign_list/", CampaignListView.as_view(), name="campaign_list"),
+    path("campaign_target/", CampaignTargetView.as_view(), name="campaign_target"),
+
     path("help_text/", views.BonusHelpTextView.as_view(), name="help_text"),
     path('bonus_histry/', views.BonusHistryView.as_view(), name = "bonus_histry"),
     path('bonus_histry_month/', views.BonusHistryMonthView.as_view(), name = "bonus_histry_month"),
