@@ -1,0 +1,413 @@
+{% extends 'base.html' %}
+{% load static humanize %}
+
+{% block head %}
+    <link href="{% static 'css/common.css' %}?v=51" rel="stylesheet">
+<style>
+    .campaign-section {
+        border: 1px solid #e5e7eb;
+        border-left: 4px solid #10b981;
+        border-radius: 10px;
+        padding: 0.65rem 0.75rem;
+        background: #fff;
+    }
+
+    .campaign-section__title {
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: #475569;
+        margin-bottom: 0.35rem;
+    }
+
+    .campaign-section__fields {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: flex-end;
+    }
+
+    .campaign-section__actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-left: auto;
+    }
+
+    .campaign-text-link {
+        color: #1d4ed8;
+        text-decoration: underline;
+        cursor: pointer;
+    }
+
+    .campaign-text-link:hover {
+        color: #1e40af;
+    }
+
+    .campaign-detail-value {
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+</style>
+{% endblock %}
+
+{% block contents %}
+<div class="container-fluid mt-3 app-page-viewport">
+  <div class="row g-1 h-100">
+
+    {% include "com/_sidebar_campaign.html" with active_menu="campaign_target" %}
+
+    <main class="col-12 col-md-9 col-lg-10 app-page-main">
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+
+          <div class="page-header-bar mb-3">
+            <h5 class="page-title mb-0">【キャンペーン - キャンペーン対象】</h5>
+
+            {% if user_access.can_create %}
+            <div class="page-header-action">
+              <button type="button"
+                      class="btn btn-primary"
+                      data-toggle="modal"
+                      data-target="#campaignTargetCreateModal"
+                      {% if not campaigns %}disabled{% endif %}>
+                <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false" class="mr-1">
+                  <path fill="currentColor" d="M8 2a.75.75 0 0 1 .75.75v4.5h4.5a.75.75 0 0 1 0 1.5h-4.5v4.5a.75.75 0 0 1-1.5 0v-4.5h-4.5a.75.75 0 0 1 0-1.5h4.5v-4.5A.75.75 0 0 1 8 2Z"/>
+                </svg>
+                新規登録
+              </button>
+            </div>
+            {% endif %}
+          </div>
+
+          {% if not campaigns %}
+          <p class="small text-muted mb-3">
+            キャンペーンが登録されていません。先に「キャンペーン一覧」でキャンペーンを登録してください。
+          </p>
+          {% endif %}
+
+          <form method="get" class="campaign-section mb-0">
+            <div class="campaign-section__title">検索</div>
+            <div class="campaign-section__fields">
+              <div style="width: 280px;">
+                <label class="form-label mb-1 small text-muted">キャンペーン</label>
+                <select name="q_campaign_id" class="form-control">
+                  <option value="">全件</option>
+                  {% for campaign in campaigns %}
+                  <option value="{{ campaign.id }}" {% if q_campaign_id == campaign.id|stringformat:"s" %}selected{% endif %}>
+                    {{ campaign.campaign_code }}｜{{ campaign.campaign_name|truncatechars:20 }}
+                  </option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div style="width: 160px;">
+                <label class="form-label mb-1 small text-muted">会員ID</label>
+                <input type="text"
+                       name="q_jwoa_code"
+                       class="form-control"
+                       value="{{ q_jwoa_code|default:'' }}">
+              </div>
+
+              <div style="width: 120px;">
+                <label class="form-label mb-1 small text-muted">対象状態</label>
+                <select name="q_eligible_status" class="form-control">
+                  <option value="" {% if not q_eligible_status %}selected{% endif %}>全件</option>
+                  <option value="1" {% if q_eligible_status == "1" %}selected{% endif %}>対象</option>
+                  <option value="0" {% if q_eligible_status == "0" %}selected{% endif %}>対象外</option>
+                </select>
+              </div>
+
+              <div style="width: 120px;">
+                <label class="form-label mb-1 small text-muted">支払状態</label>
+                <select name="q_payment_status" class="form-control">
+                  <option value="" {% if not q_payment_status %}selected{% endif %}>全件</option>
+                  <option value="0" {% if q_payment_status == "0" %}selected{% endif %}>未払い</option>
+                  <option value="1" {% if q_payment_status == "1" %}selected{% endif %}>支払済</option>
+                </select>
+              </div>
+
+              <div class="campaign-section__actions">
+                <button type="submit" class="btn btn-success">検索</button>
+                <a href="{% url 'connect:campaign_target' %}" class="btn btn-outline-secondary">リセット</a>
+              </div>
+            </div>
+          </form>
+
+        </div>
+      </div>
+
+      <div class="card shadow-sm flex-grow-1" style="min-height: 0;">
+        <div class="card-body d-flex flex-column" style="min-height: 0; overflow: hidden;">
+
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="fw-bold">対象一覧</div>
+            <div class="text-end">
+              <strong>件数：{{ rows|length }} 件</strong>
+              <span class="ml-3">ボーナス金額合計：<strong>{{ total_bonus_amount|floatformat:0|intcomma }}</strong></span>
+            </div>
+          </div>
+
+          <div class="table-responsive flex-grow-1" style="min-height: 0; overflow: auto;">
+            <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
+              <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                <tr>
+                  <th class="text-center" width="70">id</th>
+                  <th class="text-center" width="120">コード</th>
+                  <th class="text-center" width="200">キャンペーン名</th>
+                  <th class="text-center" width="140">会員ID</th>
+                  <th class="text-center" width="160">会員名</th>
+                  <th class="text-center" width="130">ボーナス金額</th>
+                  <th class="text-center" width="90">対象状態</th>
+                  <th class="text-center" width="90">支払状態</th>
+                  <th class="text-center" width="110">支払日</th>
+                  <th class="text-center" width="240">備考</th>
+                  <th class="text-center" width="170">登録日時</th>
+                  {% if user_access.can_update or user_access.can_delete %}
+                  <th class="text-center" width="150">操作</th>
+                  {% endif %}
+                </tr>
+              </thead>
+
+              <tbody>
+                {% for row in rows %}
+                <tr>
+                  <td>{{ row.id }}</td>
+                  <td>{{ row.campaign_code|default:'-' }}</td>
+                  <td>
+                    <a href="#"
+                       class="campaign-text-link"
+                       data-toggle="modal"
+                       data-target="#campaignTargetDetailModal"
+                       data-target-campaign="{{ row.campaign_code|default:'' }}｜{{ row.campaign_name|default:'' }}"
+                       data-target-jwoa="{{ row.jwoa_code }}"
+                       data-target-name="{{ row.member_name|default:'' }}"
+                       data-target-amount="{{ row.bonus_amount|floatformat:0|intcomma }}"
+                       data-target-eligible="{% if row.eligible_status == 1 %}対象{% else %}対象外{% endif %}"
+                       data-target-payment="{% if row.payment_status == 1 %}支払済{% else %}未払い{% endif %}"
+                       data-target-payment-date="{{ row.payment_date|date:'Y/m/d' }}"
+                       data-target-note="{{ row.note|default:'' }}"
+                       title="クリックで詳細を表示">{{ row.campaign_name|default:'-'|truncatechars:20 }}</a>
+                  </td>
+                  <td>{{ row.jwoa_code }}</td>
+                  <td>{{ row.member_name|default:'-' }}</td>
+                  <td class="text-end">{{ row.bonus_amount|floatformat:0|intcomma }}</td>
+                  <td class="text-center">
+                    {% if row.eligible_status == 1 %}
+                      <span class="badge bg-success">対象</span>
+                    {% else %}
+                      <span class="badge bg-secondary">対象外</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-center">
+                    {% if row.payment_status == 1 %}
+                      <span class="badge bg-primary">支払済</span>
+                    {% else %}
+                      <span class="badge bg-warning">未払い</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ row.payment_date|date:"Y/m/d" }}</td>
+                  <td>
+                    {% if row.note %}
+                    <a href="#"
+                       class="campaign-text-link"
+                       data-toggle="modal"
+                       data-target="#campaignTargetDetailModal"
+                       data-target-campaign="{{ row.campaign_code|default:'' }}｜{{ row.campaign_name|default:'' }}"
+                       data-target-jwoa="{{ row.jwoa_code }}"
+                       data-target-name="{{ row.member_name|default:'' }}"
+                       data-target-amount="{{ row.bonus_amount|floatformat:0|intcomma }}"
+                       data-target-eligible="{% if row.eligible_status == 1 %}対象{% else %}対象外{% endif %}"
+                       data-target-payment="{% if row.payment_status == 1 %}支払済{% else %}未払い{% endif %}"
+                       data-target-payment-date="{{ row.payment_date|date:'Y/m/d' }}"
+                       data-target-note="{{ row.note }}"
+                       title="クリックで全文を表示">{{ row.note|truncatechars:25 }}</a>
+                    {% endif %}
+                  </td>
+                  <td>{{ row.created_at|date:"Y/m/d H:i:s" }}</td>
+
+                  {% if user_access.can_update or user_access.can_delete %}
+                  <td class="text-center">
+                    {% if user_access.can_update %}
+                    <button type="button"
+                            class="btn btn-sm btn-warning"
+                            data-toggle="modal"
+                            data-target="#campaignTargetEditModal{{ row.id }}">
+                      編集
+                    </button>
+                    {% endif %}
+
+                    {% if user_access.can_delete %}
+                    <form method="post" style="display:inline;">
+                      {% csrf_token %}
+
+                      <input type="hidden" name="action" value="delete">
+                      <input type="hidden" name="id" value="{{ row.id }}">
+                      <input type="hidden" name="next_query" value="{{ request.GET.urlencode }}">
+
+                      <button type="submit"
+                              class="btn btn-sm btn-danger"
+                              data-confirm-submit="会員ID {{ row.jwoa_code }} をキャンペーン対象から削除しますか？">
+                        削除
+                      </button>
+                    </form>
+                    {% endif %}
+                  </td>
+                  {% endif %}
+                </tr>
+
+                {% empty %}
+                <tr>
+                  <td colspan="12" class="text-center table-empty-cell text-muted py-4">
+                    データがありません
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="modal fade" id="campaignTargetDetailModal" tabindex="-1" role="dialog" aria-labelledby="campaignTargetDetailModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="campaignTargetDetailModalLabel">キャンペーン対象 詳細</h5>
+              <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+                <span aria-hidden="true">&times;</span>
+              </button>
+            </div>
+
+            <div class="modal-body">
+              <table class="table table-bordered table-sm mb-0">
+                <tr>
+                  <th width="150" class="table-light">キャンペーン</th>
+                  <td class="campaign-detail-value" data-detail="campaign"></td>
+                </tr>
+                <tr>
+                  <th class="table-light">会員ID</th>
+                  <td data-detail="jwoa"></td>
+                </tr>
+                <tr>
+                  <th class="table-light">会員名</th>
+                  <td data-detail="name"></td>
+                </tr>
+                <tr>
+                  <th class="table-light">ボーナス金額</th>
+                  <td data-detail="amount"></td>
+                </tr>
+                <tr>
+                  <th class="table-light">対象状態</th>
+                  <td data-detail="eligible"></td>
+                </tr>
+                <tr>
+                  <th class="table-light">支払状態</th>
+                  <td data-detail="payment"></td>
+                </tr>
+                <tr>
+                  <th class="table-light">支払日</th>
+                  <td data-detail="payment-date"></td>
+                </tr>
+                <tr>
+                  <th class="table-light">備考</th>
+                  <td class="campaign-detail-value" data-detail="note"></td>
+                </tr>
+              </table>
+            </div>
+
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">閉じる</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {% if user_access.can_create %}
+      <div class="modal fade" id="campaignTargetCreateModal" tabindex="-1" role="dialog" aria-labelledby="campaignTargetCreateModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+          <div class="modal-content">
+            <form method="post" class="mb-0">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="create">
+              <input type="hidden" name="next_query" value="{{ request.GET.urlencode }}">
+
+              <div class="modal-header">
+                <h5 class="modal-title" id="campaignTargetCreateModalLabel">キャンペーン対象 登録</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+                  <span aria-hidden="true">&times;</span>
+                </button>
+              </div>
+
+              <div class="modal-body">
+                {% include "com/_campaign_target_form_fields.html" %}
+              </div>
+
+              <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
+                <button type="submit" class="btn btn-primary">登録</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if user_access.can_update %}
+      {% for row in rows %}
+      <div class="modal fade" id="campaignTargetEditModal{{ row.id }}" tabindex="-1" role="dialog" aria-labelledby="campaignTargetEditModalLabel{{ row.id }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+          <div class="modal-content">
+            <form method="post" class="mb-0">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="update">
+              <input type="hidden" name="id" value="{{ row.id }}">
+              <input type="hidden" name="next_query" value="{{ request.GET.urlencode }}">
+
+              <div class="modal-header">
+                <h5 class="modal-title" id="campaignTargetEditModalLabel{{ row.id }}">キャンペーン対象 編集</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="閉じる">
+                  <span aria-hidden="true">&times;</span>
+                </button>
+              </div>
+
+              <div class="modal-body">
+                {% include "com/_campaign_target_form_fields.html" with row=row %}
+              </div>
+
+              <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">キャンセル</button>
+                <button type="submit" class="btn btn-warning">更新</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+      {% endif %}
+
+    </main>
+  </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+$(function () {
+  $('#campaignTargetDetailModal').on('show.bs.modal', function (event) {
+    var trigger = $(event.relatedTarget);
+    if (!trigger.length) {
+      return;
+    }
+
+    var modal = $(this);
+    var keys = ['campaign', 'jwoa', 'name', 'amount', 'eligible', 'payment', 'payment-date', 'note'];
+
+    keys.forEach(function (key) {
+      var value = trigger.attr('data-target-' + key) || '';
+      modal.find('[data-detail="' + key + '"]').text(value || '（未設定）');
+    });
+  });
+});
+</script>
+{% endblock %}

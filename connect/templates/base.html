@@ -108,6 +108,13 @@
                 </li>
                 {% endif %}
 
+                {% if user_access|has_nav:"campaign" %}
+                <li class="nav-item{% nav_group_active 'campaign' as campaign_active %}{% if campaign_active %} nav-item--active{% endif %}">
+                    <a class="nav-link{% if campaign_active %} nav-link--active{% endif %}"
+                       href="{% if user_access|can_menu:'campaign_list' %}{% url 'connect:campaign_list' %}{% else %}{% url 'connect:campaign_target' %}{% endif %}">キャンペーン </a>
+                </li>
+                {% endif %}
+
                 {% if user_access|has_nav:"business_search" %}
                 {% nav_group_active 'business_search' as business_search_active %}
                 <li class="nav-item{% if business_search_active %} nav-item--active{% endif %}">
