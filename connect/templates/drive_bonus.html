@@ -87,6 +87,7 @@
                     <th>会員ID</th>
                     <th>会員名</th>
                     <th>BV合計</th>
+                    <th>レート</th>
                     <th>報酬</th>
                   </tr>
                 </thead>
@@ -99,6 +100,7 @@
                       <td>{{ r.jwoa_code }}</td>
                       <td>{{ r.jwoa_name }}</td>
                       <td class="text-end">{{ r.sum_bv }}</td>
+                      <td class="text-end">{{ r.rate }}</td>
                       <td class="fw-bold text-primary text-end">{{ r.sum_bonus_amount }}</td>
                     </tr>
                   {% endfor %}
