@@ -909,6 +909,7 @@ SEARCH_EXPORT_COLUMNS = {
         ("会員ID", "jwoa_code"),
         ("会員名", "jwoa_name"),
         ("BV合計", "sum_bv", "int"),
+        ("レート", "rate", "decimal2"),
         ("報酬", "sum_bonus_amount", "decimal2"),
     ],
     "basic_bonus": [
@@ -1323,10 +1324,12 @@ class DriveBonusView(generic.ListView):
                     introducer_code,
                     jwoa_code,
                     jwoa_name,
+                    rate,
                     sum_bv,
                     sum_bonus_amount,
                     created_at
                 ) VALUES (
+                    %s,
                     %s,
                     %s,
                     %s,
@@ -1340,6 +1343,7 @@ class DriveBonusView(generic.ListView):
                     title_name = VALUES(title_name),
                     introducer_code = VALUES(introducer_code),
                     jwoa_name = VALUES(jwoa_name),
+                    rate = VALUES(rate),
                     sum_bv = VALUES(sum_bv),
                     sum_bonus_amount = VALUES(sum_bonus_amount),
                     created_at = NOW()
@@ -1353,6 +1357,7 @@ class DriveBonusView(generic.ListView):
                     r.get("introducer_code") or "",
                     r.get("jwoa_code") or "",
                     r.get("jwoa_name") or "",
+                    r.get("rate") or 0,
                     r.get("sum_bv") or 0,
                     r.get("sum_bonus_amount") or 0,
                 ])
@@ -6367,6 +6372,7 @@ class S_DriveBonusView(generic.ListView):
                 "jwoa_code": "jwoa_code",
                 "jwoa_name": "jwoa_name",
                 "sum_bv": "sum_bv",
+                "rate": "rate",
                 "sum_bonus_amount": "sum_bonus_amount",
             },
             default_sort="kibetu",
@@ -6390,6 +6396,7 @@ class S_DriveBonusView(generic.ListView):
                 jwoa_code,
                 jwoa_name,
                 sum_bv,
+                rate,
                 sum_bonus_amount,
                 created_at
             FROM bonus_db.B_drive_bonus_result
@@ -10467,10 +10474,12 @@ class WeekBonusView(generic.ListView):
                 introducer_code,
                 jwoa_code,
                 jwoa_name,
+                rate,
                 sum_bv,
                 sum_bonus_amount,
                 created_at
             ) VALUES (
+                %s,
                 %s,
                 %s,
                 %s,
@@ -10484,6 +10493,7 @@ class WeekBonusView(generic.ListView):
                 title_name = VALUES(title_name),
                 introducer_code = VALUES(introducer_code),
                 jwoa_name = VALUES(jwoa_name),
+                rate = VALUES(rate),
                 sum_bv = VALUES(sum_bv),
                 sum_bonus_amount = VALUES(sum_bonus_amount),
                 created_at = NOW()
@@ -10495,6 +10505,7 @@ class WeekBonusView(generic.ListView):
                 r.get("introducer_code") or "",
                 r.get("jwoa_code") or "",
                 r.get("jwoa_name") or "",
+                r.get("rate") or 0,
                 r.get("sum_bv") or 0,
                 r.get("sum_bonus_amount") or 0,
             ]

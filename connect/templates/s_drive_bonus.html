@@ -156,6 +156,7 @@
                     {% sortable_th "jwoa_code" "会員ID" %}
                     {% sortable_th "jwoa_name" "会員名" %}
                     {% sortable_th "sum_bv" "BV合計" %}
+                    {% sortable_th "rate" "レート" %}
                     {% sortable_th "sum_bonus_amount" "報酬" %}
                   </tr>
                 </thead>
@@ -169,6 +170,7 @@
                       <td>{{ r.jwoa_code }}</td>
                       <td>{{ r.jwoa_name }}</td>
                       <td class="text-end">{{ r.sum_bv }}</td>
+                      <td class="text-end">{{ r.rate }}</td>
                       <td class="text-end">{{ r.sum_bonus_amount }}</td>
                     </tr>
                   {% endfor %}
