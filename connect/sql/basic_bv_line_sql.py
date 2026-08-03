@@ -30,6 +30,7 @@ prev_basic_carry_over_bv AS (
         kibetu,
         placement_code,
         jmoa_code AS jwoa_code,
+        bv,
         carry_over_bv
     FROM bonus_db.basic_bv_line
     WHERE kibetu = (
@@ -228,6 +229,19 @@ SELECT
 FROM active_prev_basic_carry_over_bv
 ),
 
+-- 組織業績の合計
+basic_line_sum_bv as (
+select
+ 上位者コード,
+ ラインコード,
+ sum(sum_bv) as line_bv
+from payer_list_prevMonth_users_add_carry_bv
+where carry_flg = 0
+group by
+ 上位者コード,
+ ラインコード
+),
+
 sum_payer_list_prevMonth_users_add_carry_bv as (
 select 
  上位者コード,
@@ -297,18 +311,21 @@ where a.line_rank = 1
 -- 下の会員の今期購入がなくても、前月アクティブ上位者の前回繰り越しを残す
 result_bv_line AS (
 select
- placement_code,
- jmoa_code,
- bv,
- carry_over_bv
-from paid_result_bv_line
+ a.placement_code,
+ a.jmoa_code,
+ b.line_bv as bv,
+ a.carry_over_bv
+from paid_result_bv_line as a
+
+left join basic_line_sum_bv as b
+on a.placement_code = b.上位者コード and a.jmoa_code = b.ラインコード
 
 UNION ALL
 
 select
  p.placement_code,
  p.jwoa_code,
- 0 as bv,
+ p.bv,
  p.carry_over_bv
 from active_prev_basic_carry_over_bv as p
 left join paid_result_bv_line as c
