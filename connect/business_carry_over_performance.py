@@ -5,6 +5,7 @@ import math
 
 import openpyxl
 from django.contrib import messages
+from django.core.cache import cache
 from django.db import ProgrammingError, connections, transaction
 from django.http import HttpResponse
 from django.shortcuts import redirect
@@ -34,6 +35,11 @@ BASIC_BV_LINE_IMPORT_COLUMNS = {
     "期別": "kibetu",
 }
 REQUIRED_IMPORT_COLUMNS = ["placement_code", "jmoa_code", "bv", "carry_over_bv", "kibetu"]
+
+# basic_bv_line は数百万件あり、期別ごとの MIN/MAX(created_at) 集計は全件走査になる。
+# 登録履歴モーダル用の集計結果はキャッシュし、取込・削除のタイミングで破棄する。
+CARRY_OVER_HISTORY_CACHE_KEY = "business_carry_over_performance:history_rows"
+CARRY_OVER_HISTORY_CACHE_TIMEOUT = 600
 
 
 def is_missing_table_error(exc):
@@ -145,13 +151,64 @@ def parse_basic_bv_line_import_rows(uploaded_file):
     return data_rows, errors
 
 
-def fetch_carry_over_history_rows():
+def fetch_latest_registered_kibetu():
+    """登録済みの最新期別を返す。idx_kibetu の MIN/MAX 最適化が効くため即時に返る。"""
+    sql = f"SELECT MAX(kibetu) FROM {BASIC_BV_LINE_TABLE}"
+    with connections["rds"].cursor() as cursor:
+        try:
+            cursor.execute(sql)
+            row = cursor.fetchone()
+        except ProgrammingError as exc:
+            if is_missing_table_error(exc):
+                logger.info("繰り越し業績テーブルが未作成です。table=%s", BASIC_BV_LINE_TABLE)
+                return ""
+            raise
+    return (row[0] or "") if row else ""
+
+
+def is_registered_kibetu(kibetu):
+    """指定期別に明細があるかを判定する。全件集計せず idx_kibetu だけを見る。"""
+    if not kibetu:
+        return False
+
+    sql = f"SELECT 1 FROM {BASIC_BV_LINE_TABLE} WHERE kibetu = %s LIMIT 1"
+    with connections["rds"].cursor() as cursor:
+        try:
+            cursor.execute(sql, [kibetu])
+            return cursor.fetchone() is not None
+        except ProgrammingError as exc:
+            if is_missing_table_error(exc):
+                logger.info("繰り越し業績テーブルが未作成です。table=%s", BASIC_BV_LINE_TABLE)
+                return False
+            raise
+
+
+def clear_carry_over_history_cache():
+    cache.delete(CARRY_OVER_HISTORY_CACHE_KEY)
+
+
+def fetch_carry_over_history_rows(use_cache=True):
+    if use_cache:
+        cached_rows = cache.get(CARRY_OVER_HISTORY_CACHE_KEY)
+        if cached_rows is not None:
+            return cached_rows
+
+    rows = _query_carry_over_history_rows()
+    cache.set(CARRY_OVER_HISTORY_CACHE_KEY, rows, CARRY_OVER_HISTORY_CACHE_TIMEOUT)
+    return rows
+
+
+def _query_carry_over_history_rows():
+    # COUNT(*) と MIN/MAX(created_at) を1つの集計にまとめると
+    # idx_kibetu_created のルースインデックススキャンが使えず全件走査になる。
+    # 件数と日時を別々の派生表にすることで、
+    # 件数は idx_kibetu のカバリングスキャン、日時は "Using index for group-by" になる。
     sql = f"""
         SELECT
-            h.kibetu,
-            h.row_count,
-            h.created_at,
-            h.updated_at,
+            c.kibetu,
+            c.row_count,
+            t.created_at,
+            t.updated_at,
             pm.st_date,
             pm.end_date,
             pm.completion_date,
@@ -161,15 +218,22 @@ def fetch_carry_over_history_rows():
         FROM (
             SELECT
                 kibetu,
-                COUNT(*) AS row_count,
+                COUNT(*) AS row_count
+            FROM {BASIC_BV_LINE_TABLE}
+            GROUP BY kibetu
+        ) AS c
+        JOIN (
+            SELECT
+                kibetu,
                 MIN(created_at) AS created_at,
                 MAX(created_at) AS updated_at
             FROM {BASIC_BV_LINE_TABLE}
             GROUP BY kibetu
-        ) AS h
+        ) AS t
+          ON t.kibetu = c.kibetu
         LEFT JOIN bonus_db.period_master AS pm
-          ON pm.kibetu = h.kibetu
-        ORDER BY h.kibetu DESC
+          ON pm.kibetu = c.kibetu
+        ORDER BY c.kibetu DESC
     """
     with connections["rds"].cursor() as cursor:
         logger.info("繰り越し業績履歴取得SQLを実行します。table=%s", BASIC_BV_LINE_TABLE)
@@ -210,12 +274,7 @@ class CarryOverPerformanceView(KeysetPaginationMixin, generic.TemplateView):
         if not q_kibetu:
             messages.error(request, "期別を選択してください。")
             return redirect("connect:business_carry_over_performance")
-        registered_kibetu_set = {
-            row.get("kibetu")
-            for row in fetch_carry_over_history_rows()
-            if row.get("kibetu") and (row.get("row_count") or 0) > 0
-        }
-        if q_kibetu not in registered_kibetu_set:
+        if not is_registered_kibetu(q_kibetu):
             messages.error(request, "登録されている期別のみ削除できます。")
             return redirect("connect:business_carry_over_performance")
 
@@ -231,6 +290,8 @@ class CarryOverPerformanceView(KeysetPaginationMixin, generic.TemplateView):
                     )
                     cursor.execute(delete_sql, [q_kibetu])
                     deleted_count = cursor.rowcount
+
+            clear_carry_over_history_cache()
 
             record_change_audit(
                 request,
@@ -299,12 +360,27 @@ class CarryOverPerformanceView(KeysetPaginationMixin, generic.TemplateView):
                     logger.info("繰り越しBV一括登録SQLを実行します。table=%s", BASIC_BV_LINE_TABLE)
                     cursor.executemany(insert_sql, rows)
 
+            clear_carry_over_history_cache()
+
             messages.success(request, f"{len(rows)}件を繰り越しBV管理に一括登録しました。")
         except Exception as exc:
             logger.exception("繰り越しBV一括登録エラー")
             messages.error(request, f"登録中にエラーが発生しました: {exc}")
 
         return redirect("connect:business_carry_over_performance")
+
+    @staticmethod
+    def resolve_default_kibetu(q_kibetu="", q_placement_code="", q_jmoa_code=""):
+        """条件無しのときに初期表示する期別を決める。
+
+        basic_bv_line は数百万件あり、期別を絞らずに並べ替えると全件 filesort になって
+        画面が開かない。会員コード等の条件も無い場合は最新の登録期別を初期値にする。
+        """
+        if q_kibetu or q_placement_code or q_jmoa_code:
+            return q_kibetu, False
+
+        latest_kibetu = fetch_latest_registered_kibetu()
+        return latest_kibetu, bool(latest_kibetu)
 
     def _build_where(self, q_kibetu="", q_placement_code="", q_jmoa_code=""):
         where = []
@@ -386,15 +462,17 @@ class CarryOverPerformanceView(KeysetPaginationMixin, generic.TemplateView):
         q_placement_code = (self.request.GET.get("q_placement_code") or "").strip()
         q_jmoa_code = (self.request.GET.get("q_jmoa_code") or "").strip()
         kibetu_choice_mode = self.request.GET.get("kibetu_choice_mode") or "recent"
-        registration_history_rows = fetch_carry_over_history_rows()
-        registered_kibetu_set = {
-            row.get("kibetu")
-            for row in registration_history_rows
-            if row.get("kibetu") and (row.get("row_count") or 0) > 0
-        }
-        if q_kibetu and q_kibetu not in registered_kibetu_set:
+
+        if q_kibetu and not is_registered_kibetu(q_kibetu):
             messages.warning(self.request, "登録されている期別のみ選択できます。")
             q_kibetu = ""
+
+        q_kibetu, q_kibetu_defaulted = self.resolve_default_kibetu(
+            q_kibetu=q_kibetu,
+            q_placement_code=q_placement_code,
+            q_jmoa_code=q_jmoa_code,
+        )
+        registration_history_rows = fetch_carry_over_history_rows()
 
         per_page = self.get_per_page()
         total_count = self._fetch_total_count(
@@ -415,6 +493,7 @@ class CarryOverPerformanceView(KeysetPaginationMixin, generic.TemplateView):
         )
 
         ctx["q_kibetu"] = q_kibetu
+        ctx["q_kibetu_defaulted"] = q_kibetu_defaulted
         ctx["q_placement_code"] = q_placement_code
         ctx["q_jmoa_code"] = q_jmoa_code
         ctx["active_menu"] = "business_carry_over_performance"
@@ -444,13 +523,14 @@ class CarryOverPerformanceExportView(CarryOverPerformanceView):
         q_kibetu = (request.GET.get("q_kibetu") or "").strip()
         q_placement_code = (request.GET.get("q_placement_code") or "").strip()
         q_jmoa_code = (request.GET.get("q_jmoa_code") or "").strip()
-        registered_kibetu_set = {
-            row.get("kibetu")
-            for row in fetch_carry_over_history_rows()
-            if row.get("kibetu") and (row.get("row_count") or 0) > 0
-        }
-        if q_kibetu and q_kibetu not in registered_kibetu_set:
+        if q_kibetu and not is_registered_kibetu(q_kibetu):
             q_kibetu = ""
+
+        q_kibetu, _ = self.resolve_default_kibetu(
+            q_kibetu=q_kibetu,
+            q_placement_code=q_placement_code,
+            q_jmoa_code=q_jmoa_code,
+        )
 
         rows = self._fetch_rows(
             q_kibetu=q_kibetu,
