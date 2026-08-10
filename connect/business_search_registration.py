@@ -14,6 +14,37 @@ def is_missing_table_error(exc):
     return bool(exc.args and exc.args[0] == 1146)
 
 
+def fetch_latest_registered_kibetu(result_table, kibetu_like=None):
+    """登録済みの最新期別を返す。kibetu のインデックスで MAX が最適化され即時に返る。"""
+    where_sql = "WHERE kibetu LIKE %s" if kibetu_like else ""
+    params = [kibetu_like] if kibetu_like else []
+    sql = f"SELECT MAX(kibetu) FROM {result_table} {where_sql}"
+
+    with connections["rds"].cursor() as cursor:
+        try:
+            cursor.execute(sql, params)
+            row = cursor.fetchone()
+        except ProgrammingError as exc:
+            if is_missing_table_error(exc):
+                logger.info("業務検索結果テーブルが未作成です。table=%s", result_table)
+                return ""
+            raise
+    return (row[0] or "") if row else ""
+
+
+def resolve_default_kibetu(result_table, q_kibetu="", kibetu_like=None, other_filters=()):
+    """条件無しのときに初期表示する期別を決める。
+
+    期別を絞らずに並べ替えると全件 filesort になるため、他の検索条件も無い場合は
+    最新の登録期別を初期値にする。一覧は期別の降順なので1ページ目の内容は変わらない。
+    """
+    if q_kibetu or any(other_filters):
+        return q_kibetu, False
+
+    latest_kibetu = fetch_latest_registered_kibetu(result_table, kibetu_like=kibetu_like)
+    return latest_kibetu, bool(latest_kibetu)
+
+
 def fetch_registration_history_rows(
     result_table,
     kibetu_like=None,
