@@ -38,13 +38,17 @@
     <div class="bonus-calc-kibetu-options" role="listbox">
       {% for obj in period_choices %}
         <button type="button"
-                class="bonus-calc-kibetu-option business-search-kibetu-option{% if obj.kibetu == q_kibetu %} business-search-kibetu-option--selected{% endif %}{% if obj.kibetu == next_completion_kibetu %} bonus-calc-kibetu-option--next{% endif %}{% if obj.kibetu == previous_month_kibetu %} bonus-calc-kibetu-option--previous-month{% endif %}"
+                class="bonus-calc-kibetu-option business-search-kibetu-option{% if obj.kibetu == next_completion_kibetu %} bonus-calc-kibetu-option--next{% endif %}{% if obj.kibetu == previous_month_kibetu %} bonus-calc-kibetu-option--previous-month{% endif %}"
                 data-kibetu-value="{{ obj.kibetu }}"
-                data-kibetu-search="{{ obj.kibetu }} {{ obj.st_date }} {{ obj.end_date }} {{ obj.payment_date }}">
+                data-kibetu-search="{{ obj.kibetu }} {{ obj.st_date }} {{ obj.end_date }} {{ obj.payment_date }}"
+                {% if obj.kibetu == q_kibetu %}data-kibetu-selected{% endif %}>
           <span class="bonus-calc-kibetu-option__main">
             <span class="bonus-calc-kibetu-option__text">
               <span class="bonus-calc-kibetu-option__title">
                 {{ obj.kibetu }}
+                <span class="bonus-calc-kibetu-option__badge bonus-calc-kibetu-option__badge--selected"
+                      data-kibetu-selected-badge
+                      {% if obj.kibetu != q_kibetu %}hidden{% endif %}>選択中</span>
               </span>
               <span class="business-search-kibetu-option__date">
                 {% if period_type == "monthly" %}
