@@ -514,9 +514,14 @@ html, body {
     padding: 0.7rem 0.75rem;
 }
 
-.business-search-kibetu-option--selected {
+/* 選択中の期別。「次の完成日」「前月」のハイライトより優先させるため、
+   クラス2つ分の詳細度で指定する。 */
+.bonus-calc-kibetu-option[data-kibetu-selected],
+.bonus-calc-kibetu-option[data-kibetu-selected]:hover,
+.bonus-calc-kibetu-option[data-kibetu-selected]:focus {
     border-color: var(--color-primary);
-    background: #eef2ff;
+    background: #e0e7ff;
+    box-shadow: inset 0 0 0 1px var(--color-primary);
 }
 
 .business-search-kibetu-option .bonus-calc-kibetu-option__main {
@@ -685,6 +690,10 @@ html, body {
 
 .bonus-calc-kibetu-option__badge--previous-month {
     background: #3b82f6;
+}
+
+.bonus-calc-kibetu-option__badge--selected {
+    background: var(--color-primary);
 }
 
 .bonus-calc-kibetu-option__badge--created {

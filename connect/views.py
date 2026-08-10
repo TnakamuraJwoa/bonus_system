@@ -6314,7 +6314,7 @@ class S_DriveBonusView(generic.ListView):
             cursor.execute("""
                 SELECT DISTINCT kibetu
                 FROM bonus_db.B_drive_bonus_result
-                ORDER BY kibetu
+                ORDER BY kibetu DESC
             """)
             registered_kibetu_list = [row[0] for row in cursor.fetchall()]
 
@@ -6324,7 +6324,7 @@ class S_DriveBonusView(generic.ListView):
         return (
             PeriodMaster.objects.using("rds")
             .filter(kibetu__in=registered_kibetu_list)
-            .order_by("kibetu")
+            .order_by("-st_date", "-kibetu")
         )
 
     def get(self, request, *args, **kwargs):
@@ -6450,7 +6450,7 @@ class S_BasicBonusView(generic.ListView):
             cursor.execute("""
                 SELECT DISTINCT kibetu
                 FROM bonus_db.B_basic_bonus_result
-                ORDER BY kibetu
+                ORDER BY kibetu DESC
             """)
             registered_kibetu_list = [row[0] for row in cursor.fetchall()]
 
@@ -6460,7 +6460,7 @@ class S_BasicBonusView(generic.ListView):
         return (
             PeriodMaster.objects.using("rds")
             .filter(kibetu__in=registered_kibetu_list)
-            .order_by("kibetu")
+            .order_by("-st_date", "-kibetu")
         )
 
     def get(self, request, *args, **kwargs):
@@ -6594,7 +6594,7 @@ class S_MatchingBonusView(generic.ListView):
             cursor.execute("""
                 SELECT DISTINCT kibetu
                 FROM bonus_db.B_matching_bonus_result
-                ORDER BY kibetu
+                ORDER BY kibetu DESC
             """)
             registered_kibetu_list = [row[0] for row in cursor.fetchall()]
 
@@ -6604,7 +6604,7 @@ class S_MatchingBonusView(generic.ListView):
         return (
             PeriodMaster.objects.using("rds")
             .filter(kibetu__in=registered_kibetu_list)
-            .order_by("kibetu")
+            .order_by("-st_date", "-kibetu")
         )
 
     def get(self, request, *args, **kwargs):
@@ -10678,7 +10678,7 @@ class S_WeekBonusView(generic.ListView):
             cursor.execute("""
                 SELECT DISTINCT kibetu
                 FROM bonus_db.B_week_bonus_result
-                ORDER BY kibetu
+                ORDER BY kibetu DESC
             """)
             registered_kibetu_list = [row[0] for row in cursor.fetchall()]
 
@@ -10688,7 +10688,7 @@ class S_WeekBonusView(generic.ListView):
         return (
             PeriodMaster.objects.using("rds")
             .filter(kibetu__in=registered_kibetu_list)
-            .order_by("kibetu")
+            .order_by("-st_date", "-kibetu")
         )
 
     def get(self, request, *args, **kwargs):
@@ -11705,7 +11705,7 @@ class S_MonthBonusView(generic.ListView):
             cursor.execute("""
                 SELECT DISTINCT kibetu
                 FROM bonus_db.B_month_bonus_result
-                ORDER BY kibetu
+                ORDER BY kibetu DESC
             """)
             registered_kibetu_list = [row[0] for row in cursor.fetchall()]
 
@@ -11715,7 +11715,7 @@ class S_MonthBonusView(generic.ListView):
         return (
             MonthlyPeriod.objects.using("rds")
             .filter(kibetu__in=registered_kibetu_list)
-            .order_by("kibetu")
+            .order_by("-year", "-month")
         )
 
     def get(self, request, *args, **kwargs):

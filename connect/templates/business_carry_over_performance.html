@@ -55,7 +55,6 @@
                        name="q_placement_code"
                        class="form-control"
                        value="{{ q_placement_code|default:'' }}"
-                       placeholder="例: JP00000000"
                        autocomplete="off">
               </div>
 
@@ -65,7 +64,6 @@
                        name="q_jmoa_code"
                        class="form-control"
                        value="{{ q_jmoa_code|default:'' }}"
-                       placeholder="例: JP00000000"
                        autocomplete="off">
               </div>
 
@@ -100,6 +98,12 @@
               </form>
             {% endif %}
           </div>
+
+          {% if q_kibetu_defaulted %}
+            <div class="small text-muted mt-2">
+              期別が未指定のため、最新の登録期別（{{ q_kibetu }}）を表示しています。
+            </div>
+          {% endif %}
 
         </div>
       </div>
