@@ -546,6 +546,96 @@ html, body {
     white-space: nowrap;
 }
 
+/* 期別の複数選択：選んだ期別は検索条件の行を押し上げないよう、別行にまとめる */
+.bonus-calc-kibetu-selected {
+    display: flex;
+    flex: 0 0 100%;
+    order: 99;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem 0.5rem;
+    width: 100%;
+    margin-top: -0.15rem;
+}
+
+.bonus-calc-kibetu-selected[hidden] {
+    display: none;
+}
+
+.bonus-calc-kibetu-selected__label {
+    font-weight: 600;
+}
+
+.bonus-calc-kibetu-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.bonus-calc-kibetu-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
+    padding: 0.05rem 0.15rem 0.05rem 0.4rem;
+    border-radius: 0.35rem;
+    background: #e0e7ff;
+    color: #3730a3;
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+
+.bonus-calc-kibetu-tag__remove {
+    padding: 0 0.2rem;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-size: 0.9rem;
+    line-height: 1;
+    opacity: 0.7;
+}
+
+.bonus-calc-kibetu-tag__remove:hover {
+    opacity: 1;
+}
+
+.bonus-calc-kibetu-select--multiple .bonus-calc-kibetu-option__main {
+    align-items: center;
+}
+
+.bonus-calc-kibetu-select--multiple .bonus-calc-kibetu-option__text {
+    flex: 1 1 auto;
+}
+
+/* チェックボックスは字形の差が出ないよう CSS で描く */
+.bonus-calc-kibetu-option__check {
+    position: relative;
+    flex: 0 0 auto;
+    width: 1rem;
+    height: 1rem;
+    border: 1.5px solid #94a3b8;
+    border-radius: 0.25rem;
+    background: #fff;
+}
+
+.bonus-calc-kibetu-option[data-kibetu-selected] .bonus-calc-kibetu-option__check {
+    border-color: var(--color-primary);
+    background: var(--color-primary);
+}
+
+.bonus-calc-kibetu-option[data-kibetu-selected] .bonus-calc-kibetu-option__check::after {
+    content: "";
+    position: absolute;
+    left: 0.28rem;
+    top: 0.05rem;
+    width: 0.26rem;
+    height: 0.55rem;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
 .bonus-calc-kibetu-field .form-label {
     font-size: 0.8125rem;
     font-weight: 600;

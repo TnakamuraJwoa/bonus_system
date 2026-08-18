@@ -7,6 +7,7 @@ from django.utils.html import format_html
 from dateutil.relativedelta import relativedelta
 
 from connect.bonus_help import get_bonus_help
+from connect.business_search_registration import parse_kibetu_list
 from connect.models import MonthlyPeriod, PeriodMaster
 
 register = template.Library()
@@ -367,7 +368,14 @@ def bonus_calc_kibetu_input(context, selected_kibetu="", period_type="weekly", r
 
 
 @register.inclusion_tag("com/_business_search_kibetu_input.html", takes_context=True)
-def business_search_kibetu_input(context, q_kibetu="", period_type="weekly", placeholder="", registered_only=False):
+def business_search_kibetu_input(
+    context,
+    q_kibetu="",
+    period_type="weekly",
+    placeholder="",
+    registered_only=False,
+    multiple=False,
+):
     request = context.get("request")
     created_kibetu_set = set()
     for row in context.get("registration_history_rows") or []:
@@ -387,10 +395,20 @@ def business_search_kibetu_input(context, q_kibetu="", period_type="weekly", pla
             if period.kibetu in created_kibetu_set
         ]
 
+    q_kibetu = q_kibetu or ""
+    selected_kibetu_list = parse_kibetu_list(q_kibetu) if multiple else [q_kibetu] if q_kibetu else []
+
+    if multiple:
+        default_placeholder = "期別を選択（複数可）"
+    else:
+        default_placeholder = "期別を入力または選択"
+
     return {
-        "q_kibetu": q_kibetu or "",
-        "placeholder": placeholder or "期別を入力または選択",
+        "q_kibetu": q_kibetu,
+        "selected_kibetu_list": selected_kibetu_list,
+        "placeholder": placeholder or default_placeholder,
         "registered_only": registered_only,
+        "multiple": multiple,
         **period_context,
     }
 

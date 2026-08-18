@@ -27,7 +27,7 @@
     <main class="col-12 col-md-9 col-lg-10 list-page-main">
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          {% include "com/_bonus_calc_help.html" with title="【業務検索 - "|add:period_label|add:" チーム業績】" help_title=period_label|add:" チーム業績" help_key=team_help_key history_modal_id=registration_history_modal_id history_title="登録履歴を表示" %}
+          {% include "com/_bonus_calc_help.html" with title="【業績検索・登録 - "|add:period_label|add:" チーム業績】" help_title=period_label|add:" チーム業績" help_key=team_help_key history_modal_id=registration_history_modal_id history_title="登録履歴を表示" %}
 
           <div class="bonus-calc-toolbar business-performance-toolbar">
             <form method="get"
@@ -35,7 +35,7 @@
                   autocomplete="off"
                   id="businessTeamPerformanceSearchForm">
               <div class="bonus-calc-toolbar__period-row">
-                {% business_search_kibetu_input q_kibetu period_type=period_type %}
+                {% business_search_kibetu_input q_kibetu period_type=period_type multiple=True %}
 
                 <div style="width: 180px;">
                   <label class="form-label mb-0 small text-muted">上位会員コード</label>
@@ -72,7 +72,7 @@
               </div>
             </form>
 
-            {% if user_access.can_execute and q_kibetu %}
+            {% if user_access.can_execute and single_q_kibetu %}
               <div class="bonus-calc-register-aside">
                 <form method="post"
                       class="mb-0"
@@ -81,7 +81,7 @@
                       data-loading-target="#businessTeamRegisterOverlay">
                   {% csrf_token %}
                   <input type="hidden" name="action" value="register_team_performance">
-                  <input type="hidden" name="kibetu" value="{{ q_kibetu }}">
+                  <input type="hidden" name="kibetu" value="{{ single_q_kibetu }}">
                   <button type="submit" class="btn btn-warning btn-block" data-loading-button>
                     {% if is_team_performance_registered %}この期別の結果を再登録{% else %}この期別の結果を登録{% endif %}
                   </button>
@@ -89,6 +89,13 @@
               </div>
             {% endif %}
           </div>
+
+          {% if is_multi_kibetu_selected %}
+            <div class="small text-muted mt-2">
+              期別を複数選択しているため、登録済みの明細のみを表示しています。
+              未登録期別の計算結果の表示・登録は、期別を1つだけ選択してください。
+            </div>
+          {% endif %}
         </div>
       </div>
 
@@ -160,7 +167,7 @@
   </div>
 </div>
 
-{% include "com/_business_search_registration_modal.html" with modal_id=registration_history_modal_id modal_title=registration_modal_title selected_q_kibetu=q_kibetu registration_target_url_name=registration_target_url_name %}
+{% include "com/_business_search_registration_modal.html" with modal_id=registration_history_modal_id modal_title=registration_modal_title selected_q_kibetu_list=q_kibetu_list registration_target_url_name=registration_target_url_name %}
 
 <div class="bonus-calculating-overlay" id="businessTeamRegisterOverlay" aria-live="polite" aria-hidden="true">
   <div class="bonus-calculating-box">

@@ -22,7 +22,7 @@ MENU_GROUPS = (
     ("bonus_search", "ボーナス検索"),
     ("bonus_calc", "ボーナス計算"),
     ("campaign", "キャンペーン"),
-    ("business_search", "業務検索"),
+    ("business_search", "業績検索"),
     ("settings", "設定・マスタ"),
 )
 
@@ -158,7 +158,7 @@ MENU_FEATURES = (
     # --- キャンペーン ---
     MenuFeature("campaign_list", "キャンペーン一覧", "campaign", ("campaign_list",)),
     MenuFeature("campaign_target", "キャンペーン対象", "campaign", ("campaign_target",)),
-    # --- 業務検索 ---
+    # --- 業績検索 ---
     MenuFeature(
         "business_personal_performance",
         "月別 個人業績",

@@ -32,17 +32,50 @@ def fetch_latest_registered_kibetu(result_table, kibetu_like=None):
     return (row[0] or "") if row else ""
 
 
-def resolve_default_kibetu(result_table, q_kibetu="", kibetu_like=None, other_filters=()):
+KIBETU_SEPARATOR = ","
+
+
+def parse_kibetu_list(raw):
+    """検索条件の期別をリストにする。複数選択はカンマ区切りで受け取る。"""
+    kibetu_list = []
+    for value in (raw or "").split(KIBETU_SEPARATOR):
+        kibetu = value.strip()
+        if kibetu and kibetu not in kibetu_list:
+            kibetu_list.append(kibetu)
+    return kibetu_list
+
+
+def join_kibetu_list(kibetu_list):
+    """期別リストを検索条件の文字列（カンマ区切り）に戻す。"""
+    return KIBETU_SEPARATOR.join(kibetu_list or [])
+
+
+def build_kibetu_condition(kibetu_list, column="kibetu"):
+    """期別リストの WHERE 条件と、そのパラメータを返す。空なら条件無し。"""
+    kibetu_list = list(kibetu_list or [])
+    if not kibetu_list:
+        return "", []
+    if len(kibetu_list) == 1:
+        return f"{column} = %s", kibetu_list
+
+    placeholders = ", ".join(["%s"] * len(kibetu_list))
+    return f"{column} IN ({placeholders})", kibetu_list
+
+
+def resolve_default_kibetu_list(result_table, kibetu_list=(), kibetu_like=None, other_filters=()):
     """条件無しのときに初期表示する期別を決める。
 
     期別を絞らずに並べ替えると全件 filesort になるため、他の検索条件も無い場合は
     最新の登録期別を初期値にする。一覧は期別の降順なので1ページ目の内容は変わらない。
     """
-    if q_kibetu or any(other_filters):
-        return q_kibetu, False
+    kibetu_list = list(kibetu_list or [])
+    if kibetu_list or any(other_filters):
+        return kibetu_list, False
 
     latest_kibetu = fetch_latest_registered_kibetu(result_table, kibetu_like=kibetu_like)
-    return latest_kibetu, bool(latest_kibetu)
+    if not latest_kibetu:
+        return [], False
+    return [latest_kibetu], True
 
 
 def fetch_registration_history_rows(

@@ -120,7 +120,7 @@
                 <li class="nav-item{% if business_search_active %} nav-item--active{% endif %}">
                     <a class="nav-link{% if business_search_active %} nav-link--active{% endif %}"
                        href="{% if user_access|can_menu:'business_personal_week_performance' %}{% url 'connect:business_personal_week_performance' %}{% elif user_access|can_menu:'business_team_week_performance' %}{% url 'connect:business_team_week_performance' %}{% elif user_access|can_menu:'business_personal_performance' %}{% url 'connect:business_personal_performance' %}{% elif user_access|can_menu:'business_team_performance' %}{% url 'connect:business_team_performance' %}{% else %}{% url 'connect:business_carry_over_performance' %}{% endif %}">
-                        業務検索
+                        業績検索
                     </a>
                 </li>
                 {% endif %}
