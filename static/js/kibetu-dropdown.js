@@ -9,32 +9,19 @@ document.addEventListener("DOMContentLoaded", function() {
     var toggle = dropdown.querySelector(".bonus-calc-kibetu-toggle");
     var options = Array.from(dropdown.querySelectorAll(".bonus-calc-kibetu-option"));
     var openOnFocus = dropdown.dataset.kibetuOpenOnFocus !== "false";
-    var suppressWhenSelected = dropdown.dataset.kibetuSuppressWhenSelected === "true";
+    var submitOnSelect = dropdown.dataset.kibetuSubmitOnSelect === "true";
 
     if (!input) {
       return;
     }
 
+    // 入力して絞り込んでいる最中かどうか。候補を開いた直後は必ず全件表示にして、
+    // 既に期別が入っていても他の期別へ切り替えられるようにする。
+    var filterByKeyword = false;
+
     function setOpen(isOpen) {
       dropdown.classList.toggle("is-open", isOpen);
       input.setAttribute("aria-expanded", isOpen ? "true" : "false");
-    }
-
-    function isSelectedKibetu() {
-      var value = input.value.trim();
-      if (!value) {
-        return false;
-      }
-      return options.some(function(option) {
-        return (option.dataset.kibetuValue || "") === value;
-      });
-    }
-
-    function canOpenDropdown() {
-      if (suppressWhenSelected && isSelectedKibetu()) {
-        return false;
-      }
-      return true;
     }
 
     // 選択中の期別に印を付ける。検索前にクリックしただけの状態でも
@@ -56,45 +43,44 @@ document.addEventListener("DOMContentLoaded", function() {
       });
     }
 
-    function showAllOptions() {
+    function filterOptions() {
+      var keyword = filterByKeyword ? input.value.trim().toLowerCase() : "";
       options.forEach(function(option) {
-        option.hidden = false;
+        var searchText = (option.dataset.kibetuSearch || "").toLowerCase();
+        option.hidden = keyword !== "" && searchText.indexOf(keyword) === -1;
       });
     }
 
-    function filterOptions() {
-      var keyword = input.value.trim().toLowerCase();
+    function openDropdown() {
+      filterByKeyword = false;
+      filterOptions();
+      setOpen(true);
+    }
 
-      // 入力値が候補そのものと一致している場合は「選択済みの値」であって
-      // 絞り込みキーワードではない。ここで絞り込むと、▾ で開き直したときに
-      // 選択中の1件しか出てこなくなるため全件表示に戻す。
-      if (!keyword || isSelectedKibetu()) {
-        showAllOptions();
+    function submitForm() {
+      var form = input.form;
+      if (!form) {
         return;
       }
-
-      options.forEach(function(option) {
-        var searchText = (option.dataset.kibetuSearch || "").toLowerCase();
-        option.hidden = searchText.indexOf(keyword) === -1;
-      });
+      if (typeof form.requestSubmit === "function") {
+        form.requestSubmit();
+      } else {
+        form.submit();
+      }
     }
 
     input.addEventListener("focus", function() {
-      if (!openOnFocus || !canOpenDropdown()) {
+      if (!openOnFocus) {
         return;
       }
-      filterOptions();
-      setOpen(true);
+      openDropdown();
     });
 
     input.addEventListener("input", function() {
+      filterByKeyword = true;
       filterOptions();
       markSelected();
-      if (canOpenDropdown()) {
-        setOpen(true);
-      } else {
-        setOpen(false);
-      }
+      setOpen(true);
     });
 
     if (toggle) {
@@ -103,8 +89,7 @@ document.addEventListener("DOMContentLoaded", function() {
           setOpen(false);
           return;
         }
-        filterOptions();
-        setOpen(true);
+        openDropdown();
         input.focus();
       });
     }
@@ -115,9 +100,15 @@ document.addEventListener("DOMContentLoaded", function() {
       });
       option.addEventListener("click", function() {
         input.value = option.dataset.kibetuValue || "";
+        filterByKeyword = false;
         markSelected();
         setOpen(false);
         input.blur();
+
+        // 業務検索では選ぶだけで検索まで走らせる（検索ボタンを押さなくてよい）
+        if (submitOnSelect) {
+          submitForm();
+        }
       });
     });
 
