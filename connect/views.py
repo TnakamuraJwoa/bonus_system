@@ -34,6 +34,7 @@ from .business_search_registration import (
     MONTH_PERSONAL_RESULT_TABLE,
     WEEK_PERSONAL_RESULT_TABLE,
     fetch_registration_history_rows,
+    resolve_default_kibetu,
 )
 
 from connect.placement_tree_builder import build_member_tree_view, fetch_tree_search_path
@@ -7962,7 +7963,15 @@ class BusinessPersonalMonthPerformanceView(KeysetPaginationMixin, generic.Templa
 class BusinessPersonalWeekPerformanceView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "business_personal_week_performance.html"
 
-    def _build_where(self, q_kibetu="", q_jwoa_code=""):
+    # 会員コードは前方一致なら idx_jwoa_code が使える。中間一致は54万件の全件走査に
+    # なるため、まず前方一致で引き、0件のときだけ中間一致に切り替える。
+    # コードは「JP/HK + 数字」の形式なので、前方一致で見つかる限り中間一致との
+    # 結果差は生じない。数字部分だけを入力した場合は前方一致が0件になり、
+    # 従来どおり中間一致で探せる。
+    CODE_MATCH_PREFIX = "prefix"
+    CODE_MATCH_CONTAINS = "contains"
+
+    def _build_where(self, q_kibetu="", q_jwoa_code="", code_match=CODE_MATCH_PREFIX):
         where = []
         params = []
 
@@ -7972,15 +7981,35 @@ class BusinessPersonalWeekPerformanceView(KeysetPaginationMixin, generic.Templat
 
         if q_jwoa_code:
             where.append("jwoa_code LIKE %s")
-            params.append(f"%{q_jwoa_code}%")
+            if code_match == self.CODE_MATCH_CONTAINS:
+                params.append(f"%{q_jwoa_code}%")
+            else:
+                params.append(f"{q_jwoa_code}%")
 
         where_sql = "WHERE " + " AND ".join(where) if where else ""
         return where_sql, params
 
-    def _fetch_total_count(self, q_kibetu="", q_jwoa_code=""):
+    def _resolve_code_match(self, q_kibetu="", q_jwoa_code=""):
+        """会員コードの照合方法と、その条件での件数を返す。"""
+        count = self._fetch_total_count(
+            q_kibetu=q_kibetu,
+            q_jwoa_code=q_jwoa_code,
+            code_match=self.CODE_MATCH_PREFIX,
+        )
+        if not q_jwoa_code or count:
+            return self.CODE_MATCH_PREFIX, count
+
+        return self.CODE_MATCH_CONTAINS, self._fetch_total_count(
+            q_kibetu=q_kibetu,
+            q_jwoa_code=q_jwoa_code,
+            code_match=self.CODE_MATCH_CONTAINS,
+        )
+
+    def _fetch_total_count(self, q_kibetu="", q_jwoa_code="", code_match=CODE_MATCH_PREFIX):
         where_sql, params = self._build_where(
             q_kibetu=q_kibetu,
             q_jwoa_code=q_jwoa_code,
+            code_match=code_match,
         )
         sql = f"""
             SELECT COUNT(*)
@@ -7992,10 +8021,12 @@ class BusinessPersonalWeekPerformanceView(KeysetPaginationMixin, generic.Templat
             row = cursor.fetchone()
         return int(row[0]) if row else 0
 
-    def _fetch_rows(self, q_kibetu="", q_jwoa_code="", limit=200, offset=0):
+    def _fetch_rows(self, q_kibetu="", q_jwoa_code="", limit=200, offset=0,
+                    code_match=CODE_MATCH_PREFIX):
         where_sql, params = self._build_where(
             q_kibetu=q_kibetu,
             q_jwoa_code=q_jwoa_code,
+            code_match=code_match,
         )
         sql = f"""
             SELECT
@@ -8026,8 +8057,15 @@ class BusinessPersonalWeekPerformanceView(KeysetPaginationMixin, generic.Templat
         q_jwoa_code = (self.request.GET.get("q_jwoa_code") or "").strip()
         kibetu_choice_mode = self.request.GET.get("kibetu_choice_mode") or "recent"
 
+        q_kibetu, q_kibetu_defaulted = resolve_default_kibetu(
+            WEEK_PERSONAL_RESULT_TABLE,
+            q_kibetu=q_kibetu,
+            kibetu_like="%W%",
+            other_filters=(q_jwoa_code,),
+        )
+
         per_page = self.get_per_page()
-        total_count = self._fetch_total_count(
+        code_match, total_count = self._resolve_code_match(
             q_kibetu=q_kibetu,
             q_jwoa_code=q_jwoa_code,
         )
@@ -8040,9 +8078,11 @@ class BusinessPersonalWeekPerformanceView(KeysetPaginationMixin, generic.Templat
             q_jwoa_code=q_jwoa_code,
             limit=per_page,
             offset=offset,
+            code_match=code_match,
         )
 
         ctx["q_kibetu"] = q_kibetu
+        ctx["q_kibetu_defaulted"] = q_kibetu_defaulted
         ctx["q_jwoa_code"] = q_jwoa_code
         ctx["active_menu"] = "business_personal_week_performance"
         ctx["registration_history_rows"] = fetch_registration_history_rows(
