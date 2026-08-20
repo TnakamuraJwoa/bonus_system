@@ -9708,9 +9708,8 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
 
         return rows
 
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-
+    def _get_filters(self):
+        """一覧と Excel 出力で同じ検索条件を使うため、GET から絞り込み条件を取り出す。"""
         q_order_statuses = [
             x for x in self.request.GET.getlist("q_order_status") if x
         ]
@@ -9718,7 +9717,7 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
             x for x in self.request.GET.getlist("q_order_type") if x
         ]
 
-        filters = {
+        return {
             "q_order_code": (self.request.GET.get("q_order_code") or "").strip(),
             "q_jwoa_code": (self.request.GET.get("q_jwoa_code") or "").strip(),
             "q_name": (self.request.GET.get("q_name") or "").strip(),
@@ -9729,6 +9728,13 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
             "q_year": (self.request.GET.get("q_year") or "").strip(),
             "q_month": (self.request.GET.get("q_month") or "").strip(),
         }
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        filters = self._get_filters()
+        q_order_statuses = filters["q_order_statuses"]
+        q_order_types = filters["q_order_types"]
 
         per_page = self.get_per_page()
 
@@ -9792,6 +9798,198 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
         ctx["base_qs"] = base_qs
 
         return ctx
+
+
+class OrdersExportView(OrdersView):
+    """注文一覧の絞り込み条件そのままで Excel 出力する。
+
+    注文は 10 万件規模になるため、次の 3 点で落ちないようにしている。
+    - 取得は主キーのキーセット方式で分割する（OFFSET を深くするとスキャン量が
+      跳ね上がり、タイムアウトの原因になるため）
+    - openpyxl は write_only で使い、全行をメモリ上のシートに保持しない
+    - Excel の行数上限（1,048,576 行）に届く前に件数で打ち切り、
+      検索条件の絞り込みを促す
+
+    並び順は一覧画面の created_at 降順ではなく id 降順にしている。
+    created_at は NULL を取り得てキーセットの継続条件が途切れるおそれがあるためで、
+    id は採番順なので実質的に新しい順のまま出力される。
+    """
+
+    EXPORT_FETCH_SIZE = 5000
+    MAX_EXPORT_ROWS = 300000
+
+    ORDER_STATUS_LABELS = {
+        201: "入金待ち",
+        202: "入金確認済",
+        203: "決済完了",
+        204: "出荷依頼済",
+        205: "出荷完了",
+        206: "キャンセル",
+        207: "返品処理中",
+        208: "返品処理完了",
+        209: "商品交換処理中",
+        210: "再出荷依頼中",
+        211: "再出荷完了",
+    }
+
+    ORDER_TYPE_LABELS = {
+        101: "再購入品",
+        102: "初回購入品",
+        103: "ランクアップ購入品",
+        105: "特別対応購入品",
+        200: "クーリングオフ",
+    }
+
+    EXPORT_HEADER = [
+        "ID",
+        "注文番号",
+        "注文状況",
+        "注文区分",
+        "注文年",
+        "注文月",
+        "会員ID",
+        "注文者_氏名",
+        "購入合計金額",
+        "合計BV",
+        "BV振分件数",
+        "入金日",
+        "作成日時",
+    ]
+
+    def _fetch_export_rows(self, last_id=None, limit=None, **filters):
+        """id の降順で 1 チャンク分だけ取得する。last_id より小さい id が次のチャンク。"""
+        where_sql, params = self._build_where(**filters)
+
+        if last_id is not None:
+            keyset_sql = "o.id < %s"
+            if where_sql:
+                where_sql = where_sql + " AND " + keyset_sql
+            else:
+                where_sql = "WHERE " + keyset_sql
+            params = params + [last_id]
+
+        sql = f"""
+            SELECT
+                o.id,
+                o.order_code,
+                o.order_status,
+                o.order_type,
+                o.order_year,
+                o.order_month,
+                o.jwoa_code,
+                o.order_name,
+                o.total_price,
+                o.total_bv,
+                (
+                    SELECT COUNT(*)
+                    FROM bonus_db.orders_distribution_bv d_count
+                    WHERE d_count.order_code = o.order_code
+                ) AS distribution_count,
+                o.deposit_at,
+                o.created_at
+            FROM nexus_production.orders o
+            {where_sql}
+            ORDER BY o.id DESC
+            LIMIT %s
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params + [limit or self.EXPORT_FETCH_SIZE])
+            return cursor.fetchall()
+
+    @staticmethod
+    def _excel_value(value):
+        """Excel はタイムゾーン付き日時を扱えないので、naive に落としてから渡す。"""
+        if isinstance(value, datetime) and value.tzinfo is not None:
+            return value.replace(tzinfo=None)
+        return value
+
+    def _row_to_excel(self, row):
+        (
+            order_id,
+            order_code,
+            order_status,
+            order_type,
+            order_year,
+            order_month,
+            jwoa_code,
+            order_name,
+            total_price,
+            total_bv,
+            distribution_count,
+            deposit_at,
+            created_at,
+        ) = row
+
+        return [
+            order_id,
+            order_code,
+            self.ORDER_STATUS_LABELS.get(order_status, order_status),
+            self.ORDER_TYPE_LABELS.get(order_type, order_type),
+            order_year,
+            order_month,
+            jwoa_code,
+            order_name,
+            total_price,
+            total_bv,
+            distribution_count,
+            self._excel_value(deposit_at),
+            self._excel_value(created_at),
+        ]
+
+    def get(self, request, *args, **kwargs):
+        filters = self._get_filters()
+
+        total_count = self._fetch_total_count(**filters)
+
+        if total_count == 0:
+            messages.error(request, "出力対象のデータがありません。")
+            return redirect(self._back_url(request))
+
+        if total_count > self.MAX_EXPORT_ROWS:
+            messages.error(
+                request,
+                f"対象が{total_count:,}件あります。"
+                f"Excel出力は{self.MAX_EXPORT_ROWS:,}件までです。"
+                "検索条件を絞り込んでください。",
+            )
+            return redirect(self._back_url(request))
+
+        wb = openpyxl.Workbook(write_only=True)
+        ws = wb.create_sheet("注文一覧")
+        ws.append(self.EXPORT_HEADER)
+
+        last_id = None
+        while True:
+            rows = self._fetch_export_rows(
+                last_id=last_id,
+                limit=self.EXPORT_FETCH_SIZE,
+                **filters,
+            )
+            if not rows:
+                break
+
+            for row in rows:
+                ws.append(self._row_to_excel(row))
+
+            last_id = rows[-1][0]
+
+            if len(rows) < self.EXPORT_FETCH_SIZE:
+                break
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = 'attachment; filename="orders.xlsx"'
+        wb.save(response)
+        return response
+
+    @staticmethod
+    def _back_url(request):
+        """絞り込み条件を保ったまま注文一覧へ戻す。"""
+        query = request.GET.urlencode()
+        url = reverse("connect:orders")
+        return f"{url}?{query}" if query else url
 
 
 class OrderDetailView(generic.TemplateView):

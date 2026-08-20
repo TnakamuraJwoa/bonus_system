@@ -55,7 +55,12 @@ MENU_FEATURES = (
         ("introducer_tree", "introducer_tree_export"),
     ),
     # --- 注文 ---
-    MenuFeature("orders", "注文一覧", "orders", ("orders", "order_detail")),
+    MenuFeature(
+        "orders",
+        "注文一覧",
+        "orders",
+        ("orders", "order_detail", "orders_export"),
+    ),
     MenuFeature(
         "orders_distribution_bv",
         "BV振分情報",

@@ -129,6 +129,7 @@ urlpatterns = [
     ),
 
     path('orders/', views.OrdersView.as_view(), name = "orders"),
+    path("orders/export/", views.OrdersExportView.as_view(), name="orders_export"),
     path("orders/<int:pk>/", views.OrderDetailView.as_view(), name="order_detail"),
     path('orders_distribution_bv/', views.OrdersDistributionBvView.as_view(), name = "orders_distribution_bv"),
     path(
