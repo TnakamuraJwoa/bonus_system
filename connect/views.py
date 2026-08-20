@@ -8478,7 +8478,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
 
         return int(row[0]) if row else 0
 
-    def _fetch_rows(
+    def _build_rows_sql(
         self,
         q_jpid: str = "",
         q_name: str = "",
@@ -8492,9 +8492,8 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         active_start_date=None,
         active_end_date=None,
         q_active_result: str = "",
-        limit: int = 200,
-        offset: int = 0,
     ):
+        """一覧のSQLとパラメータを返す。LIMIT/OFFSET は呼び出し側で付ける。"""
 
         where_sql, params = self._build_where(
             q_jpid=q_jpid,
@@ -8558,11 +8557,15 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             {active_join_sql}
             {where_sql}
             ORDER BY u.status_code, u.jmoa_code
-            LIMIT %s OFFSET %s
         """
 
+        return sql, active_params + params
+
+    def _fetch_rows(self, limit: int = 200, offset: int = 0, **filters):
+        sql, params = self._build_rows_sql(**filters)
+
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, active_params + params + [limit, offset])
+            cursor.execute(sql + " LIMIT %s OFFSET %s", params + [limit, offset])
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
 
@@ -8666,6 +8669,11 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             MonthlyPeriod.objects.using("rds")
             .order_by("-kibetu")
         )
+        # Excel出力は件数が多いと時間がかかるため、上限を超えたらCSVへ誘導する。
+        ctx["excel_export_max_rows"] = UsersExportView.EXCEL_EXPORT_MAX_ROWS
+        ctx["excel_export_allowed"] = (
+            total_count <= UsersExportView.EXCEL_EXPORT_MAX_ROWS
+        )
 
         base_params = {}
 
@@ -8711,6 +8719,27 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
 
 
 class UsersExportView(UsersView):
+    # Excelは1行あたりの書き出しが重く、上限なしだと7万件で1分近くかかる。
+    EXCEL_EXPORT_MAX_ROWS = 10000
+    EXPORT_HEADERS = [
+        "ID",
+        "グループID",
+        "会員ID",
+        "会員名",
+        "氏名(カナ)",
+        "上位者ID",
+        "紹介者ID",
+        "アクティブ確認",
+        "ランク",
+        "ステータス",
+        "本登録FLG",
+        "法人FLG",
+        "仮登録日時",
+        "本登録日時",
+        "最終購入日",
+        "作成日時",
+        "更新日時",
+    ]
     RANK_LABELS = {
         1: "シルバー",
         2: "ゴールド",
@@ -8766,14 +8795,46 @@ class UsersExportView(UsersView):
             row.get("updated_at"),
         ]
 
-    def get(self, request, *args, **kwargs):
-        q_jpid = (request.GET.get("q_jpid") or "").strip()
-        q_name = (request.GET.get("q_name") or "").strip()
-        q_name_kana = (request.GET.get("q_name_kana") or "").strip()
-        q_introducer = (request.GET.get("q_introducer") or "").strip()
-        q_placement = (request.GET.get("q_placement") or "").strip()
-        q_status = (request.GET.get("q_status") or "").strip()
-        q_rank = (request.GET.get("q_rank") or "").strip()
+    def _build_row_mapper(self, cols, q_active_kibetu):
+        """取得結果のタプルをExcelの1行に変換する関数を作る。
+
+        7万件超を書き出すので、1行ごとに辞書を作らず列位置で直接読む。
+        """
+        pos = {name: i for i, name in enumerate(cols)}
+        has_active = bool(q_active_kibetu)
+
+        def to_excel_row(row):
+            active_status = "-"
+            if has_active:
+                active_status = (
+                    "アクティブ"
+                    if row[pos["prev_month_active_status"]] == 1
+                    else "非アクティブ"
+                )
+            return [
+                row[pos["id"]],
+                row[pos["group_code"]],
+                row[pos["jmoa_code"]],
+                row[pos["send_bv_name"]],
+                row[pos["name_kana"]] or "-",
+                row[pos["introducer_code"]],
+                row[pos["placement_code"]],
+                active_status,
+                self.RANK_LABELS.get(row[pos["rank"]], "-"),
+                self.STATUS_LABELS.get(row[pos["status_code"]], "-"),
+                "本登録" if row[pos["activated"]] == 1 else "仮登録中",
+                "法人" if row[pos["company"]] == 1 else "-",
+                row[pos["interim_at"]],
+                row[pos["activated_at"]],
+                row[pos["last_purchase_at"]],
+                row[pos["created_at"]],
+                row[pos["updated_at"]],
+            ]
+
+        return to_excel_row
+
+    def _resolve_export_filters(self, request):
+        """検索条件を一覧と同じ形で取り出す。"""
         q_active_kibetu = (request.GET.get("q_active_kibetu") or "").strip()
         q_active_result = (request.GET.get("q_active_result") or "").strip()
         if not q_active_kibetu or q_active_result not in ("active", "inactive"):
@@ -8786,59 +8847,94 @@ class UsersExportView(UsersView):
             active_end_date,
         ) = self._resolve_active_period(q_active_kibetu)
 
+        filters = {
+            "q_jpid": (request.GET.get("q_jpid") or "").strip(),
+            "q_name": (request.GET.get("q_name") or "").strip(),
+            "q_name_kana": (request.GET.get("q_name_kana") or "").strip(),
+            "q_introducer": (request.GET.get("q_introducer") or "").strip(),
+            "q_placement": (request.GET.get("q_placement") or "").strip(),
+            "q_status": (request.GET.get("q_status") or "").strip(),
+            "q_rank": (request.GET.get("q_rank") or "").strip(),
+            "active_year": active_year,
+            "active_month": active_month,
+            "active_start_date": active_start_date,
+            "active_end_date": active_end_date,
+            "q_active_result": q_active_result,
+        }
+        return filters, q_active_kibetu
+
+    def _iter_export_rows(self, filters, q_active_kibetu):
+        """検索結果をエクスポート用の1行ずつに変換して返す。
+
+        LIMIT/OFFSET で分割すると毎回7万件超を並べ替え直すことになるため、
+        クエリは1回だけ実行して結果を少しずつ読み出す。
+        """
+        sql, params = self._build_rows_sql(**filters)
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            cols = [c[0] for c in cursor.description]
+            to_export_row = self._build_row_mapper(cols, q_active_kibetu)
+            while True:
+                rows = cursor.fetchmany(self.EXPORT_FETCH_SIZE)
+                if not rows:
+                    break
+                for row in rows:
+                    yield to_export_row(row)
+
+    def _list_url(self, request):
+        params = request.GET.copy()
+        params.pop("format", None)
+        query = params.urlencode()
+        url = reverse("connect:users")
+        return f"{url}?{query}" if query else url
+
+    def get(self, request, *args, **kwargs):
+        filters, q_active_kibetu = self._resolve_export_filters(request)
+        export_format = (request.GET.get("format") or "excel").strip().lower()
+
+        if export_format == "csv":
+            return self._export_csv(filters, q_active_kibetu)
+
+        # 画面側でもボタンを止めているが、URLを直接叩かれても通さないようにする。
+        total_count = self._fetch_total_count(**filters)
+        if total_count > self.EXCEL_EXPORT_MAX_ROWS:
+            messages.error(
+                request,
+                f"該当が{total_count:,}件あり、Excel出力の上限"
+                f"（{self.EXCEL_EXPORT_MAX_ROWS:,}件）を超えています。"
+                "条件を絞り込むか、CSV出力をご利用ください。",
+            )
+            return redirect(self._list_url(request))
+
+        return self._export_excel(filters, q_active_kibetu)
+
+    def _export_excel(self, filters, q_active_kibetu):
         wb = openpyxl.Workbook(write_only=True)
         ws = wb.create_sheet("会員一覧")
-        ws.append([
-            "ID",
-            "グループID",
-            "会員ID",
-            "会員名",
-            "氏名(カナ)",
-            "上位者ID",
-            "紹介者ID",
-            "アクティブ確認",
-            "ランク",
-            "ステータス",
-            "本登録FLG",
-            "法人FLG",
-            "仮登録日時",
-            "本登録日時",
-            "最終購入日",
-            "作成日時",
-            "更新日時",
-        ])
+        ws.append(self.EXPORT_HEADERS)
 
-        offset = 0
-        while True:
-            rows = self._fetch_rows(
-                q_jpid=q_jpid,
-                q_name=q_name,
-                q_name_kana=q_name_kana,
-                q_introducer=q_introducer,
-                q_placement=q_placement,
-                q_status=q_status,
-                q_rank=q_rank,
-                active_year=active_year,
-                active_month=active_month,
-                active_start_date=active_start_date,
-                active_end_date=active_end_date,
-                q_active_result=q_active_result,
-                limit=self.EXPORT_FETCH_SIZE,
-                offset=offset,
-            )
-            if not rows:
-                break
-            for row in rows:
-                ws.append(self._row_to_excel(row, q_active_kibetu))
-            if len(rows) < self.EXPORT_FETCH_SIZE:
-                break
-            offset += self.EXPORT_FETCH_SIZE
+        for row in self._iter_export_rows(filters, q_active_kibetu):
+            ws.append(row)
 
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
         response["Content-Disposition"] = 'attachment; filename="users.xlsx"'
         wb.save(response)
+        return response
+
+    def _export_csv(self, filters, q_active_kibetu):
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = 'attachment; filename="users.csv"'
+        # BOM が無いと Excel で開いたときに文字化けする。
+        response.write("\ufeff")
+
+        writer = csv.writer(response, lineterminator="\r\n")
+        writer.writerow(self.EXPORT_HEADERS)
+        for row in self._iter_export_rows(filters, q_active_kibetu):
+            writer.writerow(["" if v is None else v for v in row])
+
         return response
 
 

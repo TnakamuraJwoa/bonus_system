@@ -1570,3 +1570,12 @@ tr.field-changed-row {
     background: #f8fafc;
     color: #475569;
 }
+
+/* 会員一覧のエクスポート。説明文は右端に寄せたまま、読み方向は左揃えにする */
+.users-export__note {
+    display: block;
+    max-width: 26rem;
+    margin-left: auto;
+    text-align: left;
+    line-height: 1.5;
+}
