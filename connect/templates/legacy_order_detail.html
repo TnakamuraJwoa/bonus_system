@@ -1,142 +1,61 @@
-﻿{% extends 'base.html' %}
-
+{% extends 'base.html' %}
 {% load static custom_filters %}
 
-
-
 {% block head %}
-
-  <link href="{% static 'css/common.css' %}?v=11" rel="stylesheet">
-
+  <link href="{% static 'css/common.css' %}" rel="stylesheet">
 {% endblock %}
 
-
-
 {% block contents %}
-
 <div class="container-fluid mt-3">
-
   <div class="row g-1">
 
-
-
-    {% include "com/_sidebar_orders.html" with active_menu="orders" %}
-
-
+    {% include "com/_sidebar_orders.html" with active_menu="legacy_orders" %}
 
     <main class="col-12 col-md-9 col-lg-10">
 
-
-
       <div class="card shadow-sm mb-3">
-
         <div class="card-body page-header-bar">
-
-          <h5 class="page-title mb-0">【注文管理 - 注文詳細】</h5>
-
-
-
+          <h5 class="page-title mb-0">【注文管理 - 旧BONUS_SYSTEM(リンパ) 注文詳細】</h5>
           <button type="button"
-
                   class="btn btn-outline-secondary page-header-action"
-
                   onclick="history.back()">
-
             戻る
-
           </button>
-
         </div>
-
       </div>
-
-
 
       <div class="card shadow-sm">
-
         <div class="card-body">
 
-
-
           {% if order_rows %}
-
-
-
             <div class="table-responsive order-detail-wrap">
-
               <table class="table table-bordered table-sm align-middle order-detail-table mb-0">
-
                 <tbody>
-
                   {% for col, label, value in order_rows %}
-
                     <tr>
-
                       <th class="table-light order-detail-table__label">
-
                         {{ label }}
-
                       </th>
-
                       <td class="order-detail-table__value text-left">
-
                         {% if value == "" or value == None %}
-
                           <span class="text-muted">-</span>
-
-                        {% elif col == "order_status" %}
-
-                          <span class="order-status-badge {{ value|order_status_badge_class }}">
-                            {{ value|order_status_label }}
-                          </span>
-
                         {% else %}
-
                           {{ value }}
-
                         {% endif %}
-
                       </td>
-
                     </tr>
-
                   {% endfor %}
-
                 </tbody>
-
               </table>
-
             </div>
-
-
-
           {% else %}
-
-
-
-            <p class="mb-0 text-muted">
-
-              注文データが見つかりません。
-
-            </p>
-
-
-
+            <p class="mb-0 text-muted">注文データが見つかりません。</p>
           {% endif %}
 
-
-
         </div>
-
       </div>
 
-
-
     </main>
-
   </div>
-
 </div>
-
 {% endblock %}
-

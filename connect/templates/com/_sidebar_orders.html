@@ -1,7 +1,7 @@
 {% load access_tags %}
 <nav class="col-12 col-md-3 col-lg-2">
   <div class="card shadow-sm position-sticky" style="top: 1rem;">
-    {% if user_access|any_menu_in_group:"orders" %}
+    {% if user_access|can_menu:"orders" or user_access|can_menu:"orders_distribution_bv" or user_access|can_menu:"api_users_bv" %}
     <div class="card-body">
       <div class="fw-bold mb-2">■ NEXUS</div>
 
@@ -43,6 +43,17 @@
         <a class="list-group-item list-group-item-action {% if active_menu == 'cooling_off' %}active{% endif %}"
            href="{% url 'connect:cooling_off' %}">クーリングオフ</a>
         {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if user_access|can_menu:"legacy_orders" %}
+    <div class="card-body">
+      <div class="fw-bold mb-2">■ 旧BONUS_SYSTEM(リンパ)</div>
+
+      <div class="list-group">
+        <a class="list-group-item list-group-item-action {% if active_menu == 'legacy_orders' %}active{% endif %}"
+           href="{% url 'connect:legacy_orders' %}">注文一覧</a>
       </div>
     </div>
     {% endif %}

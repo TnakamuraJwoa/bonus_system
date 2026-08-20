@@ -26,15 +26,18 @@ from django.http import HttpResponse
 from openpyxl import Workbook
 import openpyxl
 
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.utils.timezone import make_aware
 from .models import TitleMaster, PeriodMaster, UserTitles, Orders, User, PurchaseInfoList, MonthlyPeriod
 from .models import Settings
 from .business_search_registration import (
     MONTH_PERSONAL_RESULT_TABLE,
     WEEK_PERSONAL_RESULT_TABLE,
+    build_kibetu_condition,
     fetch_registration_history_rows,
-    resolve_default_kibetu,
+    join_kibetu_list,
+    parse_kibetu_list,
+    resolve_default_kibetu_list,
 )
 
 from connect.placement_tree_builder import build_member_tree_view, fetch_tree_search_path
@@ -2350,15 +2353,166 @@ class SettingsView(generic.ListView):
     context_object_name = "rows"
     model = Settings
 
+    SCREEN_NAME = "設定"
+    TARGET_TABLE = "settings"
+    PERMISSION_BY_ACTION = {
+        "create": "can_create",
+        "update": "can_update",
+        "delete": "can_delete",
+    }
+
     def get_queryset(self):
+        qs = Settings.objects.using("rds").all()
+
+        q = (self.request.GET.get("q") or "").strip()
+        if q:
+            qs = qs.filter(
+                Q(name__icontains=q)
+                | Q(value__icontains=q)
+                | Q(comment__icontains=q)
+            )
+
         # 並び順はお好みで（title_id順など）
-        return Settings.objects.using("rds").order_by("id")
+        return qs.order_by("id")
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         # 件数表示用（テンプレで rows|length を使わない）
         ctx["total_count"] = ctx["rows"].count()
+        ctx["q"] = (self.request.GET.get("q") or "").strip()
         return ctx
+
+    def post(self, request, *args, **kwargs):
+        action = (request.POST.get("action") or "").strip()
+
+        if action not in self.PERMISSION_BY_ACTION:
+            messages.error(request, "不正な操作です。")
+            return redirect(self._redirect_url(request))
+
+        user_access = get_user_access(request.user)
+        if not user_access.can_menu("settings") or not user_access.has(
+            self.PERMISSION_BY_ACTION[action]
+        ):
+            return HttpResponse("権限がありません。", status=403)
+
+        try:
+            with transaction.atomic(using="rds"):
+                if action == "create":
+                    self._create(request)
+                elif action == "update":
+                    self._update(request)
+                else:
+                    self._delete(request)
+
+        except Settings.DoesNotExist:
+            messages.error(request, "対象の設定が存在しません。")
+        except IntegrityError:
+            messages.error(request, "同じ設定キーがすでに存在します。")
+        except ValueError as e:
+            messages.error(request, str(e))
+        except Exception as e:
+            messages.error(request, f"エラーが発生しました: {e}")
+
+        return redirect(self._redirect_url(request))
+
+    def _create(self, request):
+        name = (request.POST.get("name") or "").strip()
+        value = (request.POST.get("value") or "").strip()
+        comment = (request.POST.get("comment") or "").strip()
+
+        if not name:
+            raise ValueError("設定キーを入力してください。")
+
+        if Settings.objects.using("rds").filter(name=name).exists():
+            raise ValueError(f"設定キー {name} はすでに存在します。")
+
+        obj = Settings.objects.using("rds").create(
+            name=name,
+            value=value,
+            comment=comment or None,
+        )
+        record_change_audit(
+            request,
+            screen_name=self.SCREEN_NAME,
+            action_type="create",
+            target_table=self.TARGET_TABLE,
+            target_pk=obj.pk,
+            summary=f"{name} を追加",
+            before_values=None,
+            after_values={"name": name, "value": value, "comment": comment or None},
+        )
+        messages.success(request, f"{name} を追加しました。")
+
+    def _update(self, request):
+        obj = self._get_target(request, "更新対象が指定されていません。")
+
+        value = (request.POST.get("value") or "").strip()
+        comment = (request.POST.get("comment") or "").strip()
+
+        if obj.value == value and (obj.comment or "") == comment:
+            messages.info(request, f"{obj.name} は変更がありませんでした。")
+            return
+
+        before_values = {
+            "name": obj.name,
+            "value": obj.value,
+            "comment": obj.comment,
+        }
+        obj.value = value
+        obj.comment = comment or None
+        obj.save(using="rds", update_fields=["value", "comment"])
+
+        record_change_audit(
+            request,
+            screen_name=self.SCREEN_NAME,
+            action_type="update",
+            target_table=self.TARGET_TABLE,
+            target_pk=obj.pk,
+            summary=f"{obj.name} を変更",
+            before_values=before_values,
+            after_values={
+                "name": obj.name,
+                "value": obj.value,
+                "comment": obj.comment,
+            },
+        )
+        messages.success(request, f"{obj.name} を変更しました。")
+
+    def _delete(self, request):
+        obj = self._get_target(request, "削除対象が指定されていません。")
+
+        before_values = {
+            "name": obj.name,
+            "value": obj.value,
+            "comment": obj.comment,
+        }
+        target_pk = obj.pk
+        obj.delete(using="rds")
+
+        record_change_audit(
+            request,
+            screen_name=self.SCREEN_NAME,
+            action_type="delete",
+            target_table=self.TARGET_TABLE,
+            target_pk=target_pk,
+            summary=f"{before_values['name']} を削除",
+            before_values=before_values,
+            after_values=None,
+        )
+        messages.success(request, f"{before_values['name']} を削除しました。")
+
+    def _get_target(self, request, missing_message):
+        row_id = (request.POST.get("row_id") or "").strip()
+        if not row_id:
+            raise ValueError(missing_message)
+        return Settings.objects.using("rds").get(pk=row_id)
+
+    def _redirect_url(self, request):
+        q = (request.POST.get("filter_q") or request.GET.get("q") or "").strip()
+        url = reverse("connect:settings")
+        if q:
+            url += "?" + urlencode({"q": q})
+        return url
 
 
 class UserTargetRankView(KeysetPaginationMixin, generic.TemplateView):
@@ -7854,13 +8008,14 @@ class BusinessPersonalPerformanceView(KeysetPaginationMixin, generic.TemplateVie
 class BusinessPersonalMonthPerformanceView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "business_personal_month_performance.html"
 
-    def _build_where(self, q_kibetu="", q_jwoa_code=""):
+    def _build_where(self, q_kibetu_list=(), q_jwoa_code=""):
         where = []
         params = []
 
-        if q_kibetu:
-            where.append("kibetu = %s")
-            params.append(q_kibetu)
+        kibetu_sql, kibetu_params = build_kibetu_condition(q_kibetu_list)
+        if kibetu_sql:
+            where.append(kibetu_sql)
+            params.extend(kibetu_params)
 
         if q_jwoa_code:
             where.append("jwoa_code LIKE %s")
@@ -7869,9 +8024,9 @@ class BusinessPersonalMonthPerformanceView(KeysetPaginationMixin, generic.Templa
         where_sql = "WHERE " + " AND ".join(where) if where else ""
         return where_sql, params
 
-    def _fetch_total_count(self, q_kibetu="", q_jwoa_code=""):
+    def _fetch_total_count(self, q_kibetu_list=(), q_jwoa_code=""):
         where_sql, params = self._build_where(
-            q_kibetu=q_kibetu,
+            q_kibetu_list=q_kibetu_list,
             q_jwoa_code=q_jwoa_code,
         )
         sql = f"""
@@ -7884,9 +8039,9 @@ class BusinessPersonalMonthPerformanceView(KeysetPaginationMixin, generic.Templa
             row = cursor.fetchone()
         return int(row[0]) if row else 0
 
-    def _fetch_rows(self, q_kibetu="", q_jwoa_code="", limit=200, offset=0):
+    def _fetch_rows(self, q_kibetu_list=(), q_jwoa_code="", limit=200, offset=0):
         where_sql, params = self._build_where(
-            q_kibetu=q_kibetu,
+            q_kibetu_list=q_kibetu_list,
             q_jwoa_code=q_jwoa_code,
         )
         sql = f"""
@@ -7916,12 +8071,13 @@ class BusinessPersonalMonthPerformanceView(KeysetPaginationMixin, generic.Templa
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        q_kibetu = (self.request.GET.get("q_kibetu") or "").strip()
+        q_kibetu_list = parse_kibetu_list(self.request.GET.get("q_kibetu"))
+        q_kibetu = join_kibetu_list(q_kibetu_list)
         q_jwoa_code = (self.request.GET.get("q_jwoa_code") or "").strip()
 
         per_page = self.get_per_page()
         total_count = self._fetch_total_count(
-            q_kibetu=q_kibetu,
+            q_kibetu_list=q_kibetu_list,
             q_jwoa_code=q_jwoa_code,
         )
         total_pages = max(1, math.ceil(total_count / per_page))
@@ -7929,13 +8085,14 @@ class BusinessPersonalMonthPerformanceView(KeysetPaginationMixin, generic.Templa
         offset = (page - 1) * per_page
 
         rows = self._fetch_rows(
-            q_kibetu=q_kibetu,
+            q_kibetu_list=q_kibetu_list,
             q_jwoa_code=q_jwoa_code,
             limit=per_page,
             offset=offset,
         )
 
         ctx["q_kibetu"] = q_kibetu
+        ctx["q_kibetu_list"] = q_kibetu_list
         ctx["q_jwoa_code"] = q_jwoa_code
         ctx["active_menu"] = "business_personal_performance"
         ctx["registration_history_rows"] = fetch_registration_history_rows(
@@ -7971,13 +8128,14 @@ class BusinessPersonalWeekPerformanceView(KeysetPaginationMixin, generic.Templat
     CODE_MATCH_PREFIX = "prefix"
     CODE_MATCH_CONTAINS = "contains"
 
-    def _build_where(self, q_kibetu="", q_jwoa_code="", code_match=CODE_MATCH_PREFIX):
+    def _build_where(self, q_kibetu_list=(), q_jwoa_code="", code_match=CODE_MATCH_PREFIX):
         where = []
         params = []
 
-        if q_kibetu:
-            where.append("kibetu = %s")
-            params.append(q_kibetu)
+        kibetu_sql, kibetu_params = build_kibetu_condition(q_kibetu_list)
+        if kibetu_sql:
+            where.append(kibetu_sql)
+            params.extend(kibetu_params)
 
         if q_jwoa_code:
             where.append("jwoa_code LIKE %s")
@@ -7989,10 +8147,10 @@ class BusinessPersonalWeekPerformanceView(KeysetPaginationMixin, generic.Templat
         where_sql = "WHERE " + " AND ".join(where) if where else ""
         return where_sql, params
 
-    def _resolve_code_match(self, q_kibetu="", q_jwoa_code=""):
+    def _resolve_code_match(self, q_kibetu_list=(), q_jwoa_code=""):
         """会員コードの照合方法と、その条件での件数を返す。"""
         count = self._fetch_total_count(
-            q_kibetu=q_kibetu,
+            q_kibetu_list=q_kibetu_list,
             q_jwoa_code=q_jwoa_code,
             code_match=self.CODE_MATCH_PREFIX,
         )
@@ -8000,14 +8158,14 @@ class BusinessPersonalWeekPerformanceView(KeysetPaginationMixin, generic.Templat
             return self.CODE_MATCH_PREFIX, count
 
         return self.CODE_MATCH_CONTAINS, self._fetch_total_count(
-            q_kibetu=q_kibetu,
+            q_kibetu_list=q_kibetu_list,
             q_jwoa_code=q_jwoa_code,
             code_match=self.CODE_MATCH_CONTAINS,
         )
 
-    def _fetch_total_count(self, q_kibetu="", q_jwoa_code="", code_match=CODE_MATCH_PREFIX):
+    def _fetch_total_count(self, q_kibetu_list=(), q_jwoa_code="", code_match=CODE_MATCH_PREFIX):
         where_sql, params = self._build_where(
-            q_kibetu=q_kibetu,
+            q_kibetu_list=q_kibetu_list,
             q_jwoa_code=q_jwoa_code,
             code_match=code_match,
         )
@@ -8021,10 +8179,10 @@ class BusinessPersonalWeekPerformanceView(KeysetPaginationMixin, generic.Templat
             row = cursor.fetchone()
         return int(row[0]) if row else 0
 
-    def _fetch_rows(self, q_kibetu="", q_jwoa_code="", limit=200, offset=0,
+    def _fetch_rows(self, q_kibetu_list=(), q_jwoa_code="", limit=200, offset=0,
                     code_match=CODE_MATCH_PREFIX):
         where_sql, params = self._build_where(
-            q_kibetu=q_kibetu,
+            q_kibetu_list=q_kibetu_list,
             q_jwoa_code=q_jwoa_code,
             code_match=code_match,
         )
@@ -8053,20 +8211,21 @@ class BusinessPersonalWeekPerformanceView(KeysetPaginationMixin, generic.Templat
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        q_kibetu = (self.request.GET.get("q_kibetu") or "").strip()
+        q_kibetu_list = parse_kibetu_list(self.request.GET.get("q_kibetu"))
         q_jwoa_code = (self.request.GET.get("q_jwoa_code") or "").strip()
         kibetu_choice_mode = self.request.GET.get("kibetu_choice_mode") or "recent"
 
-        q_kibetu, q_kibetu_defaulted = resolve_default_kibetu(
+        q_kibetu_list, q_kibetu_defaulted = resolve_default_kibetu_list(
             WEEK_PERSONAL_RESULT_TABLE,
-            q_kibetu=q_kibetu,
+            kibetu_list=q_kibetu_list,
             kibetu_like="%W%",
             other_filters=(q_jwoa_code,),
         )
+        q_kibetu = join_kibetu_list(q_kibetu_list)
 
         per_page = self.get_per_page()
         code_match, total_count = self._resolve_code_match(
-            q_kibetu=q_kibetu,
+            q_kibetu_list=q_kibetu_list,
             q_jwoa_code=q_jwoa_code,
         )
         total_pages = max(1, math.ceil(total_count / per_page))
@@ -8074,7 +8233,7 @@ class BusinessPersonalWeekPerformanceView(KeysetPaginationMixin, generic.Templat
         offset = (page - 1) * per_page
 
         rows = self._fetch_rows(
-            q_kibetu=q_kibetu,
+            q_kibetu_list=q_kibetu_list,
             q_jwoa_code=q_jwoa_code,
             limit=per_page,
             offset=offset,
@@ -8082,6 +8241,7 @@ class BusinessPersonalWeekPerformanceView(KeysetPaginationMixin, generic.Templat
         )
 
         ctx["q_kibetu"] = q_kibetu
+        ctx["q_kibetu_list"] = q_kibetu_list
         ctx["q_kibetu_defaulted"] = q_kibetu_defaulted
         ctx["q_jwoa_code"] = q_jwoa_code
         ctx["active_menu"] = "business_personal_week_performance"
@@ -8318,7 +8478,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
 
         return int(row[0]) if row else 0
 
-    def _fetch_rows(
+    def _build_rows_sql(
         self,
         q_jpid: str = "",
         q_name: str = "",
@@ -8332,9 +8492,8 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         active_start_date=None,
         active_end_date=None,
         q_active_result: str = "",
-        limit: int = 200,
-        offset: int = 0,
     ):
+        """一覧のSQLとパラメータを返す。LIMIT/OFFSET は呼び出し側で付ける。"""
 
         where_sql, params = self._build_where(
             q_jpid=q_jpid,
@@ -8398,11 +8557,15 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             {active_join_sql}
             {where_sql}
             ORDER BY u.status_code, u.jmoa_code
-            LIMIT %s OFFSET %s
         """
 
+        return sql, active_params + params
+
+    def _fetch_rows(self, limit: int = 200, offset: int = 0, **filters):
+        sql, params = self._build_rows_sql(**filters)
+
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, active_params + params + [limit, offset])
+            cursor.execute(sql + " LIMIT %s OFFSET %s", params + [limit, offset])
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
 
@@ -8506,6 +8669,11 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             MonthlyPeriod.objects.using("rds")
             .order_by("-kibetu")
         )
+        # Excel出力は件数が多いと時間がかかるため、上限を超えたらCSVへ誘導する。
+        ctx["excel_export_max_rows"] = UsersExportView.EXCEL_EXPORT_MAX_ROWS
+        ctx["excel_export_allowed"] = (
+            total_count <= UsersExportView.EXCEL_EXPORT_MAX_ROWS
+        )
 
         base_params = {}
 
@@ -8551,6 +8719,27 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
 
 
 class UsersExportView(UsersView):
+    # Excelは1行あたりの書き出しが重く、上限なしだと7万件で1分近くかかる。
+    EXCEL_EXPORT_MAX_ROWS = 10000
+    EXPORT_HEADERS = [
+        "ID",
+        "グループID",
+        "会員ID",
+        "会員名",
+        "氏名(カナ)",
+        "上位者ID",
+        "紹介者ID",
+        "アクティブ確認",
+        "ランク",
+        "ステータス",
+        "本登録FLG",
+        "法人FLG",
+        "仮登録日時",
+        "本登録日時",
+        "最終購入日",
+        "作成日時",
+        "更新日時",
+    ]
     RANK_LABELS = {
         1: "シルバー",
         2: "ゴールド",
@@ -8606,14 +8795,46 @@ class UsersExportView(UsersView):
             row.get("updated_at"),
         ]
 
-    def get(self, request, *args, **kwargs):
-        q_jpid = (request.GET.get("q_jpid") or "").strip()
-        q_name = (request.GET.get("q_name") or "").strip()
-        q_name_kana = (request.GET.get("q_name_kana") or "").strip()
-        q_introducer = (request.GET.get("q_introducer") or "").strip()
-        q_placement = (request.GET.get("q_placement") or "").strip()
-        q_status = (request.GET.get("q_status") or "").strip()
-        q_rank = (request.GET.get("q_rank") or "").strip()
+    def _build_row_mapper(self, cols, q_active_kibetu):
+        """取得結果のタプルをExcelの1行に変換する関数を作る。
+
+        7万件超を書き出すので、1行ごとに辞書を作らず列位置で直接読む。
+        """
+        pos = {name: i for i, name in enumerate(cols)}
+        has_active = bool(q_active_kibetu)
+
+        def to_excel_row(row):
+            active_status = "-"
+            if has_active:
+                active_status = (
+                    "アクティブ"
+                    if row[pos["prev_month_active_status"]] == 1
+                    else "非アクティブ"
+                )
+            return [
+                row[pos["id"]],
+                row[pos["group_code"]],
+                row[pos["jmoa_code"]],
+                row[pos["send_bv_name"]],
+                row[pos["name_kana"]] or "-",
+                row[pos["introducer_code"]],
+                row[pos["placement_code"]],
+                active_status,
+                self.RANK_LABELS.get(row[pos["rank"]], "-"),
+                self.STATUS_LABELS.get(row[pos["status_code"]], "-"),
+                "本登録" if row[pos["activated"]] == 1 else "仮登録中",
+                "法人" if row[pos["company"]] == 1 else "-",
+                row[pos["interim_at"]],
+                row[pos["activated_at"]],
+                row[pos["last_purchase_at"]],
+                row[pos["created_at"]],
+                row[pos["updated_at"]],
+            ]
+
+        return to_excel_row
+
+    def _resolve_export_filters(self, request):
+        """検索条件を一覧と同じ形で取り出す。"""
         q_active_kibetu = (request.GET.get("q_active_kibetu") or "").strip()
         q_active_result = (request.GET.get("q_active_result") or "").strip()
         if not q_active_kibetu or q_active_result not in ("active", "inactive"):
@@ -8626,59 +8847,94 @@ class UsersExportView(UsersView):
             active_end_date,
         ) = self._resolve_active_period(q_active_kibetu)
 
+        filters = {
+            "q_jpid": (request.GET.get("q_jpid") or "").strip(),
+            "q_name": (request.GET.get("q_name") or "").strip(),
+            "q_name_kana": (request.GET.get("q_name_kana") or "").strip(),
+            "q_introducer": (request.GET.get("q_introducer") or "").strip(),
+            "q_placement": (request.GET.get("q_placement") or "").strip(),
+            "q_status": (request.GET.get("q_status") or "").strip(),
+            "q_rank": (request.GET.get("q_rank") or "").strip(),
+            "active_year": active_year,
+            "active_month": active_month,
+            "active_start_date": active_start_date,
+            "active_end_date": active_end_date,
+            "q_active_result": q_active_result,
+        }
+        return filters, q_active_kibetu
+
+    def _iter_export_rows(self, filters, q_active_kibetu):
+        """検索結果をエクスポート用の1行ずつに変換して返す。
+
+        LIMIT/OFFSET で分割すると毎回7万件超を並べ替え直すことになるため、
+        クエリは1回だけ実行して結果を少しずつ読み出す。
+        """
+        sql, params = self._build_rows_sql(**filters)
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params)
+            cols = [c[0] for c in cursor.description]
+            to_export_row = self._build_row_mapper(cols, q_active_kibetu)
+            while True:
+                rows = cursor.fetchmany(self.EXPORT_FETCH_SIZE)
+                if not rows:
+                    break
+                for row in rows:
+                    yield to_export_row(row)
+
+    def _list_url(self, request):
+        params = request.GET.copy()
+        params.pop("format", None)
+        query = params.urlencode()
+        url = reverse("connect:users")
+        return f"{url}?{query}" if query else url
+
+    def get(self, request, *args, **kwargs):
+        filters, q_active_kibetu = self._resolve_export_filters(request)
+        export_format = (request.GET.get("format") or "excel").strip().lower()
+
+        if export_format == "csv":
+            return self._export_csv(filters, q_active_kibetu)
+
+        # 画面側でもボタンを止めているが、URLを直接叩かれても通さないようにする。
+        total_count = self._fetch_total_count(**filters)
+        if total_count > self.EXCEL_EXPORT_MAX_ROWS:
+            messages.error(
+                request,
+                f"該当が{total_count:,}件あり、Excel出力の上限"
+                f"（{self.EXCEL_EXPORT_MAX_ROWS:,}件）を超えています。"
+                "条件を絞り込むか、CSV出力をご利用ください。",
+            )
+            return redirect(self._list_url(request))
+
+        return self._export_excel(filters, q_active_kibetu)
+
+    def _export_excel(self, filters, q_active_kibetu):
         wb = openpyxl.Workbook(write_only=True)
         ws = wb.create_sheet("会員一覧")
-        ws.append([
-            "ID",
-            "グループID",
-            "会員ID",
-            "会員名",
-            "氏名(カナ)",
-            "上位者ID",
-            "紹介者ID",
-            "アクティブ確認",
-            "ランク",
-            "ステータス",
-            "本登録FLG",
-            "法人FLG",
-            "仮登録日時",
-            "本登録日時",
-            "最終購入日",
-            "作成日時",
-            "更新日時",
-        ])
+        ws.append(self.EXPORT_HEADERS)
 
-        offset = 0
-        while True:
-            rows = self._fetch_rows(
-                q_jpid=q_jpid,
-                q_name=q_name,
-                q_name_kana=q_name_kana,
-                q_introducer=q_introducer,
-                q_placement=q_placement,
-                q_status=q_status,
-                q_rank=q_rank,
-                active_year=active_year,
-                active_month=active_month,
-                active_start_date=active_start_date,
-                active_end_date=active_end_date,
-                q_active_result=q_active_result,
-                limit=self.EXPORT_FETCH_SIZE,
-                offset=offset,
-            )
-            if not rows:
-                break
-            for row in rows:
-                ws.append(self._row_to_excel(row, q_active_kibetu))
-            if len(rows) < self.EXPORT_FETCH_SIZE:
-                break
-            offset += self.EXPORT_FETCH_SIZE
+        for row in self._iter_export_rows(filters, q_active_kibetu):
+            ws.append(row)
 
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
         response["Content-Disposition"] = 'attachment; filename="users.xlsx"'
         wb.save(response)
+        return response
+
+    def _export_csv(self, filters, q_active_kibetu):
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = 'attachment; filename="users.csv"'
+        # BOM が無いと Excel で開いたときに文字化けする。
+        response.write("\ufeff")
+
+        writer = csv.writer(response, lineterminator="\r\n")
+        writer.writerow(self.EXPORT_HEADERS)
+        for row in self._iter_export_rows(filters, q_active_kibetu):
+            writer.writerow(["" if v is None else v for v in row])
+
         return response
 
 
@@ -9537,7 +9793,7 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
                 ) AS distribution_count
             FROM nexus_production.orders o
             {where_sql}
-            ORDER BY o.id
+            ORDER BY o.created_at DESC, o.id DESC
             LIMIT %s OFFSET %s
         """
 
@@ -9548,9 +9804,8 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
 
         return rows
 
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-
+    def _get_filters(self):
+        """一覧と Excel 出力で同じ検索条件を使うため、GET から絞り込み条件を取り出す。"""
         q_order_statuses = [
             x for x in self.request.GET.getlist("q_order_status") if x
         ]
@@ -9558,7 +9813,7 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
             x for x in self.request.GET.getlist("q_order_type") if x
         ]
 
-        filters = {
+        return {
             "q_order_code": (self.request.GET.get("q_order_code") or "").strip(),
             "q_jwoa_code": (self.request.GET.get("q_jwoa_code") or "").strip(),
             "q_name": (self.request.GET.get("q_name") or "").strip(),
@@ -9569,6 +9824,13 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
             "q_year": (self.request.GET.get("q_year") or "").strip(),
             "q_month": (self.request.GET.get("q_month") or "").strip(),
         }
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        filters = self._get_filters()
+        q_order_statuses = filters["q_order_statuses"]
+        q_order_types = filters["q_order_types"]
 
         per_page = self.get_per_page()
 
@@ -9634,6 +9896,198 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
         return ctx
 
 
+class OrdersExportView(OrdersView):
+    """注文一覧の絞り込み条件そのままで Excel 出力する。
+
+    注文は 10 万件規模になるため、次の 3 点で落ちないようにしている。
+    - 取得は主キーのキーセット方式で分割する（OFFSET を深くするとスキャン量が
+      跳ね上がり、タイムアウトの原因になるため）
+    - openpyxl は write_only で使い、全行をメモリ上のシートに保持しない
+    - Excel の行数上限（1,048,576 行）に届く前に件数で打ち切り、
+      検索条件の絞り込みを促す
+
+    並び順は一覧画面の created_at 降順ではなく id 降順にしている。
+    created_at は NULL を取り得てキーセットの継続条件が途切れるおそれがあるためで、
+    id は採番順なので実質的に新しい順のまま出力される。
+    """
+
+    EXPORT_FETCH_SIZE = 5000
+    MAX_EXPORT_ROWS = 300000
+
+    ORDER_STATUS_LABELS = {
+        201: "入金待ち",
+        202: "入金確認済",
+        203: "決済完了",
+        204: "出荷依頼済",
+        205: "出荷完了",
+        206: "キャンセル",
+        207: "返品処理中",
+        208: "返品処理完了",
+        209: "商品交換処理中",
+        210: "再出荷依頼中",
+        211: "再出荷完了",
+    }
+
+    ORDER_TYPE_LABELS = {
+        101: "再購入品",
+        102: "初回購入品",
+        103: "ランクアップ購入品",
+        105: "特別対応購入品",
+        200: "クーリングオフ",
+    }
+
+    EXPORT_HEADER = [
+        "ID",
+        "注文番号",
+        "注文状況",
+        "注文区分",
+        "注文年",
+        "注文月",
+        "会員ID",
+        "注文者_氏名",
+        "購入合計金額",
+        "合計BV",
+        "BV振分件数",
+        "入金日",
+        "作成日時",
+    ]
+
+    def _fetch_export_rows(self, last_id=None, limit=None, **filters):
+        """id の降順で 1 チャンク分だけ取得する。last_id より小さい id が次のチャンク。"""
+        where_sql, params = self._build_where(**filters)
+
+        if last_id is not None:
+            keyset_sql = "o.id < %s"
+            if where_sql:
+                where_sql = where_sql + " AND " + keyset_sql
+            else:
+                where_sql = "WHERE " + keyset_sql
+            params = params + [last_id]
+
+        sql = f"""
+            SELECT
+                o.id,
+                o.order_code,
+                o.order_status,
+                o.order_type,
+                o.order_year,
+                o.order_month,
+                o.jwoa_code,
+                o.order_name,
+                o.total_price,
+                o.total_bv,
+                (
+                    SELECT COUNT(*)
+                    FROM bonus_db.orders_distribution_bv d_count
+                    WHERE d_count.order_code = o.order_code
+                ) AS distribution_count,
+                o.deposit_at,
+                o.created_at
+            FROM nexus_production.orders o
+            {where_sql}
+            ORDER BY o.id DESC
+            LIMIT %s
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params + [limit or self.EXPORT_FETCH_SIZE])
+            return cursor.fetchall()
+
+    @staticmethod
+    def _excel_value(value):
+        """Excel はタイムゾーン付き日時を扱えないので、naive に落としてから渡す。"""
+        if isinstance(value, datetime) and value.tzinfo is not None:
+            return value.replace(tzinfo=None)
+        return value
+
+    def _row_to_excel(self, row):
+        (
+            order_id,
+            order_code,
+            order_status,
+            order_type,
+            order_year,
+            order_month,
+            jwoa_code,
+            order_name,
+            total_price,
+            total_bv,
+            distribution_count,
+            deposit_at,
+            created_at,
+        ) = row
+
+        return [
+            order_id,
+            order_code,
+            self.ORDER_STATUS_LABELS.get(order_status, order_status),
+            self.ORDER_TYPE_LABELS.get(order_type, order_type),
+            order_year,
+            order_month,
+            jwoa_code,
+            order_name,
+            total_price,
+            total_bv,
+            distribution_count,
+            self._excel_value(deposit_at),
+            self._excel_value(created_at),
+        ]
+
+    def get(self, request, *args, **kwargs):
+        filters = self._get_filters()
+
+        total_count = self._fetch_total_count(**filters)
+
+        if total_count == 0:
+            messages.error(request, "出力対象のデータがありません。")
+            return redirect(self._back_url(request))
+
+        if total_count > self.MAX_EXPORT_ROWS:
+            messages.error(
+                request,
+                f"対象が{total_count:,}件あります。"
+                f"Excel出力は{self.MAX_EXPORT_ROWS:,}件までです。"
+                "検索条件を絞り込んでください。",
+            )
+            return redirect(self._back_url(request))
+
+        wb = openpyxl.Workbook(write_only=True)
+        ws = wb.create_sheet("注文一覧")
+        ws.append(self.EXPORT_HEADER)
+
+        last_id = None
+        while True:
+            rows = self._fetch_export_rows(
+                last_id=last_id,
+                limit=self.EXPORT_FETCH_SIZE,
+                **filters,
+            )
+            if not rows:
+                break
+
+            for row in rows:
+                ws.append(self._row_to_excel(row))
+
+            last_id = rows[-1][0]
+
+            if len(rows) < self.EXPORT_FETCH_SIZE:
+                break
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = 'attachment; filename="orders.xlsx"'
+        wb.save(response)
+        return response
+
+    @staticmethod
+    def _back_url(request):
+        """絞り込み条件を保ったまま注文一覧へ戻す。"""
+        query = request.GET.urlencode()
+        url = reverse("connect:orders")
+        return f"{url}?{query}" if query else url
+
+
 class OrderDetailView(generic.TemplateView):
     template_name = "order_detail.html"
 
@@ -9670,8 +10124,10 @@ class OrderDetailView(generic.TemplateView):
         if row:
             order = dict(zip(cols, row))
             ctx["order"] = order
+            # 注文状況だけバッジで色分けするため、列名も一緒に渡す。
             ctx["order_rows"] = [
                 (
+                    col,
                     get_order_field_label(col),
                     self._format_order_value(order.get(col)),
                 )

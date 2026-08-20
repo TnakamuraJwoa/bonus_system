@@ -1,12 +1,12 @@
 {% extends 'base.html' %}
 {% load humanize %}
-{% load static %}
+{% load static custom_filters %}
 
 {% block head %}
   <link href="{% static 'css/common.css' %}" rel="stylesheet">
   <style>
     .business-performance-table {
-      min-width: 1100px;
+      min-width: 1500px;
       white-space: nowrap;
     }
 
@@ -27,23 +27,18 @@
     <main class="col-12 col-md-9 col-lg-10 list-page-main">
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <h5 class="page-title mb-3">【業績検索 - {{ period_label }} 個人業績】</h5>
+          <h5 class="page-title mb-3">【旧システム業績照会 - {{ period_label }} {{ target_label }}】</h5>
 
-          <form method="get" class="business-performance-filter mb-0">
+          <form method="get" class="business-performance-filter mb-0" autocomplete="off">
+            {% business_search_kibetu_input q_kibetu period_type=period_type multiple=True %}
+
             <div style="width: 180px;">
-              <label class="form-label mb-0 small text-muted">会員ID</label>
+              <label class="form-label mb-0 small text-muted">会員コード</label>
               <input type="text"
-                     name="q_jmoa_code"
+                     name="q_member_no"
                      class="form-control"
-                     value="{{ q_jmoa_code|default:'' }}">
-            </div>
-
-            <div style="width: 260px;">
-              <label class="form-label mb-0 small text-muted">会員名</label>
-              <input type="text"
-                     name="q_name"
-                     class="form-control"
-                     value="{{ q_name|default:'' }}">
+                     value="{{ q_member_no|default:'' }}"
+                     autocomplete="off">
             </div>
 
             <div style="width: 110px;">
@@ -59,39 +54,36 @@
             <button type="submit" class="btn btn-primary">検索</button>
             <a href="{% url reset_url_name %}" class="btn btn-outline-secondary">リセット</a>
           </form>
+
         </div>
       </div>
 
       <div class="card shadow-sm flex-grow-1">
         <div class="card-body d-flex flex-column">
           {% if rows %}
-            {% include "com/_list_summary.html" with list_title=period_label|add:" 個人業績一覧" %}
+            {% include "com/_list_summary.html" with list_title=list_title %}
 
             <div class="table-responsive flex-grow-1">
               <table class="table table-bordered table-sm align-middle mb-0 business-performance-table">
                 <thead class="table-light">
                   <tr>
-                    <th class="text-center">会員ID</th>
-                    <th class="text-center">会員名</th>
-                    <th class="text-center">ランク</th>
-                    <th class="text-center">ステータス</th>
-                    <th class="text-center">注文件数</th>
-                    <th class="text-center">個人BV</th>
-                    <th class="text-center">個人売上</th>
-                    <th class="text-center">最終注文日</th>
+                    {% for col in columns %}
+                      <th class="text-center">{{ col.label }}</th>
+                    {% endfor %}
                   </tr>
                 </thead>
                 <tbody>
                   {% for r in rows %}
                   <tr>
-                    <td>{{ r.jmoa_code }}</td>
-                    <td>{{ r.send_bv_name }}</td>
-                    <td class="text-center">{{ r.rank|default:"-" }}</td>
-                    <td class="text-center">{{ r.status_code|default:"-" }}</td>
-                    <td class="text-end">{{ r.order_count|intcomma }}</td>
-                    <td class="text-end">{{ r.total_bv|floatformat:0|intcomma }}</td>
-                    <td class="text-end">{{ r.total_price|floatformat:0|intcomma }}</td>
-                    <td class="text-center">{{ r.last_order_at|date:"Y-m-d H:i:s"|default:"-" }}</td>
+                    {% for col in columns %}
+                      {% if col.kind == "number" %}
+                        <td class="text-end">{{ r|get_item:col.key|floatformat:0|intcomma }}</td>
+                      {% elif col.kind == "datetime" %}
+                        <td class="text-center">{{ r|get_item:col.key|date:"Y-m-d H:i:s" }}</td>
+                      {% else %}
+                        <td>{{ r|get_item:col.key|default:"" }}</td>
+                      {% endif %}
+                    {% endfor %}
                   </tr>
                   {% endfor %}
                 </tbody>
@@ -99,6 +91,8 @@
             </div>
 
             {% include "com/_pagination.html" %}
+          {% elif kibetu_required %}
+            <p class="mb-0 text-muted">期別を選択して検索してください。</p>
           {% else %}
             <p class="mb-0 text-muted">該当データがありません。</p>
           {% endif %}

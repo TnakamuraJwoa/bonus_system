@@ -7,6 +7,7 @@ from django.utils.html import format_html
 from dateutil.relativedelta import relativedelta
 
 from connect.bonus_help import get_bonus_help
+from connect.business_search_registration import parse_kibetu_list
 from connect.models import MonthlyPeriod, PeriodMaster
 
 register = template.Library()
@@ -170,6 +171,59 @@ def title_badge_class(value):
     if title_id < 6:
         return ""
     return classes.get(key, "badge-title-slate")
+
+
+ORDER_STATUS_LABELS = {
+    201: "入金待ち",
+    202: "入金確認済",
+    203: "決済完了",
+    204: "出荷依頼済",
+    205: "出荷完了",
+    206: "キャンセル",
+    207: "返品処理中",
+    208: "返品処理完了",
+    209: "商品交換処理中",
+    210: "再出荷依頼中",
+    211: "再出荷完了",
+}
+
+# 進行状況が一目で分かるよう、待ち＝オレンジ／処理中＝青／完了＝緑／
+# 中止・返品＝赤／交換＝紫 で色分けする。
+ORDER_STATUS_BADGE_CLASSES = {
+    201: "order-status-badge--waiting",
+    202: "order-status-badge--progress",
+    203: "order-status-badge--progress",
+    204: "order-status-badge--progress",
+    205: "order-status-badge--done",
+    206: "order-status-badge--canceled",
+    207: "order-status-badge--canceled",
+    208: "order-status-badge--canceled",
+    209: "order-status-badge--exchange",
+    210: "order-status-badge--progress",
+    211: "order-status-badge--done",
+}
+
+
+def _to_order_status(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+@register.filter
+def order_status_label(value):
+    """注文状況コードを日本語ラベルにする。未知のコードはそのまま返す。"""
+    status = _to_order_status(value)
+    if status is None:
+        return value if value not in (None, "") else ""
+    return ORDER_STATUS_LABELS.get(status, status)
+
+
+@register.filter
+def order_status_badge_class(value):
+    status = _to_order_status(value)
+    return ORDER_STATUS_BADGE_CLASSES.get(status, "order-status-badge--unknown")
 
 
 @register.filter
@@ -367,7 +421,14 @@ def bonus_calc_kibetu_input(context, selected_kibetu="", period_type="weekly", r
 
 
 @register.inclusion_tag("com/_business_search_kibetu_input.html", takes_context=True)
-def business_search_kibetu_input(context, q_kibetu="", period_type="weekly", placeholder="", registered_only=False):
+def business_search_kibetu_input(
+    context,
+    q_kibetu="",
+    period_type="weekly",
+    placeholder="",
+    registered_only=False,
+    multiple=False,
+):
     request = context.get("request")
     created_kibetu_set = set()
     for row in context.get("registration_history_rows") or []:
@@ -387,10 +448,20 @@ def business_search_kibetu_input(context, q_kibetu="", period_type="weekly", pla
             if period.kibetu in created_kibetu_set
         ]
 
+    q_kibetu = q_kibetu or ""
+    selected_kibetu_list = parse_kibetu_list(q_kibetu) if multiple else [q_kibetu] if q_kibetu else []
+
+    if multiple:
+        default_placeholder = "期別を選択（複数可）"
+    else:
+        default_placeholder = "期別を入力または選択"
+
     return {
-        "q_kibetu": q_kibetu or "",
-        "placeholder": placeholder or "期別を入力または選択",
+        "q_kibetu": q_kibetu,
+        "selected_kibetu_list": selected_kibetu_list,
+        "placeholder": placeholder or default_placeholder,
         "registered_only": registered_only,
+        "multiple": multiple,
         **period_context,
     }
 

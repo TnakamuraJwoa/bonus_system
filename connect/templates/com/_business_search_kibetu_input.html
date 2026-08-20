@@ -17,17 +17,28 @@
       </div>
     {% endif %}
   </div>
-  <div class="bonus-calc-kibetu-select"
+  <div class="bonus-calc-kibetu-select{% if multiple %} bonus-calc-kibetu-select--multiple{% endif %}"
        data-kibetu-dropdown
-       data-kibetu-submit-on-select="true">
-    <input type="text"
-           name="q_kibetu"
-           class="form-control bonus-calc-kibetu-input"
-           value="{{ q_kibetu|default:'' }}"
-           placeholder="{{ placeholder|default:'期別を入力または選択' }}"
-           autocomplete="off"
-           {% if registered_only %}readonly{% endif %}
-           aria-expanded="false">
+       {% if multiple %}data-kibetu-multiple="true"{% else %}data-kibetu-submit-on-select="true"{% endif %}>
+    {% if multiple %}
+      {# 実際の検索条件はカンマ区切りの hidden に持たせ、見える欄は候補の絞り込み用にする #}
+      <input type="hidden" name="q_kibetu" value="{{ q_kibetu|default:'' }}" data-kibetu-value-field>
+      <input type="text"
+             class="form-control bonus-calc-kibetu-input"
+             value=""
+             placeholder="{{ placeholder|default:'期別を選択（複数可）' }}"
+             autocomplete="off"
+             aria-expanded="false">
+    {% else %}
+      <input type="text"
+             name="q_kibetu"
+             class="form-control bonus-calc-kibetu-input"
+             value="{{ q_kibetu|default:'' }}"
+             placeholder="{{ placeholder|default:'期別を入力または選択' }}"
+             autocomplete="off"
+             {% if registered_only %}readonly{% endif %}
+             aria-expanded="false">
+    {% endif %}
     <button type="button"
             class="bonus-calc-kibetu-toggle"
             aria-label="期別候補を開く"
@@ -40,14 +51,17 @@
                 class="bonus-calc-kibetu-option business-search-kibetu-option{% if obj.kibetu == next_completion_kibetu %} bonus-calc-kibetu-option--next{% endif %}{% if obj.kibetu == previous_month_kibetu %} bonus-calc-kibetu-option--previous-month{% endif %}"
                 data-kibetu-value="{{ obj.kibetu }}"
                 data-kibetu-search="{{ obj.kibetu }} {{ obj.st_date }} {{ obj.end_date }} {{ obj.payment_date }}"
-                {% if obj.kibetu == q_kibetu %}data-kibetu-selected{% endif %}>
+                {% if obj.kibetu in selected_kibetu_list %}data-kibetu-selected{% endif %}>
           <span class="bonus-calc-kibetu-option__main">
+            {% if multiple %}
+              <span class="bonus-calc-kibetu-option__check" aria-hidden="true"></span>
+            {% endif %}
             <span class="bonus-calc-kibetu-option__text">
               <span class="bonus-calc-kibetu-option__title">
                 {{ obj.kibetu }}
                 <span class="bonus-calc-kibetu-option__badge bonus-calc-kibetu-option__badge--selected"
                       data-kibetu-selected-badge
-                      {% if obj.kibetu != q_kibetu %}hidden{% endif %}>選択中</span>
+                      {% if obj.kibetu not in selected_kibetu_list %}hidden{% endif %}>選択中</span>
               </span>
               <span class="business-search-kibetu-option__date">
                 {% if period_type == "monthly" %}
@@ -79,3 +93,24 @@
     <input type="hidden" name="kibetu_choice_mode" value="{{ kibetu_choice_mode }}">
   {% endif %}
 </div>
+{% if multiple %}
+  {# 選択中の期別。入力欄の高さを変えないよう、検索条件の行とは別の行にまとめる #}
+  <div class="bonus-calc-kibetu-selected" data-kibetu-selected-area
+       {% if not selected_kibetu_list %}hidden{% endif %}>
+    <span class="bonus-calc-kibetu-selected__label small text-muted">選択中の期別</span>
+    <span class="bonus-calc-kibetu-tags" data-kibetu-tags>
+      {% for kibetu in selected_kibetu_list %}
+        <span class="bonus-calc-kibetu-tag">
+          {{ kibetu }}
+          <button type="button"
+                  class="bonus-calc-kibetu-tag__remove"
+                  data-kibetu-tag-remove="{{ kibetu }}"
+                  aria-label="{{ kibetu }} を外す">×</button>
+        </span>
+      {% endfor %}
+    </span>
+    <span class="bonus-calc-kibetu-hint small text-muted">
+      <span data-kibetu-count>{{ selected_kibetu_list|length }}</span> 件選択中（検索ボタンで実行）
+    </span>
+  </div>
+{% endif %}

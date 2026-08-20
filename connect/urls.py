@@ -13,6 +13,17 @@ from .active_user_search import ActiveUserSearchExportView, ActiveUserSearchView
 from .basic_income_line_detail import BasicIncomeLineDetailView
 from .campaign import CampaignListView, CampaignTargetView
 from .introducer_tree import IntroducerTreeExportView, IntroducerTreeView
+from .legacy_orders import (
+    LegacyOrderDetailView,
+    LegacyOrdersExportView,
+    LegacyOrdersView,
+)
+from .legacy_performance import (
+    LegacyPersonalMonthPerformanceView,
+    LegacyPersonalWeekPerformanceView,
+    LegacyTeamMonthPerformanceView,
+    LegacyTeamWeekPerformanceView,
+)
 from .matching_bonus_detail import MatchingBonusTreeView
 from .member_month_title_search import MemberMonthTitleSearchView
 from .month_title_detail import MonthTitleDetailView
@@ -92,6 +103,26 @@ urlpatterns = [
         name="business_carry_over_performance",
     ),
     path(
+        "legacy_personal_week_performance/",
+        LegacyPersonalWeekPerformanceView.as_view(),
+        name="legacy_personal_week_performance",
+    ),
+    path(
+        "legacy_team_week_performance/",
+        LegacyTeamWeekPerformanceView.as_view(),
+        name="legacy_team_week_performance",
+    ),
+    path(
+        "legacy_personal_month_performance/",
+        LegacyPersonalMonthPerformanceView.as_view(),
+        name="legacy_personal_month_performance",
+    ),
+    path(
+        "legacy_team_month_performance/",
+        LegacyTeamMonthPerformanceView.as_view(),
+        name="legacy_team_month_performance",
+    ),
+    path(
         "business_carry_over_performance/template/",
         CarryOverPerformanceTemplateView.as_view(),
         name="business_carry_over_performance_template",
@@ -103,7 +134,11 @@ urlpatterns = [
     ),
 
     path('orders/', views.OrdersView.as_view(), name = "orders"),
+    path("orders/export/", views.OrdersExportView.as_view(), name="orders_export"),
     path("orders/<int:pk>/", views.OrderDetailView.as_view(), name="order_detail"),
+    path("legacy_orders/", LegacyOrdersView.as_view(), name="legacy_orders"),
+    path("legacy_orders/export/", LegacyOrdersExportView.as_view(), name="legacy_orders_export"),
+    path("legacy_orders/<int:pk>/", LegacyOrderDetailView.as_view(), name="legacy_order_detail"),
     path('orders_distribution_bv/', views.OrdersDistributionBvView.as_view(), name = "orders_distribution_bv"),
     path(
         "orders_distribution_bv/update/",

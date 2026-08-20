@@ -43,11 +43,11 @@
               </thead>
               <tbody>
                 {% for h in registration_history_rows %}
-                  <tr class="{% if h.kibetu == selected_q_kibetu %}business-history-table__selected{% endif %}">
+                  <tr class="{% if h.kibetu in selected_q_kibetu_list %}business-history-table__selected{% endif %}">
                     <td>
                       <div class="business-history-kibetu">
                         {{ h.kibetu }}
-                        {% if h.kibetu == selected_q_kibetu %}
+                        {% if h.kibetu in selected_q_kibetu_list %}
                           <span class="business-history-badge">選択中</span>
                         {% endif %}
                       </div>

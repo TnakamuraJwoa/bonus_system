@@ -493,6 +493,8 @@ class CarryOverPerformanceView(KeysetPaginationMixin, generic.TemplateView):
         )
 
         ctx["q_kibetu"] = q_kibetu
+        # 登録履歴モーダルは複数選択画面と共通のため、リストで渡す。
+        ctx["q_kibetu_list"] = [q_kibetu] if q_kibetu else []
         ctx["q_kibetu_defaulted"] = q_kibetu_defaulted
         ctx["q_placement_code"] = q_placement_code
         ctx["q_jmoa_code"] = q_jmoa_code

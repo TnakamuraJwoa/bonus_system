@@ -22,7 +22,7 @@ MENU_GROUPS = (
     ("bonus_search", "ボーナス検索"),
     ("bonus_calc", "ボーナス計算"),
     ("campaign", "キャンペーン"),
-    ("business_search", "業務検索"),
+    ("business_search", "業績検索"),
     ("settings", "設定・マスタ"),
 )
 
@@ -55,7 +55,12 @@ MENU_FEATURES = (
         ("introducer_tree", "introducer_tree_export"),
     ),
     # --- 注文 ---
-    MenuFeature("orders", "注文一覧", "orders", ("orders", "order_detail")),
+    MenuFeature(
+        "orders",
+        "注文一覧",
+        "orders",
+        ("orders", "order_detail", "orders_export"),
+    ),
     MenuFeature(
         "orders_distribution_bv",
         "BV振分情報",
@@ -66,6 +71,12 @@ MENU_FEATURES = (
     MenuFeature("repurchase_list", "ボーナス購入情報一覧", "orders", ("repurchase_list",)),
     MenuFeature("bonus_payment_date", "注文別ボーナス支払日", "orders", ("bonus_payment_date",)),
     MenuFeature("cooling_off", "クーリングオフ", "orders", ("cooling_off",)),
+    MenuFeature(
+        "legacy_orders",
+        "旧BONUS_SYSTEM(リンパ) 注文一覧",
+        "orders",
+        ("legacy_orders", "legacy_order_detail", "legacy_orders_export"),
+    ),
     # --- ボーナス検索（個人） ---
     MenuFeature("s_drive_bonus", "ドライブボーナス（検索）", "bonus_search", ("s_drive_bonus",)),
     MenuFeature("s_basic_bonus", "ベーシックボーナス（検索）", "bonus_search", ("s_basic_bonus",)),
@@ -158,7 +169,7 @@ MENU_FEATURES = (
     # --- キャンペーン ---
     MenuFeature("campaign_list", "キャンペーン一覧", "campaign", ("campaign_list",)),
     MenuFeature("campaign_target", "キャンペーン対象", "campaign", ("campaign_target",)),
-    # --- 業務検索 ---
+    # --- 業績検索 ---
     MenuFeature(
         "business_personal_performance",
         "月別 個人業績",
@@ -188,6 +199,31 @@ MENU_FEATURES = (
         "繰り越し業績照会",
         "business_search",
         ("business_carry_over_performance", "business_carry_over_performance_template"),
+    ),
+    # --- 業績検索（旧システム） ---
+    MenuFeature(
+        "legacy_personal_week_performance",
+        "旧システム 週別 個人業績",
+        "business_search",
+        ("legacy_personal_week_performance",),
+    ),
+    MenuFeature(
+        "legacy_team_week_performance",
+        "旧システム 週別 チーム業績",
+        "business_search",
+        ("legacy_team_week_performance",),
+    ),
+    MenuFeature(
+        "legacy_personal_month_performance",
+        "旧システム 月別 個人業績",
+        "business_search",
+        ("legacy_personal_month_performance",),
+    ),
+    MenuFeature(
+        "legacy_team_month_performance",
+        "旧システム 月別 チーム業績",
+        "business_search",
+        ("legacy_team_month_performance",),
     ),
     # --- 設定・マスタ ---
     MenuFeature("kibetu", "期別（週）", "settings", ("kibetu",)),

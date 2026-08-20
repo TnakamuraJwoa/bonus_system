@@ -7,7 +7,12 @@ from django.db import ProgrammingError, connections, transaction
 from django.shortcuts import redirect
 from django.views import generic
 
-from connect.business_search_registration import fetch_registration_history_rows
+from connect.business_search_registration import (
+    build_kibetu_condition,
+    fetch_registration_history_rows,
+    join_kibetu_list,
+    parse_kibetu_list,
+)
 from connect.sql.register_sql import (
     get_month_team_performance_insert_data,
     get_week_team_performance_insert_data,
@@ -128,7 +133,7 @@ def ensure_team_performance_purchase_info(request, kibetu, period_type):
 def fetch_team_performance_detail_rows(
     detail_table,
     period_type,
-    q_kibetu="",
+    q_kibetu_list=(),
     q_upper_code="",
     q_purchaser_code="",
     limit=200,
@@ -137,9 +142,10 @@ def fetch_team_performance_detail_rows(
     where = ["period_type = %s"]
     params = [period_type]
 
-    if q_kibetu:
-        where.append("kibetu = %s")
-        params.append(q_kibetu)
+    kibetu_sql, kibetu_params = build_kibetu_condition(q_kibetu_list)
+    if kibetu_sql:
+        where.append(kibetu_sql)
+        params.extend(kibetu_params)
 
     if q_upper_code:
         where.append("upper_code LIKE %s")
@@ -183,16 +189,17 @@ def fetch_team_performance_detail_rows(
 def count_team_performance_detail_rows(
     detail_table,
     period_type,
-    q_kibetu="",
+    q_kibetu_list=(),
     q_upper_code="",
     q_purchaser_code="",
 ):
     where = ["period_type = %s"]
     params = [period_type]
 
-    if q_kibetu:
-        where.append("kibetu = %s")
-        params.append(q_kibetu)
+    kibetu_sql, kibetu_params = build_kibetu_condition(q_kibetu_list)
+    if kibetu_sql:
+        where.append(kibetu_sql)
+        params.extend(kibetu_params)
 
     if q_upper_code:
         where.append("upper_code LIKE %s")
@@ -326,7 +333,11 @@ class BusinessTeamPerformanceDetailMixin(KeysetPaginationMixin):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        q_kibetu = (self.request.GET.get("q_kibetu") or "").strip()
+        q_kibetu_list = parse_kibetu_list(self.request.GET.get("q_kibetu"))
+        q_kibetu = join_kibetu_list(q_kibetu_list)
+        # 未登録期別のプレビュー計算と登録は1期別ずつしか行えないため、
+        # 複数選択時は登録済み明細の検索だけを行う。
+        single_q_kibetu = q_kibetu_list[0] if len(q_kibetu_list) == 1 else ""
         q_upper_code = (self.request.GET.get("q_upper_code") or "").strip()
         q_purchaser_code = (self.request.GET.get("q_purchaser_code") or "").strip()
         kibetu_choice_mode = self.request.GET.get("kibetu_choice_mode") or "recent"
@@ -334,17 +345,17 @@ class BusinessTeamPerformanceDetailMixin(KeysetPaginationMixin):
         per_page = self.get_per_page()
         is_registered = has_team_performance_detail(
             self.detail_table,
-            q_kibetu,
+            single_q_kibetu,
             self.period_type,
         )
         is_preview = False
         preview_error = ""
 
-        if q_kibetu and not is_registered:
+        if single_q_kibetu and not is_registered:
             try:
                 preview_rows = calculate_team_performance_detail_rows(
                     self.period_type,
-                    q_kibetu,
+                    single_q_kibetu,
                 )
             except ValueError as exc:
                 preview_rows = []
@@ -352,7 +363,7 @@ class BusinessTeamPerformanceDetailMixin(KeysetPaginationMixin):
 
             preview_rows = filter_team_performance_preview_rows(
                 preview_rows,
-                q_kibetu,
+                single_q_kibetu,
                 q_upper_code=q_upper_code,
                 q_purchaser_code=q_purchaser_code,
             )
@@ -366,7 +377,7 @@ class BusinessTeamPerformanceDetailMixin(KeysetPaginationMixin):
             total_count = count_team_performance_detail_rows(
                 self.detail_table,
                 self.period_type,
-                q_kibetu=q_kibetu,
+                q_kibetu_list=q_kibetu_list,
                 q_upper_code=q_upper_code,
                 q_purchaser_code=q_purchaser_code,
             )
@@ -377,7 +388,7 @@ class BusinessTeamPerformanceDetailMixin(KeysetPaginationMixin):
             rows = fetch_team_performance_detail_rows(
                 self.detail_table,
                 self.period_type,
-                q_kibetu=q_kibetu,
+                q_kibetu_list=q_kibetu_list,
                 q_upper_code=q_upper_code,
                 q_purchaser_code=q_purchaser_code,
                 limit=per_page,
@@ -385,6 +396,9 @@ class BusinessTeamPerformanceDetailMixin(KeysetPaginationMixin):
             )
 
         ctx["q_kibetu"] = q_kibetu
+        ctx["q_kibetu_list"] = q_kibetu_list
+        ctx["single_q_kibetu"] = single_q_kibetu
+        ctx["is_multi_kibetu_selected"] = len(q_kibetu_list) > 1
         ctx["q_upper_code"] = q_upper_code
         ctx["q_purchaser_code"] = q_purchaser_code
         ctx["period_label"] = self.period_label
