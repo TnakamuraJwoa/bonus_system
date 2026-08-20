@@ -1,16 +1,13 @@
 ﻿{% extends 'base.html' %}
 {% load static %}
 
-{% block contents %}
-
 {% block head %}
-    {% load static %}
     <link href="{% static 'css/common.css' %}" rel="stylesheet">
 {% endblock %}
 
+{% block contents %}
 <div class="container-fluid mt-3">
   <div class="row g-1">
-
 
     <!-- Sidebar（そのまま） -->
     {% include "com/_sidebar.html" with active_menu="settings" %}
@@ -20,12 +17,65 @@
 
       <div class="card shadow-sm mb-3">
         <div class="card-body">
-          <h5 class="page-title mb-0">【設定】</h5>
+          <h5 class="page-title mb-3">【設定】</h5>
+
+          <form method="get" class="form-inline mb-0">
+            <input type="text"
+                   name="q"
+                   class="form-control form-control-sm mr-2"
+                   style="min-width: 240px;"
+                   value="{{ q|default:'' }}"
+                   placeholder="設定キー・値・説明で検索"
+                   title="設定キー・値・説明で検索">
+            <button type="submit" class="btn btn-primary btn-sm px-3 mr-2">絞り込み</button>
+            <a class="btn btn-outline-secondary btn-sm px-3" href="{% url 'connect:settings' %}">リセット</a>
+          </form>
+
+          {% if user_access.can_create %}
+          <hr>
+
+          <form method="post" class="form-inline mb-0">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create">
+            <input type="hidden" name="filter_q" value="{{ q|default:'' }}">
+
+            <span class="fw-bold mr-2">新規</span>
+            <input type="text"
+                   name="name"
+                   class="form-control form-control-sm mr-2"
+                   style="min-width: 180px;"
+                   maxlength="50"
+                   placeholder="設定キー"
+                   title="設定キー"
+                   required>
+            <input type="text"
+                   name="value"
+                   class="form-control form-control-sm mr-2"
+                   style="min-width: 160px;"
+                   maxlength="100"
+                   placeholder="値"
+                   title="値">
+            <input type="text"
+                   name="comment"
+                   class="form-control form-control-sm mr-2"
+                   style="min-width: 240px;"
+                   maxlength="255"
+                   placeholder="説明"
+                   title="説明">
+            <button type="submit" class="btn btn-success btn-sm px-3">追加</button>
+          </form>
+          {% endif %}
         </div>
       </div>
 
       <div class="card shadow-sm">
         <div class="card-body">
+
+          {% if not user_access.can_update %}
+            <div class="alert alert-info">
+              更新権限がないため、設定は閲覧のみです。
+            </div>
+          {% endif %}
 
           {% if rows %}
             <div class="d-flex justify-content-between align-items-center mb-2">
@@ -40,19 +90,93 @@
                     <th>設定キー</th>
                     <th>値</th>
                     <th>説明</th>
+                    {% if user_access.can_update or user_access.can_delete %}
+                    <th style="width: 120px;">操作</th>
+                    {% endif %}
                   </tr>
                 </thead>
                 <tbody>
                   {% for r in rows %}
                     <tr>
-                      <td>{{ r.name }}</td>
-                      <td>{{ r.value }}</td>
-                      <td>{{ r.comment }}</td>
+                      <td class="text-left">{{ r.name }}</td>
+
+                      {% if user_access.can_update %}
+                        <td>
+                          <input type="text"
+                                 name="value"
+                                 form="settings-edit-{{ r.id }}"
+                                 class="form-control form-control-sm"
+                                 maxlength="100"
+                                 value="{{ r.value|default:'' }}"
+                                 title="値">
+                        </td>
+                        <td>
+                          <input type="text"
+                                 name="comment"
+                                 form="settings-edit-{{ r.id }}"
+                                 class="form-control form-control-sm"
+                                 maxlength="255"
+                                 value="{{ r.comment|default:'' }}"
+                                 title="説明">
+                        </td>
+                      {% else %}
+                        <td class="text-left">{{ r.value }}</td>
+                        <td class="text-left">{{ r.comment }}</td>
+                      {% endif %}
+
+                      {% if user_access.can_update or user_access.can_delete %}
+                      <td class="text-nowrap">
+                        {% if user_access.can_update %}
+                        <button type="submit"
+                                form="settings-edit-{{ r.id }}"
+                                class="btn btn-primary btn-sm py-0">
+                          保存
+                        </button>
+                        {% endif %}
+
+                        {% if user_access.can_delete %}
+                        <button type="submit"
+                                form="settings-delete-{{ r.id }}"
+                                class="btn btn-danger btn-sm py-0"
+                                data-confirm-submit="{{ r.name }} を削除しますか？">
+                          削除
+                        </button>
+                        {% endif %}
+                      </td>
+                      {% endif %}
                     </tr>
                   {% endfor %}
                 </tbody>
               </table>
             </div>
+
+            {% if user_access.can_update %}
+              <p class="text-muted small mt-2 mb-0">
+                設定キーはプログラムから参照されるため変更できません。キーを変えたい場合は追加・削除で対応してください。
+              </p>
+            {% endif %}
+
+            <!-- 行ごとの送信用フォーム（table内にformを置けないためここへ集約） -->
+            {% for r in rows %}
+              {% if user_access.can_update %}
+              <form method="post" id="settings-edit-{{ r.id }}" class="d-none">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="update">
+                <input type="hidden" name="row_id" value="{{ r.id }}">
+                <input type="hidden" name="filter_q" value="{{ q|default:'' }}">
+              </form>
+              {% endif %}
+
+              {% if user_access.can_delete %}
+              <form method="post" id="settings-delete-{{ r.id }}" class="d-none">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="delete">
+                <input type="hidden" name="row_id" value="{{ r.id }}">
+                <input type="hidden" name="filter_q" value="{{ q|default:'' }}">
+              </form>
+              {% endif %}
+            {% endfor %}
+
           {% else %}
             <p class="mb-0 text-muted">該当データがありません。</p>
           {% endif %}
@@ -63,5 +187,4 @@
     </main>
   </div>
 </div>
-
 {% endblock %}

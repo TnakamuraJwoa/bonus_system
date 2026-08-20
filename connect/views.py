@@ -26,7 +26,7 @@ from django.http import HttpResponse
 from openpyxl import Workbook
 import openpyxl
 
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.utils.timezone import make_aware
 from .models import TitleMaster, PeriodMaster, UserTitles, Orders, User, PurchaseInfoList, MonthlyPeriod
 from .models import Settings
@@ -2353,15 +2353,166 @@ class SettingsView(generic.ListView):
     context_object_name = "rows"
     model = Settings
 
+    SCREEN_NAME = "設定"
+    TARGET_TABLE = "settings"
+    PERMISSION_BY_ACTION = {
+        "create": "can_create",
+        "update": "can_update",
+        "delete": "can_delete",
+    }
+
     def get_queryset(self):
+        qs = Settings.objects.using("rds").all()
+
+        q = (self.request.GET.get("q") or "").strip()
+        if q:
+            qs = qs.filter(
+                Q(name__icontains=q)
+                | Q(value__icontains=q)
+                | Q(comment__icontains=q)
+            )
+
         # 並び順はお好みで（title_id順など）
-        return Settings.objects.using("rds").order_by("id")
+        return qs.order_by("id")
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         # 件数表示用（テンプレで rows|length を使わない）
         ctx["total_count"] = ctx["rows"].count()
+        ctx["q"] = (self.request.GET.get("q") or "").strip()
         return ctx
+
+    def post(self, request, *args, **kwargs):
+        action = (request.POST.get("action") or "").strip()
+
+        if action not in self.PERMISSION_BY_ACTION:
+            messages.error(request, "不正な操作です。")
+            return redirect(self._redirect_url(request))
+
+        user_access = get_user_access(request.user)
+        if not user_access.can_menu("settings") or not user_access.has(
+            self.PERMISSION_BY_ACTION[action]
+        ):
+            return HttpResponse("権限がありません。", status=403)
+
+        try:
+            with transaction.atomic(using="rds"):
+                if action == "create":
+                    self._create(request)
+                elif action == "update":
+                    self._update(request)
+                else:
+                    self._delete(request)
+
+        except Settings.DoesNotExist:
+            messages.error(request, "対象の設定が存在しません。")
+        except IntegrityError:
+            messages.error(request, "同じ設定キーがすでに存在します。")
+        except ValueError as e:
+            messages.error(request, str(e))
+        except Exception as e:
+            messages.error(request, f"エラーが発生しました: {e}")
+
+        return redirect(self._redirect_url(request))
+
+    def _create(self, request):
+        name = (request.POST.get("name") or "").strip()
+        value = (request.POST.get("value") or "").strip()
+        comment = (request.POST.get("comment") or "").strip()
+
+        if not name:
+            raise ValueError("設定キーを入力してください。")
+
+        if Settings.objects.using("rds").filter(name=name).exists():
+            raise ValueError(f"設定キー {name} はすでに存在します。")
+
+        obj = Settings.objects.using("rds").create(
+            name=name,
+            value=value,
+            comment=comment or None,
+        )
+        record_change_audit(
+            request,
+            screen_name=self.SCREEN_NAME,
+            action_type="create",
+            target_table=self.TARGET_TABLE,
+            target_pk=obj.pk,
+            summary=f"{name} を追加",
+            before_values=None,
+            after_values={"name": name, "value": value, "comment": comment or None},
+        )
+        messages.success(request, f"{name} を追加しました。")
+
+    def _update(self, request):
+        obj = self._get_target(request, "更新対象が指定されていません。")
+
+        value = (request.POST.get("value") or "").strip()
+        comment = (request.POST.get("comment") or "").strip()
+
+        if obj.value == value and (obj.comment or "") == comment:
+            messages.info(request, f"{obj.name} は変更がありませんでした。")
+            return
+
+        before_values = {
+            "name": obj.name,
+            "value": obj.value,
+            "comment": obj.comment,
+        }
+        obj.value = value
+        obj.comment = comment or None
+        obj.save(using="rds", update_fields=["value", "comment"])
+
+        record_change_audit(
+            request,
+            screen_name=self.SCREEN_NAME,
+            action_type="update",
+            target_table=self.TARGET_TABLE,
+            target_pk=obj.pk,
+            summary=f"{obj.name} を変更",
+            before_values=before_values,
+            after_values={
+                "name": obj.name,
+                "value": obj.value,
+                "comment": obj.comment,
+            },
+        )
+        messages.success(request, f"{obj.name} を変更しました。")
+
+    def _delete(self, request):
+        obj = self._get_target(request, "削除対象が指定されていません。")
+
+        before_values = {
+            "name": obj.name,
+            "value": obj.value,
+            "comment": obj.comment,
+        }
+        target_pk = obj.pk
+        obj.delete(using="rds")
+
+        record_change_audit(
+            request,
+            screen_name=self.SCREEN_NAME,
+            action_type="delete",
+            target_table=self.TARGET_TABLE,
+            target_pk=target_pk,
+            summary=f"{before_values['name']} を削除",
+            before_values=before_values,
+            after_values=None,
+        )
+        messages.success(request, f"{before_values['name']} を削除しました。")
+
+    def _get_target(self, request, missing_message):
+        row_id = (request.POST.get("row_id") or "").strip()
+        if not row_id:
+            raise ValueError(missing_message)
+        return Settings.objects.using("rds").get(pk=row_id)
+
+    def _redirect_url(self, request):
+        q = (request.POST.get("filter_q") or request.GET.get("q") or "").strip()
+        url = reverse("connect:settings")
+        if q:
+            url += "?" + urlencode({"q": q})
+        return url
 
 
 class UserTargetRankView(KeysetPaginationMixin, generic.TemplateView):
