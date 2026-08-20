@@ -9546,7 +9546,7 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
                 ) AS distribution_count
             FROM nexus_production.orders o
             {where_sql}
-            ORDER BY o.id
+            ORDER BY o.created_at DESC, o.id DESC
             LIMIT %s OFFSET %s
         """
 
