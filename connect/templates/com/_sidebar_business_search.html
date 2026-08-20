@@ -44,5 +44,105 @@
       </div>
     </div>
     {% endif %}
+
+    {% if user_access|can_menu:"legacy_personal_week_performance" or user_access|can_menu:"legacy_team_week_performance" or user_access|can_menu:"legacy_personal_month_performance" or user_access|can_menu:"legacy_team_month_performance" %}
+    {# 旧システムの業績は普段使わないので、見出しを押したときだけ中身を出す #}
+    <div class="card shadow-sm mt-3">
+      <div class="card-body">
+        <button type="button"
+                class="legacy-performance-toggle"
+                data-legacy-performance-toggle
+                aria-controls="legacyPerformanceMenu"
+                aria-expanded="{% if active_menu|slice:':7' == 'legacy_' %}true{% else %}false{% endif %}">
+          <span class="fw-bold">■ 旧システム業績照会</span>
+          <span class="legacy-performance-toggle__icon" aria-hidden="true">{% if active_menu|slice:':7' == 'legacy_' %}▴{% else %}▾{% endif %}</span>
+        </button>
+
+        <div id="legacyPerformanceMenu"
+             class="legacy-performance-menu mt-2 {% if active_menu|slice:':7' != 'legacy_' %}is-collapsed{% endif %}">
+          <div class="small text-muted fw-bold mb-1">週別</div>
+          <div class="list-group mb-3">
+            {% if user_access|can_menu:"legacy_personal_week_performance" %}
+            <a class="list-group-item list-group-item-action {% if active_menu == 'legacy_personal_week_performance' %}active{% endif %}"
+               href="{% url 'connect:legacy_personal_week_performance' %}">個人業績</a>
+            {% endif %}
+
+            {% if user_access|can_menu:"legacy_team_week_performance" %}
+            <a class="list-group-item list-group-item-action {% if active_menu == 'legacy_team_week_performance' %}active{% endif %}"
+               href="{% url 'connect:legacy_team_week_performance' %}">チーム業績</a>
+            {% endif %}
+          </div>
+
+          <div class="small text-muted fw-bold mb-1">月別</div>
+          <div class="list-group">
+            {% if user_access|can_menu:"legacy_personal_month_performance" %}
+            <a class="list-group-item list-group-item-action {% if active_menu == 'legacy_personal_month_performance' %}active{% endif %}"
+               href="{% url 'connect:legacy_personal_month_performance' %}">個人業績</a>
+            {% endif %}
+
+            {% if user_access|can_menu:"legacy_team_month_performance" %}
+            <a class="list-group-item list-group-item-action {% if active_menu == 'legacy_team_month_performance' %}active{% endif %}"
+               href="{% url 'connect:legacy_team_month_performance' %}">チーム業績</a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
   </div>
 </nav>
+<script>
+(function () {
+  if (window.__legacyPerformanceSidebarInit) {
+    return;
+  }
+  window.__legacyPerformanceSidebarInit = true;
+
+  var STORAGE_KEY = "legacyPerformanceMenuOpen";
+
+  function readStoredState() {
+    try {
+      return window.localStorage.getItem(STORAGE_KEY) === "1";
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function writeStoredState(isOpen) {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, isOpen ? "1" : "0");
+    } catch (e) {
+      // プライベートモードなどで保存できない場合は開閉だけ動けばよい
+    }
+  }
+
+  function apply(button, menu, isOpen) {
+    menu.classList.toggle("is-collapsed", !isOpen);
+    button.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    var icon = button.querySelector(".legacy-performance-toggle__icon");
+    if (icon) {
+      icon.textContent = isOpen ? "▴" : "▾";
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    var button = document.querySelector("[data-legacy-performance-toggle]");
+    var menu = document.getElementById("legacyPerformanceMenu");
+    if (!button || !menu) {
+      return;
+    }
+
+    // 旧システムの画面を開いているときは、記憶に関係なく開いたままにする。
+    var isActive = button.getAttribute("aria-expanded") === "true";
+    if (!isActive) {
+      apply(button, menu, readStoredState());
+    }
+
+    button.addEventListener("click", function () {
+      var isOpen = menu.classList.contains("is-collapsed");
+      apply(button, menu, isOpen);
+      writeStoredState(isOpen);
+    });
+  });
+})();
+</script>

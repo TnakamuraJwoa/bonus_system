@@ -1489,3 +1489,30 @@ tr.field-changed-row {
     background-color: #fee2e2;
 }
 
+/* 旧システム業績照会：見出しを押したときだけメニューを出す */
+.legacy-performance-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-text);
+    text-align: left;
+}
+
+.legacy-performance-toggle:hover {
+    color: var(--color-primary);
+}
+
+.legacy-performance-toggle__icon {
+    color: #64748b;
+    font-size: 0.9rem;
+    line-height: 1;
+}
+
+.legacy-performance-menu.is-collapsed {
+    display: none;
+}

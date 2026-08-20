@@ -189,6 +189,31 @@ MENU_FEATURES = (
         "business_search",
         ("business_carry_over_performance", "business_carry_over_performance_template"),
     ),
+    # --- 業績検索（旧システム） ---
+    MenuFeature(
+        "legacy_personal_week_performance",
+        "旧システム 週別 個人業績",
+        "business_search",
+        ("legacy_personal_week_performance",),
+    ),
+    MenuFeature(
+        "legacy_team_week_performance",
+        "旧システム 週別 チーム業績",
+        "business_search",
+        ("legacy_team_week_performance",),
+    ),
+    MenuFeature(
+        "legacy_personal_month_performance",
+        "旧システム 月別 個人業績",
+        "business_search",
+        ("legacy_personal_month_performance",),
+    ),
+    MenuFeature(
+        "legacy_team_month_performance",
+        "旧システム 月別 チーム業績",
+        "business_search",
+        ("legacy_team_month_performance",),
+    ),
     # --- 設定・マスタ ---
     MenuFeature("kibetu", "期別（週）", "settings", ("kibetu",)),
     MenuFeature("kibetu_month", "期別（月）", "settings", ("kibetu_month",)),

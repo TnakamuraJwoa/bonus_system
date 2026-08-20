@@ -13,6 +13,12 @@ from .active_user_search import ActiveUserSearchExportView, ActiveUserSearchView
 from .basic_income_line_detail import BasicIncomeLineDetailView
 from .campaign import CampaignListView, CampaignTargetView
 from .introducer_tree import IntroducerTreeExportView, IntroducerTreeView
+from .legacy_performance import (
+    LegacyPersonalMonthPerformanceView,
+    LegacyPersonalWeekPerformanceView,
+    LegacyTeamMonthPerformanceView,
+    LegacyTeamWeekPerformanceView,
+)
 from .matching_bonus_detail import MatchingBonusTreeView
 from .member_month_title_search import MemberMonthTitleSearchView
 from .month_title_detail import MonthTitleDetailView
@@ -90,6 +96,26 @@ urlpatterns = [
         "business_carry_over_performance/",
         CarryOverPerformanceView.as_view(),
         name="business_carry_over_performance",
+    ),
+    path(
+        "legacy_personal_week_performance/",
+        LegacyPersonalWeekPerformanceView.as_view(),
+        name="legacy_personal_week_performance",
+    ),
+    path(
+        "legacy_team_week_performance/",
+        LegacyTeamWeekPerformanceView.as_view(),
+        name="legacy_team_week_performance",
+    ),
+    path(
+        "legacy_personal_month_performance/",
+        LegacyPersonalMonthPerformanceView.as_view(),
+        name="legacy_personal_month_performance",
+    ),
+    path(
+        "legacy_team_month_performance/",
+        LegacyTeamMonthPerformanceView.as_view(),
+        name="legacy_team_month_performance",
     ),
     path(
         "business_carry_over_performance/template/",
