@@ -173,6 +173,59 @@ def title_badge_class(value):
     return classes.get(key, "badge-title-slate")
 
 
+ORDER_STATUS_LABELS = {
+    201: "入金待ち",
+    202: "入金確認済",
+    203: "決済完了",
+    204: "出荷依頼済",
+    205: "出荷完了",
+    206: "キャンセル",
+    207: "返品処理中",
+    208: "返品処理完了",
+    209: "商品交換処理中",
+    210: "再出荷依頼中",
+    211: "再出荷完了",
+}
+
+# 進行状況が一目で分かるよう、待ち＝オレンジ／処理中＝青／完了＝緑／
+# 中止・返品＝赤／交換＝紫 で色分けする。
+ORDER_STATUS_BADGE_CLASSES = {
+    201: "order-status-badge--waiting",
+    202: "order-status-badge--progress",
+    203: "order-status-badge--progress",
+    204: "order-status-badge--progress",
+    205: "order-status-badge--done",
+    206: "order-status-badge--canceled",
+    207: "order-status-badge--canceled",
+    208: "order-status-badge--canceled",
+    209: "order-status-badge--exchange",
+    210: "order-status-badge--progress",
+    211: "order-status-badge--done",
+}
+
+
+def _to_order_status(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+@register.filter
+def order_status_label(value):
+    """注文状況コードを日本語ラベルにする。未知のコードはそのまま返す。"""
+    status = _to_order_status(value)
+    if status is None:
+        return value if value not in (None, "") else ""
+    return ORDER_STATUS_LABELS.get(status, status)
+
+
+@register.filter
+def order_status_badge_class(value):
+    status = _to_order_status(value)
+    return ORDER_STATUS_BADGE_CLASSES.get(status, "order-status-badge--unknown")
+
+
 @register.filter
 def is_three_star_title(value):
     if value in (None, ""):

@@ -1516,3 +1516,57 @@ tr.field-changed-row {
 .legacy-performance-menu.is-collapsed {
     display: none;
 }
+
+/* 注文状況：進行状況が一目で分かるよう色分けしたバッジ */
+.order-status-badge {
+    display: inline-block;
+    padding: 0.15rem 0.55rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+
+/* 入金待ち */
+.order-status-badge--waiting {
+    border-color: #fdba74;
+    background: #fff7ed;
+    color: #c2410c;
+}
+
+/* 入金確認済・決済完了・出荷依頼済・再出荷依頼中 */
+.order-status-badge--progress {
+    border-color: #93c5fd;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+/* 出荷完了・再出荷完了 */
+.order-status-badge--done {
+    border-color: #86efac;
+    background: #f0fdf4;
+    color: #15803d;
+}
+
+/* キャンセル・返品処理中・返品処理完了 */
+.order-status-badge--canceled {
+    border-color: #fca5a5;
+    background: #fef2f2;
+    color: #b91c1c;
+}
+
+/* 商品交換処理中 */
+.order-status-badge--exchange {
+    border-color: #d8b4fe;
+    background: #faf5ff;
+    color: #7e22ce;
+}
+
+/* 未知のコード */
+.order-status-badge--unknown {
+    border-color: var(--color-border);
+    background: #f8fafc;
+    color: #475569;
+}

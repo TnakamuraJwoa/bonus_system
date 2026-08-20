@@ -1,6 +1,6 @@
 ﻿{% extends 'base.html' %}
 
-{% load static %}
+{% load static custom_filters %}
 
 
 
@@ -68,7 +68,7 @@
 
                 <tbody>
 
-                  {% for label, value in order_rows %}
+                  {% for col, label, value in order_rows %}
 
                     <tr>
 
@@ -83,6 +83,12 @@
                         {% if value == "" or value == None %}
 
                           <span class="text-muted">-</span>
+
+                        {% elif col == "order_status" %}
+
+                          <span class="order-status-badge {{ value|order_status_badge_class }}">
+                            {{ value|order_status_label }}
+                          </span>
 
                         {% else %}
 

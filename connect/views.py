@@ -9679,8 +9679,10 @@ class OrderDetailView(generic.TemplateView):
         if row:
             order = dict(zip(cols, row))
             ctx["order"] = order
+            # 注文状況だけバッジで色分けするため、列名も一緒に渡す。
             ctx["order_rows"] = [
                 (
+                    col,
                     get_order_field_label(col),
                     self._format_order_value(order.get(col)),
                 )
