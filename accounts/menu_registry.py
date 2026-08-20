@@ -71,6 +71,12 @@ MENU_FEATURES = (
     MenuFeature("repurchase_list", "ボーナス購入情報一覧", "orders", ("repurchase_list",)),
     MenuFeature("bonus_payment_date", "注文別ボーナス支払日", "orders", ("bonus_payment_date",)),
     MenuFeature("cooling_off", "クーリングオフ", "orders", ("cooling_off",)),
+    MenuFeature(
+        "legacy_orders",
+        "旧BONUS_SYSTEM(リンパ) 注文一覧",
+        "orders",
+        ("legacy_orders", "legacy_order_detail", "legacy_orders_export"),
+    ),
     # --- ボーナス検索（個人） ---
     MenuFeature("s_drive_bonus", "ドライブボーナス（検索）", "bonus_search", ("s_drive_bonus",)),
     MenuFeature("s_basic_bonus", "ベーシックボーナス（検索）", "bonus_search", ("s_basic_bonus",)),
