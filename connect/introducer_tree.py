@@ -127,6 +127,16 @@ LIMIT %s OFFSET %s
             cols = [col[0] for col in cursor.description]
             return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
+    def _fetch_last_recreated_at(self):
+        # 再作成は全削除＋一括INSERTのため、MAX(created_at) が最終再作成日時になる。
+        sql = "SELECT MAX(created_at) FROM bonus_db.C_users_introducer_tree_cache"
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql)
+            row = cursor.fetchone()
+
+        return row[0] if row else None
+
     def _rebuild_cache(self) -> int:
         delete_sql = "DELETE FROM bonus_db.C_users_introducer_tree_cache"
 
@@ -258,6 +268,7 @@ LIMIT %s OFFSET %s
         ctx["q_introducer_rank"] = q_introducer_rank
         ctx["q_rank"] = q_rank
         ctx["tree_search"] = tree_search
+        ctx["last_recreated_at"] = self._fetch_last_recreated_at()
 
         view_mode = (self.request.GET.get("view") or "list").strip()
         if view_mode not in ("list", "tree"):
