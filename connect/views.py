@@ -5164,7 +5164,7 @@ class ActiveUsersView(KeysetPaginationMixin, generic.TemplateView):
                 a.created_at,
                 u.send_bv_name
             FROM active_users a
-            LEFT JOIN users u
+            LEFT JOIN nexus_production.users u
                 ON a.jwoa_code = u.jmoa_code
             {where_sql}
             ORDER BY a.jwoa_code, a.year DESC, a.month DESC
