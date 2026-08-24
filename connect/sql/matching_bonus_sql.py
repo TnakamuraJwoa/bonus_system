@@ -56,7 +56,7 @@ basic_active_cnt AS (
         a.get_basic_bonus_code as introducer_code,
         COUNT(DISTINCT b.jmoa_code) AS active_count
     FROM basic_id_list AS a
-    LEFT JOIN bonus_db.users AS b
+    LEFT JOIN nexus_production.users AS b
         ON a.get_basic_bonus_code = b.introducer_code
     INNER JOIN active_users AS au
         ON au.jwoa_code = b.jmoa_code
@@ -135,7 +135,7 @@ introducer_down_line_tree AS (
 
     FROM basic_id_list AS a
 
-    INNER JOIN bonus_db.users AS u
+    INNER JOIN nexus_production.users AS u
         ON a.get_basic_bonus_code = u.introducer_code
 
     LEFT JOIN basic_id_list AS bb
@@ -209,7 +209,7 @@ introducer_down_line_tree AS (
 
     from introducer_down_line_tree as t
 
-    INNER JOIN bonus_db.users AS u
+    INNER JOIN nexus_production.users AS u
         ON t.down_code = u.introducer_code
 
     LEFT JOIN basic_id_list AS bb
@@ -264,10 +264,10 @@ SELECT
 
 FROM matching_detail_table as a
 
-left join bonus_db.users as b
+left join nexus_production.users as b
 on a.get_basic_bonus_code = b.jmoa_code
 
-left join bonus_db.users as c
+left join nexus_production.users as c
 on a.down_code = c.jmoa_code
 
 order by get_basic_bonus_code, level

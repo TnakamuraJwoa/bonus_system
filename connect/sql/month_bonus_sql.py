@@ -54,7 +54,7 @@ month_user_list AS (
         UNION
         SELECT pay_code FROM three_star_global_bonus
     ) AS a
-    INNER JOIN bonus_db.users AS b
+    INNER JOIN nexus_production.users AS b
         ON a.pay_code = b.jmoa_code
 ),
 

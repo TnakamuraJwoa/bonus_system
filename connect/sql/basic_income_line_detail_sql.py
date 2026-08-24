@@ -137,7 +137,7 @@ payer_tree AS (
         u.placement_code AS upper_code,
         0 AS lvl,
         CAST(u.jmoa_code AS CHAR(4000)) AS path_codes
-    FROM bonus_db.users AS u
+    FROM nexus_production.users AS u
     JOIN purchase_users AS pu
       ON pu.jwoa_code = u.jmoa_code
 
@@ -151,7 +151,7 @@ payer_tree AS (
         t.lvl + 1 AS lvl,
         CONCAT(t.path_codes, '>', up.jmoa_code) AS path_codes
     FROM payer_tree AS t
-    JOIN bonus_db.users AS up
+    JOIN nexus_production.users AS up
       ON up.jmoa_code = t.upper_code
     WHERE t.lvl < 1000
       AND t.upper_code IS NOT NULL
@@ -168,7 +168,7 @@ payer_list AS (
         t.lvl + 1 AS tree_level,
         t.path_codes
     FROM payer_tree AS t
-    LEFT JOIN bonus_db.users AS up
+    LEFT JOIN nexus_production.users AS up
       ON up.jmoa_code = t.upper_code
     WHERE t.upper_code IS NOT NULL
       AND t.upper_code <> ''
@@ -225,7 +225,7 @@ income_detail_source AS (
         '繰り越し' AS detail_type_label,
         2 AS detail_sort
     FROM active_prev_basic_carry_over_bv AS a
-    LEFT JOIN bonus_db.users AS u
+    LEFT JOIN nexus_production.users AS u
       ON u.jmoa_code = a.placement_code
     LEFT JOIN bonus_db.users_target_rank AS ur
       ON a.placement_code = ur.jmoa_code

@@ -183,7 +183,7 @@ class MatchingBonusTreeView(generic.TemplateView):
 
         sql = """
             SELECT jmoa_code
-            FROM bonus_db.users
+            FROM nexus_production.users
             WHERE introducer_code = %s
         """
         with connections["rds"].cursor() as cursor:

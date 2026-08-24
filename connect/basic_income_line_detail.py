@@ -297,7 +297,7 @@ class BasicIncomeLineDetailView(generic.TemplateView):
                     THEN 1
                     ELSE 0
                 END AS is_prev_month_active
-            FROM bonus_db.users AS u
+            FROM nexus_production.users AS u
             LEFT JOIN purchase_sum AS ps
               ON ps.jwoa_code = u.jmoa_code
             LEFT JOIN bonus_db.users_target_rank AS utr

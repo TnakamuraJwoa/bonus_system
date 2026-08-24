@@ -2595,7 +2595,7 @@ END = %s
 
         sql = f"""
 SELECT COUNT(*)
-FROM bonus_db.users t
+FROM nexus_production.users t
 LEFT JOIN (
   SELECT user_id, fluctuation_name, created_at
   FROM (
@@ -2663,7 +2663,7 @@ SELECT
     ELSE t.`rank`
   END AS new_rank
 
-FROM bonus_db.users t
+FROM nexus_production.users t
 LEFT JOIN (
   SELECT user_id, fluctuation_name, created_at
   FROM (
@@ -2857,7 +2857,7 @@ class TitleUserView(KeysetPaginationMixin, generic.TemplateView):
         sql = f"""
 SELECT COUNT(*)
 FROM bonus_db.user_titles ut
-LEFT JOIN bonus_db.users u
+LEFT JOIN nexus_production.users u
   ON ut.jmoa_code = u.jmoa_code
 {where_sql}
         """
@@ -2883,7 +2883,7 @@ SELECT
   COALESCE(tm.title_name, 'タイトルなし') AS title_name,
   ut.update_date AS update_date
 FROM bonus_db.user_titles ut
-LEFT JOIN bonus_db.users u
+LEFT JOIN nexus_production.users u
   ON ut.jmoa_code = u.jmoa_code
 LEFT JOIN bonus_db.title_master tm
   ON ut.title_id = tm.title_id
@@ -3089,7 +3089,7 @@ SELECT
   COALESCE(tm.title_name, 'タイトルなし') AS title_name,
   ut.update_date AS update_date
 FROM bonus_db.user_titles ut
-LEFT JOIN bonus_db.users u
+LEFT JOIN nexus_production.users u
   ON ut.jmoa_code = u.jmoa_code
 LEFT JOIN bonus_db.title_master tm
   ON ut.title_id = tm.title_id
@@ -9771,7 +9771,7 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
                     o.jwoa_code LIKE %s
                     OR EXISTS (
                         SELECT 1
-                        FROM bonus_db.orders_distribution_bv d
+                        FROM nexus_production.orders_distribution_bv d
                         WHERE d.order_code = o.order_code
                           AND d.jwoa_code LIKE %s
                     )
@@ -9867,7 +9867,7 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
                 {member_match_select}
                 (
                     SELECT COUNT(*)
-                    FROM bonus_db.orders_distribution_bv d_count
+                    FROM nexus_production.orders_distribution_bv d_count
                     WHERE d_count.order_code = o.order_code
                 ) AS distribution_count
             FROM nexus_production.orders o
@@ -10057,7 +10057,7 @@ class OrdersExportView(OrdersView):
                 o.total_bv,
                 (
                     SELECT COUNT(*)
-                    FROM bonus_db.orders_distribution_bv d_count
+                    FROM nexus_production.orders_distribution_bv d_count
                     WHERE d_count.order_code = o.order_code
                 ) AS distribution_count,
                 o.deposit_at,
@@ -10263,7 +10263,7 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
 
         sql = f"""
             SELECT COUNT(*)
-            FROM bonus_db.orders_distribution_bv AS a
+            FROM nexus_production.orders_distribution_bv AS a
             {where_sql}
         """
 
@@ -10286,7 +10286,7 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
                 a.usage_fee,
                 a.created_at,
                 a.updated_at
-            FROM bonus_db.orders_distribution_bv AS a
+            FROM nexus_production.orders_distribution_bv AS a
             {where_sql}
             ORDER BY a.id DESC
             LIMIT %s OFFSET %s
@@ -10627,7 +10627,7 @@ class ApiUsersBvView(KeysetPaginationMixin, generic.TemplateView):
 
         sql = f"""
             SELECT COUNT(*)
-            FROM bonus_db.api_users_bv AS a
+            FROM nexus_production.api_users_bv AS a
             {where_sql}
         """
 
@@ -10657,7 +10657,7 @@ class ApiUsersBvView(KeysetPaginationMixin, generic.TemplateView):
                 a.choice_type,
                 a.created_by,
                 a.post_by
-            FROM bonus_db.api_users_bv AS a
+            FROM nexus_production.api_users_bv AS a
             {where_sql}
             ORDER BY a.id DESC
             LIMIT %s OFFSET %s
@@ -12589,7 +12589,7 @@ class CoolingOffView(generic.TemplateView):
                 o.order_type,
                 p.bv
             FROM bonus_db.cooling_off c
-            LEFT JOIN bonus_db.orders o
+            LEFT JOIN nexus_production.orders o
                 ON c.order_code = o.order_code
             LEFT JOIN (
                 SELECT
@@ -12644,7 +12644,7 @@ class CoolingOffView(generic.TemplateView):
                 total_bv,
                 deposit_at,
                 order_at
-            FROM bonus_db.orders
+            FROM nexus_production.orders
             WHERE order_code = %s
         """
 
@@ -12671,7 +12671,7 @@ class CoolingOffView(generic.TemplateView):
     def _restore_purchase_info_order_type(self, cursor, order_code):
         sql = """
             UPDATE bonus_db.purchase_info_list p
-            JOIN bonus_db.orders o
+            JOIN nexus_production.orders o
               ON p.order_code = o.order_code
             SET
                 p.order_type = o.order_type,

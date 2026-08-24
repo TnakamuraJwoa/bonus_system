@@ -224,7 +224,7 @@ placement_tree AS (
 
     FROM active_three_star_dia AS a
 
-    JOIN bonus_db.users AS u
+    JOIN nexus_production.users AS u
       ON a.jwoa_code = u.introducer_code
 
     UNION ALL
@@ -263,7 +263,7 @@ placement_tree AS (
 
     FROM placement_tree AS a
 
-    JOIN bonus_db.users AS u
+    JOIN nexus_production.users AS u
       ON a.down_jwoa_code = u.introducer_code
 ),
 
@@ -324,7 +324,7 @@ select
  IFNULL(b.sum_bv, 0) as bv
 from down_users_bv as a
 
-JOIN bonus_db.users AS u
+JOIN nexus_production.users AS u
 on a.down_code = u.introducer_code
 
 left join title_bonus_target_purchase_list as b
