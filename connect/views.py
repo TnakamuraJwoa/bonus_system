@@ -5958,6 +5958,16 @@ LIMIT %s OFFSET %s
     def _fetch_tree_search_path(self, q_jwoa_code: str, tree_search: str):
         return fetch_tree_search_path(q_jwoa_code, tree_search)
 
+    def _fetch_last_recreated_at(self):
+        # 再作成は全削除＋一括INSERTのため、MAX(created_at) が最終再作成日時になる。
+        sql = "SELECT MAX(created_at) FROM bonus_db.C_users_placement_tree_cache"
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql)
+            row = cursor.fetchone()
+
+        return row[0] if row else None
+
     def _rebuild_cache(self) -> int:
         delete_sql = "DELETE FROM bonus_db.C_users_placement_tree_cache"
 
@@ -6116,6 +6126,7 @@ LIMIT %s OFFSET %s
         ctx["q_placement_rank"] = q_placement_rank
         ctx["q_rank"] = q_rank
         ctx["tree_search"] = tree_search
+        ctx["last_recreated_at"] = self._fetch_last_recreated_at()
 
         ctx["view_mode"] = view_mode
         ctx["downline_fullscreen"] = downline_fullscreen
@@ -8341,6 +8352,10 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         q_placement: str = "",
         q_status: str = "",
         q_rank: str = "",
+        q_interim_from: str = "",
+        q_interim_to: str = "",
+        q_activated_from: str = "",
+        q_activated_to: str = "",
     ):
         where = []
         params = []
@@ -8379,6 +8394,22 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         if q_rank:
             where.append("u.rank = %s")
             params.append(q_rank)
+
+        if q_interim_from:
+            where.append("u.interim_at >= %s")
+            params.append(q_interim_from)
+
+        if q_interim_to:
+            where.append("u.interim_at < DATE_ADD(%s, INTERVAL 1 DAY)")
+            params.append(q_interim_to)
+
+        if q_activated_from:
+            where.append("u.activated_at >= %s")
+            params.append(q_activated_from)
+
+        if q_activated_to:
+            where.append("u.activated_at < DATE_ADD(%s, INTERVAL 1 DAY)")
+            params.append(q_activated_to)
 
         where_sql = "WHERE " + " AND ".join(where) if where else ""
 
@@ -8429,6 +8460,10 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         q_placement: str = "",
         q_status: str = "",
         q_rank: str = "",
+        q_interim_from: str = "",
+        q_interim_to: str = "",
+        q_activated_from: str = "",
+        q_activated_to: str = "",
         active_year=None,
         active_month=None,
         active_start_date=None,
@@ -8444,6 +8479,10 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             q_placement=q_placement,
             q_status=q_status,
             q_rank=q_rank,
+            q_interim_from=q_interim_from,
+            q_interim_to=q_interim_to,
+            q_activated_from=q_activated_from,
+            q_activated_to=q_activated_to,
         )
         active_params = []
         active_join_sql = ""
@@ -8487,6 +8526,10 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         q_placement: str = "",
         q_status: str = "",
         q_rank: str = "",
+        q_interim_from: str = "",
+        q_interim_to: str = "",
+        q_activated_from: str = "",
+        q_activated_to: str = "",
         active_year=None,
         active_month=None,
         active_start_date=None,
@@ -8503,6 +8546,10 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             q_placement=q_placement,
             q_status=q_status,
             q_rank=q_rank,
+            q_interim_from=q_interim_from,
+            q_interim_to=q_interim_to,
+            q_activated_from=q_activated_from,
+            q_activated_to=q_activated_to,
         )
 
         active_params = []
@@ -8556,7 +8603,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             FROM nexus_production.users u
             {active_join_sql}
             {where_sql}
-            ORDER BY u.status_code, u.jmoa_code
+            ORDER BY u.created_at DESC, u.id DESC
         """
 
         return sql, active_params + params
@@ -8603,6 +8650,10 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         q_placement = (self.request.GET.get("q_placement") or "").strip()
         q_status = (self.request.GET.get("q_status") or "").strip()
         q_rank = (self.request.GET.get("q_rank") or "").strip()
+        q_interim_from = (self.request.GET.get("q_interim_from") or "").strip()
+        q_interim_to = (self.request.GET.get("q_interim_to") or "").strip()
+        q_activated_from = (self.request.GET.get("q_activated_from") or "").strip()
+        q_activated_to = (self.request.GET.get("q_activated_to") or "").strip()
         q_active_kibetu = (self.request.GET.get("q_active_kibetu") or "").strip()
         q_active_result = (self.request.GET.get("q_active_result") or "").strip()
         if not q_active_kibetu or q_active_result not in ("active", "inactive"):
@@ -8625,6 +8676,10 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             q_placement=q_placement,
             q_status=q_status,
             q_rank=q_rank,
+            q_interim_from=q_interim_from,
+            q_interim_to=q_interim_to,
+            q_activated_from=q_activated_from,
+            q_activated_to=q_activated_to,
             active_year=active_year,
             active_month=active_month,
             active_start_date=active_start_date,
@@ -8644,6 +8699,10 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             q_placement=q_placement,
             q_status=q_status,
             q_rank=q_rank,
+            q_interim_from=q_interim_from,
+            q_interim_to=q_interim_to,
+            q_activated_from=q_activated_from,
+            q_activated_to=q_activated_to,
             active_year=active_year,
             active_month=active_month,
             active_start_date=active_start_date,
@@ -8660,6 +8719,10 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         ctx["q_placement"] = q_placement
         ctx["q_status"] = q_status
         ctx["q_rank"] = q_rank
+        ctx["q_interim_from"] = q_interim_from
+        ctx["q_interim_to"] = q_interim_to
+        ctx["q_activated_from"] = q_activated_from
+        ctx["q_activated_to"] = q_activated_to
         ctx["q_active_kibetu"] = q_active_kibetu
         ctx["q_active_result"] = q_active_result
         ctx["selected_active_period"] = selected_active_period
@@ -8697,6 +8760,18 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
 
         if q_rank:
             base_params["q_rank"] = q_rank
+
+        if q_interim_from:
+            base_params["q_interim_from"] = q_interim_from
+
+        if q_interim_to:
+            base_params["q_interim_to"] = q_interim_to
+
+        if q_activated_from:
+            base_params["q_activated_from"] = q_activated_from
+
+        if q_activated_to:
+            base_params["q_activated_to"] = q_activated_to
 
         if q_active_kibetu:
             base_params["q_active_kibetu"] = q_active_kibetu
@@ -8855,6 +8930,10 @@ class UsersExportView(UsersView):
             "q_placement": (request.GET.get("q_placement") or "").strip(),
             "q_status": (request.GET.get("q_status") or "").strip(),
             "q_rank": (request.GET.get("q_rank") or "").strip(),
+            "q_interim_from": (request.GET.get("q_interim_from") or "").strip(),
+            "q_interim_to": (request.GET.get("q_interim_to") or "").strip(),
+            "q_activated_from": (request.GET.get("q_activated_from") or "").strip(),
+            "q_activated_to": (request.GET.get("q_activated_to") or "").strip(),
             "active_year": active_year,
             "active_month": active_month,
             "active_start_date": active_start_date,

@@ -96,6 +96,10 @@
     .users-search-period {
       width: 190px;
     }
+
+    .users-search-date {
+      width: 150px;
+    }
   </style>
 {% endblock %}
 
@@ -216,6 +220,38 @@
                   </select>
                 </div>
 
+                <div class="mr-2 mb-2 users-search-date">
+                  <label class="form-label mb-0 small text-muted">仮登録日（FROM）</label>
+                  <input type="date"
+                         name="q_interim_from"
+                         class="form-control"
+                         value="{{ q_interim_from|default:'' }}">
+                </div>
+
+                <div class="mr-2 mb-2 users-search-date">
+                  <label class="form-label mb-0 small text-muted">仮登録日（TO）</label>
+                  <input type="date"
+                         name="q_interim_to"
+                         class="form-control"
+                         value="{{ q_interim_to|default:'' }}">
+                </div>
+
+                <div class="mr-2 mb-2 users-search-date">
+                  <label class="form-label mb-0 small text-muted">本登録日（FROM）</label>
+                  <input type="date"
+                         name="q_activated_from"
+                         class="form-control"
+                         value="{{ q_activated_from|default:'' }}">
+                </div>
+
+                <div class="mr-2 mb-2 users-search-date">
+                  <label class="form-label mb-0 small text-muted">本登録日（TO）</label>
+                  <input type="date"
+                         name="q_activated_to"
+                         class="form-control"
+                         value="{{ q_activated_to|default:'' }}">
+                </div>
+
                 <div class="mr-2 mb-2 users-search-period">
                   <label class="form-label mb-0 small text-muted">アクティブ確認</label>
                   <select name="q_active_kibetu" class="form-control">
@@ -252,7 +288,7 @@
             </form>
 
             <div class="users-filter-status bonus-calc-selection-status small">
-              {% if q_jpid or q_name or q_name_kana or q_introducer or q_placement or q_status or q_rank or q_active_kibetu or q_active_result %}
+              {% if q_jpid or q_name or q_name_kana or q_introducer or q_placement or q_status or q_rank or q_interim_from or q_interim_to or q_activated_from or q_activated_to or q_active_kibetu or q_active_result %}
                 絞り込み中：
 
                 {% if q_jpid %}
@@ -281,6 +317,18 @@
 
                 {% if q_rank %}
                   <span class="badge bg-dark">ランク={{ q_rank }}</span>
+                {% endif %}
+
+                {% if q_interim_from or q_interim_to %}
+                  <span class="badge bg-secondary">
+                    仮登録日={{ q_interim_from|default:'' }}〜{{ q_interim_to|default:'' }}
+                  </span>
+                {% endif %}
+
+                {% if q_activated_from or q_activated_to %}
+                  <span class="badge bg-secondary">
+                    本登録日={{ q_activated_from|default:'' }}〜{{ q_activated_to|default:'' }}
+                  </span>
                 {% endif %}
 
                 {% if q_active_kibetu %}

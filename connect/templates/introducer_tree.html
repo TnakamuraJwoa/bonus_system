@@ -380,34 +380,39 @@
                 Tree
               </a>
             </div>
-            {% if view_mode == "tree" and not tree_unavailable_reason %}
-              <div class="d-flex gap-2 flex-wrap align-items-center">
-                {% if tree_node_count %}
-                  <div class="text-muted small">表示ノード数：{{ tree_node_count }} 件</div>
-                {% endif %}
-                <div class="placement-tree-search">
-                  <input type="text"
-                         class="form-control form-control-sm"
-                         data-tree-search-input
-                         value="{{ tree_search|default:'' }}"
-                         placeholder="下位会員コード・会員名">
-                  <button type="button"
-                          class="btn btn-sm btn-outline-primary"
-                          data-tree-search-button>
-                    検索
-                  </button>
-                  <button type="button"
-                          class="btn btn-sm btn-outline-secondary"
-                          data-tree-path-button>
-                    経路表示
-                  </button>
-                  <span class="placement-tree-search__message text-muted" data-tree-search-message></span>
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+              <span class="text-muted small">
+                最終再作成：{% if last_recreated_at %}{{ last_recreated_at|date:"Y年n月j日 G:i" }}{% else %}-{% endif %}
+              </span>
+              {% if view_mode == "tree" and not tree_unavailable_reason %}
+                <div class="d-flex gap-2 flex-wrap align-items-center">
+                  {% if tree_node_count %}
+                    <div class="text-muted small">表示ノード数：{{ tree_node_count }} 件</div>
+                  {% endif %}
+                  <div class="placement-tree-search">
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           data-tree-search-input
+                           value="{{ tree_search|default:'' }}"
+                           placeholder="下位会員コード・会員名">
+                    <button type="button"
+                            class="btn btn-sm btn-outline-primary"
+                            data-tree-search-button>
+                      検索
+                    </button>
+                    <button type="button"
+                            class="btn btn-sm btn-outline-secondary"
+                            data-tree-path-button>
+                      経路表示
+                    </button>
+                    <span class="placement-tree-search__message text-muted" data-tree-search-message></span>
+                  </div>
+                  <button type="button" class="btn btn-sm btn-outline-secondary js-tree-collapse-all">全て閉じる</button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary js-tree-expand-all">全て開く</button>
+                  <button type="button" class="btn btn-sm btn-outline-primary js-tree-fullscreen">全画面表示</button>
                 </div>
-                <button type="button" class="btn btn-sm btn-outline-secondary js-tree-collapse-all">全て閉じる</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary js-tree-expand-all">全て開く</button>
-                <button type="button" class="btn btn-sm btn-outline-primary js-tree-fullscreen">全画面表示</button>
-              </div>
-            {% endif %}
+              {% endif %}
+            </div>
           </div>
 
           {% if view_mode == "tree" %}
