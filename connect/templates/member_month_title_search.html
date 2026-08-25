@@ -2,7 +2,7 @@
 {% load static custom_filters %}
 
 {% block head %}
-  <link href="{% static 'css/common.css' %}" rel="stylesheet">
+  <link href="{% static 'css/common.css' %}?v=54" rel="stylesheet">
 {% endblock %}
 
 {% block contents %}
@@ -137,29 +137,29 @@
               <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
                 <thead class="table-light">
                   <tr>
-                    <th class="text-center">ID</th>
-                    <th class="text-center">期別</th>
-                    <th class="text-center">会員コード</th>
-                    <th class="text-center">会員名</th>
-                    <th class="text-center">収入ラインBV</th>
-                    <th class="text-center">基本ラインBV</th>
-                    <th class="text-center">タイトル</th>
-                    <th class="text-center">作成日時</th>
-                    <th class="text-center">更新日時</th>
+                    {% sortable_th "kibetu" "期別" %}
+                    {% sortable_th "jwoa_code" "会員コード" %}
+                    {% sortable_th "jwoa_name" "会員名" %}
+                    {% sortable_th "income_line_bv" "収入ラインBV" %}
+                    {% sortable_th "basic_line_bv" "基本ラインBV" %}
+                    {% sortable_th "title_name" "タイトル" %}
+                    {% sortable_th "created_at" "作成日時" %}
+                    {% sortable_th "updated_at" "更新日時" %}
                   </tr>
                 </thead>
                 <tbody>
                   {% for r in rows %}
                     <tr>
-                      <td class="text-end">{{ r.id }}</td>
                       <td>{{ r.kibetu }}</td>
                       <td>{{ r.jwoa_code }}</td>
                       <td>{{ r.jwoa_name }}</td>
                       <td class="text-end">{{ r.income_line_bv }}</td>
                       <td class="text-end">{{ r.basic_line_bv }}</td>
-                      <td>{{ r.title_name }}</td>
-                      <td>{{ r.created_at|date:"Y-m-d H:i:s" }}</td>
-                      <td>{{ r.updated_at|date:"Y-m-d H:i:s" }}</td>
+                      <td class="text-center">
+                        <span class="badge {{ r.title_id|title_tier_badge_class }}">{{ r.title_name }}</span>
+                      </td>
+                      <td>{{ r.created_at|jst_datetime|date:"Y-m-d H:i:s" }}</td>
+                      <td>{{ r.updated_at|jst_datetime|date:"Y-m-d H:i:s" }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

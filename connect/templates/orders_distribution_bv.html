@@ -1,5 +1,5 @@
 ﻿{% extends 'base.html' %}
-{% load static %}
+{% load static custom_filters %}
 {% load humanize %}
 
 {% block head %}
@@ -75,13 +75,49 @@
 
             <div>
               <label class="form-label mb-0 small text-muted">
-                JWOA会員ID
+                購入者_会員ID
+              </label>
+
+              <input type="text"
+                     name="q_purchaser_jwoa_code"
+                     class="form-control"
+                     value="{{ q_purchaser_jwoa_code|default:'' }}">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">
+                振分会員ID
               </label>
 
               <input type="text"
                      name="q_jwoa_code"
                      class="form-control"
                      value="{{ q_jwoa_code|default:'' }}">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">
+                BV反映FLG
+              </label>
+
+              <select name="q_bv_actived_flg" class="form-select">
+                <option value=""
+                  {% if not q_bv_actived_flg %}selected{% endif %}>
+                  全て
+                </option>
+                <option value="0"
+                  {% if q_bv_actived_flg == "0" %}selected{% endif %}>
+                  0：未反映
+                </option>
+                <option value="1"
+                  {% if q_bv_actived_flg == "1" %}selected{% endif %}>
+                  1：反映済
+                </option>
+                <option value="3"
+                  {% if q_bv_actived_flg == "3" %}selected{% endif %}>
+                  3：反映無効
+                </option>
+              </select>
             </div>
 
             <div>
@@ -172,14 +208,14 @@
                 <thead class="table-light">
 
                   <tr>
-                    <th>ID</th>
-                    <th>注文番号</th>
-                    <th>会員ID</th>
-                    <th>JWOA会員ID</th>
-                    <th>振分BV</th>
-                    <th>システム使用料</th>
-                    <th>作成日時</th>
-                    <th>更新日時</th>
+                    {% sortable_th "order_code" "注文番号" %}
+                    {% sortable_th "purchaser_jwoa_code" "購入者_会員ID" %}
+                    {% sortable_th "jwoa_code" "振分会員ID" %}
+                    {% sortable_th "distribution_bv" "振分BV" %}
+                    {% sortable_th "usage_fee" "システム使用料" %}
+                    {% sortable_th "bv_actived_flg" "BV反映FLG" %}
+                    {% sortable_th "created_at" "作成日時" %}
+                    {% sortable_th "updated_at" "更新日時" %}
                   </tr>
 
                 </thead>
@@ -190,16 +226,12 @@
 
                     <tr>
 
-                      <td class="text-end">
-                        {{ r.id }}
-                      </td>
-
                       <td>
                         {{ r.order_code }}
                       </td>
 
-                      <td class="text-end">
-                        {{ r.user_id }}
+                      <td>
+                        {{ r.purchaser_jwoa_code }}
                       </td>
 
                       <td>
@@ -214,12 +246,18 @@
                         {{ r.usage_fee|intcomma }}
                       </td>
 
-                      <td>
-                        {{ r.created_at }}
+                      <td class="text-center">
+                        <span class="order-status-badge {{ r.bv_actived_flg|bv_actived_flg_badge_class }}">
+                          {{ r.bv_actived_flg|bv_actived_flg_label }}
+                        </span>
                       </td>
 
                       <td>
-                        {{ r.updated_at }}
+                        {{ r.created_at|jst_datetime }}
+                      </td>
+
+                      <td>
+                        {{ r.updated_at|jst_datetime }}
                       </td>
 
                     </tr>

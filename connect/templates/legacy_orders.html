@@ -191,17 +191,17 @@
 
                 <thead class="table-light">
                   <tr>
-                    <th>注文番号</th>
-                    <th>注文状況</th>
-                    <th>注文区分</th>
-                    <th>注文年</th>
-                    <th>注文月</th>
-                    <th>会員ID</th>
-                    <th>注文者_氏名</th>
-                    <th>購入合計金額</th>
-                    <th>合計BV</th>
-                    <th>注文日</th>
-                    <th>作成日時</th>
+                    {% sortable_th "order_code" "注文番号" %}
+                    {% sortable_th "order_status" "注文状況" %}
+                    {% sortable_th "order_type" "注文区分" %}
+                    {% sortable_th "order_year" "注文年" %}
+                    {% sortable_th "order_month" "注文月" %}
+                    {% sortable_th "member_no" "会員ID" %}
+                    {% sortable_th "order_name" "注文者_氏名" %}
+                    {% sortable_th "total_price" "購入合計金額" %}
+                    {% sortable_th "total_bv" "合計BV" %}
+                    {% sortable_th "order_at" "注文日" %}
+                    {% sortable_th "created_at" "作成日時" %}
                   </tr>
                 </thead>
 
@@ -209,7 +209,11 @@
                   {% for r in rows %}
                   <tr>
                     <td>{{ r.order_code }}</td>
-                    <td class="text-center">{{ r.order_status_label }}</td>
+                    <td class="text-center">
+                      <span class="order-status-badge {{ r.order_status_badge_class }}">
+                        {{ r.order_status_label }}
+                      </span>
+                    </td>
                     <td class="text-center">{{ r.order_type_label }}</td>
                     <td>{{ r.order_year }}</td>
                     <td>{{ r.order_month }}</td>
@@ -217,8 +221,8 @@
                     <td>{{ r.order_name }}</td>
                     <td class="text-end">{{ r.total_price|floatformat:0|intcomma }}</td>
                     <td class="text-end">{{ r.total_bv|floatformat:"-2"|intcomma }}</td>
-                    <td>{{ r.order_at|default:"" }}</td>
-                    <td>{{ r.created_at }}</td>
+                    <td>{{ r.order_at|jst_datetime|default:"" }}</td>
+                    <td>{{ r.created_at|jst_datetime }}</td>
                   </tr>
                   {% endfor %}
                 </tbody>

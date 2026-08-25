@@ -76,7 +76,7 @@
             </div>
 
             <div style="width: 169px;">
-              <label class="form-label mb-0 small text-muted">会員ID（注文者/振分先）</label>
+              <label class="form-label mb-0 small text-muted">注文者_会員ID（振分先含む）</label>
               <input type="text" name="q_jwoa_code" class="form-control"
                      value="{{ q_jwoa_code|default:'' }}">
             </div>
@@ -244,6 +244,16 @@
             </div>
 
             <div>
+              <label class="form-label mb-0 small text-muted">BV反映FLG</label>
+              <select name="q_bv_actived_flg" class="form-select">
+                <option value="" {% if not q_bv_actived_flg %}selected{% endif %}>全て</option>
+                <option value="0" {% if q_bv_actived_flg == "0" %}selected{% endif %}>0：未反映</option>
+                <option value="1" {% if q_bv_actived_flg == "1" %}selected{% endif %}>1：反映済</option>
+                <option value="3" {% if q_bv_actived_flg == "3" %}selected{% endif %}>3：反映無効</option>
+              </select>
+            </div>
+
+            <div>
               <label class="form-label mb-0 small text-muted">表示件数</label>
               <select name="per_page" class="form-select">
                 <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
@@ -285,27 +295,26 @@
 
                 <thead class="table-light">
                   <tr>
-                    <th>ID</th>
-                    <th>注文番号</th>
-                    <th>注文状況</th>
-                    <th>注文区分</th>
-                    <th>注文年</th>
-                    <th>注文月</th>
-                    <th>会員ID</th>
-                    <th>注文者_氏名</th>
-                    <th>購入合計金額</th>
-                    <th>合計BV</th>
-                    <th>BV振分先</th>
-                    <th>入金日</th>
-                    <th>作成日時</th>
+                    {% sortable_th "order_code" "注文番号" %}
+                    {% sortable_th "order_status" "注文状況" %}
+                    {% sortable_th "order_type" "注文区分" %}
+                    {% sortable_th "jwoa_code" "注文者_会員ID" %}
+                    {% sortable_th "order_name" "注文者_氏名" %}
+                    {% sortable_th "total_price" "購入合計金額" %}
+                    {% sortable_th "total_bv" "合計BV" %}
+                    {% sortable_th "bv_actived_flg" "BV反映FLG" %}
+                    {% sortable_th "distribution_count" "BV振分先" %}
+                    {% sortable_th "deposit_at" "入金日" %}
+                    {% sortable_th "created_at" "作成日時" %}
                     <th>詳細</th>
                   </tr>
                 </thead>
 
                 <tbody>
+                  {% url 'connect:orders_distribution_bv' as distribution_bv_url %}
+                  {% with return_to=request.get_full_path|urlencode %}
                   {% for r in rows %}
                   <tr>
-                    <td class="text-end">{{ r.id }}</td>
                     <td>{{ r.order_code }}</td>
                     <td class="text-center">
 
@@ -336,8 +345,6 @@
 
                     </td>
 
-                    <td>{{ r.order_year }}</td>
-                    <td>{{ r.order_month }}</td>
                     <td class="{% if r.order_member_matched %}orders-member-match{% endif %}">
                       {% if r.order_member_matched %}
                         <span class="orders-member-match-badge">一致</span>
@@ -349,9 +356,14 @@
                       {{ r.total_price|intcomma }}
                     </td>
                     <td class="text-end">{{ r.total_bv }}</td>
+                    <td class="text-center">
+                      <span class="order-status-badge {{ r.bv_actived_flg|bv_actived_flg_badge_class }}">
+                        {{ r.bv_actived_flg|bv_actived_flg_label }}
+                      </span>
+                    </td>
                     <td class="orders-distribution-cell">
                       {% if r.distribution_count %}
-                        <a href="{% url 'connect:orders_distribution_bv' %}?q_order_code={{ r.order_code|urlencode }}&return_to={{ request.get_full_path|urlencode }}"
+                        <a href="{{ distribution_bv_url }}?q_order_code={{ r.order_code|urlencode }}&return_to={{ return_to }}"
                            class="btn btn-sm btn-outline-primary">
                           振分 {{ r.distribution_count }}件
                         </a>
@@ -359,8 +371,8 @@
                         <span class="text-muted">なし</span>
                       {% endif %}
                     </td>
-                    <td>{{ r.deposit_at|default:"" }}</td>
-                    <td>{{ r.created_at }}</td>
+                    <td>{{ r.deposit_at|jst_datetime|default:"" }}</td>
+                    <td>{{ r.created_at|jst_datetime }}</td>
                     <td class="text-center">
                       <a href="{% url 'connect:order_detail' r.id %}"
                          class="btn btn-sm btn-outline-primary">
@@ -369,6 +381,7 @@
                     </td>
                   </tr>
                   {% endfor %}
+                  {% endwith %}
                 </tbody>
 
               </table>

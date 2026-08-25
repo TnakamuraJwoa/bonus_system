@@ -7,7 +7,12 @@ from django.http import HttpResponse
 from django.views import generic
 import openpyxl
 
-from connect.views import KeysetPaginationMixin
+from connect.templatetags.custom_filters import jst_datetime
+from connect.views import (
+    KeysetPaginationMixin,
+    add_sort_params,
+    get_bonus_sort_context,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -22,6 +27,24 @@ class ActiveUserSearchView(KeysetPaginationMixin, generic.TemplateView):
         ("1", "アクティブ"),
         ("0", "非アクティブ"),
     )
+    SORT_COLUMNS = {
+        "id": "a.id",
+        "jwoa_code": "a.jwoa_code",
+        "send_bv_name": "u.send_bv_name",
+        "year": "a.year",
+        "month": "a.month",
+        "active_month": "(a.year * 100 + a.month)",
+        "active_status": "a.active_status",
+        "created_at": "a.created_at",
+    }
+
+    def _get_sort_context(self):
+        return get_bonus_sort_context(
+            self.request,
+            self.SORT_COLUMNS,
+            default_sort="active_month",
+            default_direction="desc",
+        )
 
     def _build_where(
         self,
@@ -87,6 +110,7 @@ class ActiveUserSearchView(KeysetPaginationMixin, generic.TemplateView):
         q_year="",
         q_month="",
         q_active_status="",
+        order_sql="",
         limit=200,
         offset=0,
     ):
@@ -111,7 +135,7 @@ class ActiveUserSearchView(KeysetPaginationMixin, generic.TemplateView):
             LEFT JOIN nexus_production.users u
                 ON a.jwoa_code = u.jmoa_code
             {where_sql}
-            ORDER BY a.year DESC, a.month DESC, a.jwoa_code
+            ORDER BY {order_sql or "(a.year * 100 + a.month) DESC"}, a.jwoa_code ASC
             LIMIT %s OFFSET %s
         """
         params.extend([limit, offset])
@@ -138,6 +162,9 @@ class ActiveUserSearchView(KeysetPaginationMixin, generic.TemplateView):
         ctx["q_active_status"] = q_active_status
         ctx["active_status_choices"] = self.ACTIVE_STATUS_CHOICES
 
+        sort_ctx = self._get_sort_context()
+        ctx.update(sort_ctx)
+
         try:
             total_count = self._count_rows(
                 q_jwoa_code=q_jwoa_code,
@@ -163,6 +190,7 @@ class ActiveUserSearchView(KeysetPaginationMixin, generic.TemplateView):
                 q_year=q_year,
                 q_month=q_month,
                 q_active_status=q_active_status,
+                order_sql=sort_ctx["order_sql"],
                 limit=per_page,
                 offset=offset,
             )
@@ -175,6 +203,7 @@ class ActiveUserSearchView(KeysetPaginationMixin, generic.TemplateView):
             "q_active_status": q_active_status,
             "per_page": per_page,
         }
+        add_sort_params(base_params, sort_ctx)
 
         return self.set_page_context(
             ctx=ctx,
@@ -202,6 +231,7 @@ class ActiveUserSearchExportView(ActiveUserSearchView):
                 q_year=q_year,
                 q_month=q_month,
                 q_active_status=q_active_status,
+                order_sql=self._get_sort_context()["order_sql"],
                 limit=1000000,
                 offset=0,
             )
@@ -227,6 +257,9 @@ class ActiveUserSearchExportView(ActiveUserSearchView):
             status_label = "アクティブ" if active_status == 1 else "非アクティブ"
             year = row.get("year")
             month = row.get("month")
+            created_at = jst_datetime(row.get("created_at"))
+            if getattr(created_at, "tzinfo", None) is not None:
+                created_at = created_at.replace(tzinfo=None)
             ws.append([
                 row.get("id"),
                 row.get("jwoa_code"),
@@ -235,7 +268,7 @@ class ActiveUserSearchExportView(ActiveUserSearchView):
                 month,
                 f"{year}/{month}",
                 status_label,
-                row.get("created_at"),
+                created_at,
             ])
 
         response = HttpResponse(

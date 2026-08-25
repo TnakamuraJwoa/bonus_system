@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static humanize %}
+{% load static humanize custom_filters %}
 
 {% block head %}
     <link href="{% static 'css/common.css' %}?v=51" rel="stylesheet">
@@ -223,7 +223,7 @@
                        title="クリックで全文を表示">{{ row.note|truncatechars:25 }}</a>
                     {% endif %}
                   </td>
-                  <td>{{ row.created_at|date:"Y/m/d H:i:s" }}</td>
+                  <td>{{ row.created_at|jst_datetime|date:"Y/m/d H:i:s" }}</td>
 
                   {% if user_access.can_update or user_access.can_delete %}
                   <td class="text-center">

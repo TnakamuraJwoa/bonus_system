@@ -3,10 +3,13 @@ from django.shortcuts import render
 from django.contrib.auth.views import LoginView
 from allauth.account.forms import LoginForm
 import csv
+import hashlib
 import io
+import json
 import logging
 import time
 from decimal import Decimal, InvalidOperation
+from django.core.cache import cache
 from django.views import generic
 from django.contrib import messages
 from .forms import InquiryForm
@@ -64,8 +67,16 @@ from accounts.access import get_user_access
 from connect.audit import fetch_one_dict, record_change_audit
 from connect.bonus_help import list_bonus_help, save_bonus_help
 from connect.sql.placement_tree_sql import PLACEMENT_TREE_REBUILD_CACHE_SQL
+from connect.templatetags.custom_filters import jst_datetime
 
 logger = logging.getLogger(__name__)
+
+
+def _excel_jst_datetime(value):
+    value = jst_datetime(value)
+    if isinstance(value, datetime) and value.tzinfo is not None:
+        return value.replace(tzinfo=None)
+    return value
 
 
 def insert_bonus_register_history(bonus_name, kibetu, username, comment_text):
@@ -826,6 +837,13 @@ def get_bonus_sort_context(request, allowed_sort_columns, default_sort="id", def
         "next_direction": next_direction,
         "order_sql": f"{order_column} {order_direction}",
     }
+
+
+def add_sort_params(base_params, sort_ctx):
+    """ページ送りリンクに現在の並び替え条件を引き継ぐ。"""
+    base_params["sort"] = sort_ctx["sort"]
+    base_params["direction"] = sort_ctx["direction"]
+    return base_params
 
 
 def apply_like_filters(sql, params, request, field_map):
@@ -1994,6 +2012,35 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
 
     DEFAULT_PER_PAGE = 100
     MAX_PER_PAGE = 500
+    BV_ACTIVED_FLG_LABELS = {
+        0: "未反映",
+        1: "反映済",
+        3: "反映無効",
+    }
+    SORT_COLUMNS = {
+        "register_year": "register_year",
+        "register_month": "register_month",
+        "order_year": "order_year",
+        "order_month": "order_month",
+        "order_code": "order_code",
+        "order_type": "order_type",
+        "jwoa_code": "jwoa_code",
+        "send_bv_name": "send_bv_name",
+        "bonus_payment_date": "bonus_payment_date",
+        "bv": "bv",
+        "bv_actived_flg": "bv_actived_flg",
+        "deposit_at": "deposit_at",
+        "order_at": "order_at",
+        "created_at": "created_at",
+    }
+
+    def _get_sort_context(self):
+        return get_bonus_sort_context(
+            self.request,
+            self.SORT_COLUMNS,
+            default_sort="bonus_payment_date",
+            default_direction="desc",
+        )
 
     def _build_where(
         self,
@@ -2054,6 +2101,16 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
             cursor.execute(sql)
             return [row[0] for row in cursor.fetchall()]
 
+    def _fetch_last_created_at(self):
+        sql = "SELECT MAX(created_at) FROM bonus_db.purchase_info_list"
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql)
+            row = cursor.fetchone()
+
+        last_created_at = row[0] if row else None
+        return jst_datetime(last_created_at)
+
     def _fetch_rows(
         self,
         year=None,
@@ -2064,6 +2121,7 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
         q_order_types=None,
         q_bonus_date_from: str = "",
         q_bonus_date_to: str = "",
+        order_sql: str = "",
         limit: int = 100,
         offset: int = 0,
     ):
@@ -2078,6 +2136,9 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
             q_bonus_date_to=q_bonus_date_to,
         )
 
+        # purchase_info_list.order_code は utf8mb4、orders.order_code は utf8mb3。
+        # CONVERT を挟まないと照合順序の変換で orders 側のインデックスが使えず、
+        # 1ページ表示に10秒かかる。
         sql = f"""
             SELECT
                 id,
@@ -2094,10 +2155,18 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
                 register_year,
                 register_month,
                 order_year,
-                order_month
+                order_month,
+                (
+                    SELECT o.bv_actived_flg
+                    FROM nexus_production.orders AS o
+                    WHERE o.order_code = CONVERT(
+                        bonus_db.purchase_info_list.order_code USING utf8mb3
+                    )
+                    LIMIT 1
+                ) AS bv_actived_flg
             FROM bonus_db.purchase_info_list
             {where_sql}
-            ORDER BY bonus_payment_date DESC, id DESC
+            ORDER BY {order_sql or "bonus_payment_date DESC"}, id DESC
             LIMIT %s OFFSET %s
         """
 
@@ -2212,6 +2281,7 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
 
         ctx["month_choices"] = self._get_month_choices()
         ctx["period_choices"] = self._get_period_choices()
+        ctx["last_created_at"] = self._fetch_last_created_at()
 
         ctx["selected_month"] = selected_month
         ctx["q_kibetu"] = q_kibetu
@@ -2295,6 +2365,9 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
 
         offset = (page - 1) * per_page
 
+        sort_ctx = self._get_sort_context()
+        ctx.update(sort_ctx)
+
         rows = self._fetch_rows(
             year=year,
             month=month,
@@ -2304,6 +2377,7 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
             q_order_types=q_order_types,
             q_bonus_date_from=effective_bonus_date_from,
             q_bonus_date_to=effective_bonus_date_to,
+            order_sql=sort_ctx["order_sql"],
             limit=per_page,
             offset=offset,
         )
@@ -2326,6 +2400,8 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
             base_params["q_bonus_date_to"] = q_bonus_date_to
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
+
+        add_sort_params(base_params, sort_ctx)
 
         ctx = self.set_page_context(
             ctx=ctx,
@@ -2835,6 +2911,30 @@ class TitleUserView(KeysetPaginationMixin, generic.TemplateView):
     DEFAULT_PER_PAGE = 200
     MAX_PER_PAGE = 500
     EXPORT_FETCH_SIZE = 5000
+    SORT_COLUMNS = {
+        "jmoa_code": "ut.jmoa_code",
+        "jwoa_name": "u.send_bv_name",
+        "title_name": "ut.title_id",
+        "update_date": "ut.update_date",
+    }
+
+    # user_titles.jmoa_code は utf8mb4_bin、users.jmoa_code は utf8mb3_bin。
+    # そのまま結合すると照合順序の変換で users 側のインデックスが使えず、
+    # 3万件×7万件の総当たりになって画面が返ってこない。
+    # COLLATE まで揃えるとバイナリ比較のまま eq_ref で引ける。
+    MEMBER_JOIN_SQL = """
+LEFT JOIN nexus_production.users u
+  ON CONVERT(ut.jmoa_code USING utf8mb3) COLLATE utf8mb3_bin = u.jmoa_code
+"""
+
+    def _get_sort_context(self):
+        title_id = (self.request.GET.get("title_id") or "").strip()
+        return get_bonus_sort_context(
+            self.request,
+            self.SORT_COLUMNS,
+            default_sort="jmoa_code" if title_id else "title_name",
+            default_direction="asc",
+        )
 
     def _build_where(self, title_id: str, q_jpid: str):
         where = []
@@ -2845,8 +2945,8 @@ class TitleUserView(KeysetPaginationMixin, generic.TemplateView):
             params.append(title_id)
 
         if q_jpid:
-            where.append("u.jmoa_code LIKE %s")
-            params.append(f"%{q_jpid}%")
+            where.append("ut.jmoa_code LIKE %s")
+            params.append(f"{q_jpid}%")
 
         where_sql = ("WHERE " + " AND ".join(where)) if where else ""
         return where_sql, params
@@ -2857,8 +2957,6 @@ class TitleUserView(KeysetPaginationMixin, generic.TemplateView):
         sql = f"""
 SELECT COUNT(*)
 FROM bonus_db.user_titles ut
-LEFT JOIN nexus_production.users u
-  ON ut.jmoa_code = u.jmoa_code
 {where_sql}
         """
 
@@ -2872,6 +2970,7 @@ LEFT JOIN nexus_production.users u
         q_jpid: str,
         limit: int,
         offset: int = 0,
+        order_sql: str = "",
     ):
         where_sql, params = self._build_where(title_id, q_jpid)
 
@@ -2883,12 +2982,11 @@ SELECT
   COALESCE(tm.title_name, 'タイトルなし') AS title_name,
   ut.update_date AS update_date
 FROM bonus_db.user_titles ut
-LEFT JOIN nexus_production.users u
-  ON ut.jmoa_code = u.jmoa_code
+{self.MEMBER_JOIN_SQL}
 LEFT JOIN bonus_db.title_master tm
   ON ut.title_id = tm.title_id
 {where_sql}
-ORDER BY ut.title_id, ut.jmoa_code
+ORDER BY {order_sql or "ut.title_id ASC"}, ut.jmoa_code ASC
 LIMIT %s OFFSET %s
         """
 
@@ -3039,6 +3137,9 @@ WHERE jmoa_code = %s
             per_page = self.DEFAULT_PER_PAGE
         per_page = max(1, min(per_page, self.MAX_PER_PAGE))
 
+        sort_ctx = self._get_sort_context()
+        ctx.update(sort_ctx)
+
         total_count = self._fetch_total_count(title_id, q_jpid)
         total_pages = max(1, math.ceil(total_count / per_page))
         page = self.get_page_number(total_pages)
@@ -3049,6 +3150,7 @@ WHERE jmoa_code = %s
             q_jpid=q_jpid,
             limit=per_page,
             offset=offset,
+            order_sql=sort_ctx["order_sql"],
         )
 
         base_params = {}
@@ -3058,6 +3160,8 @@ WHERE jmoa_code = %s
             base_params["q_jpid"] = q_jpid
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
+
+        add_sort_params(base_params, sort_ctx)
 
         ctx["title_choices"] = self._fetch_title_choices()
         ctx["selected_title_id"] = title_id
@@ -3080,6 +3184,7 @@ class TitleUserExportView(TitleUserView):
         title_id = (request.GET.get("title_id") or "").strip()
         q_jpid = (request.GET.get("q_jpid") or "").strip()
         where_sql, params = self._build_where(title_id, q_jpid)
+        order_sql = self._get_sort_context()["order_sql"]
 
         sql = f"""
 SELECT
@@ -3089,12 +3194,11 @@ SELECT
   COALESCE(tm.title_name, 'タイトルなし') AS title_name,
   ut.update_date AS update_date
 FROM bonus_db.user_titles ut
-LEFT JOIN nexus_production.users u
-  ON ut.jmoa_code = u.jmoa_code
+{self.MEMBER_JOIN_SQL}
 LEFT JOIN bonus_db.title_master tm
   ON ut.title_id = tm.title_id
 {where_sql}
-ORDER BY ut.title_id, ut.jmoa_code
+ORDER BY {order_sql}, ut.jmoa_code ASC
         """
 
         wb = openpyxl.Workbook(write_only=True)
@@ -4596,6 +4700,7 @@ class RepurchaseExportView(RepurchaseListView):
             "会員名",
             "total_bv",
             "bv",
+            "BV反映FLG",
             "BV反映日時",
             "注文日時",
             "ボーナス支払日",
@@ -4628,10 +4733,14 @@ class RepurchaseExportView(RepurchaseListView):
                 r["send_bv_name"],
                 r["total_bv"],
                 r["bv"],
-                r["deposit_at"],
-                r["order_at"],
+                self.BV_ACTIVED_FLG_LABELS.get(
+                    r["bv_actived_flg"],
+                    r["bv_actived_flg"],
+                ),
+                _excel_jst_datetime(r["deposit_at"]),
+                _excel_jst_datetime(r["order_at"]),
                 r["bonus_payment_date"],
-                r["created_at"],
+                _excel_jst_datetime(r["created_at"]),
             ])
 
         response = HttpResponse(
@@ -4652,6 +4761,19 @@ class BonusPaymentDateView(KeysetPaginationMixin, generic.TemplateView):
 
     DEFAULT_PER_PAGE = 500
     MAX_PER_PAGE = 500
+    SORT_COLUMNS = {
+        "order_code": "order_code",
+        "bonus_payment_date": "bonus_payment_date",
+        "created_at": "created_at",
+    }
+
+    def _get_sort_context(self):
+        return get_bonus_sort_context(
+            self.request,
+            self.SORT_COLUMNS,
+            default_sort="created_at",
+            default_direction="desc",
+        )
 
     def _build_where(self, q_order_code: str = ""):
         where = ["1=1"]
@@ -4675,7 +4797,7 @@ FROM bonus_db.bonus_payment_date
             row = cursor.fetchone()
             return int(row[0]) if row else 0
 
-    def _fetch_rows(self, q_order_code: str = "", limit=500, offset=0):
+    def _fetch_rows(self, q_order_code: str = "", limit=500, offset=0, order_sql=""):
         where_sql, params = self._build_where(q_order_code=q_order_code)
         sql = """
 SELECT
@@ -4684,9 +4806,9 @@ SELECT
     created_at
 FROM bonus_db.bonus_payment_date
 {where_sql}
-ORDER BY created_at DESC, order_code ASC
+ORDER BY {order_sql}, order_code ASC
 LIMIT %s OFFSET %s
-""".format(where_sql=where_sql)
+""".format(where_sql=where_sql, order_sql=order_sql or "created_at DESC")
         params.extend([limit, offset])
 
         with connections["rds"].cursor() as cursor:
@@ -4795,6 +4917,63 @@ LIMIT %s OFFSET %s
                         ],
                     )
 
+    def _fetch_source_payment_date(self, order_code):
+        """支払日の上書きを消したときに戻す元の日付を返す。
+
+        購入情報の元データは COALESCE(この画面の支払日, 入金日) で支払日を決めて
+        いるので、上書きが無い状態の値は入金日になる。注文区分105（特別対応）は
+        orders に無く api_users_bv の支払日が元の値になるため、そちらも見る。
+        どちらも無いときは None を返す。
+        """
+        lookups = [
+            """
+            SELECT DATE(deposit_at)
+            FROM nexus_production.orders
+            WHERE order_code = %s
+              AND deposit_at IS NOT NULL
+            LIMIT 1
+            """,
+            """
+            SELECT DATE(payment_date)
+            FROM nexus_production.api_users_bv
+            WHERE doc_no = %s
+              AND payment_date IS NOT NULL
+            LIMIT 1
+            """,
+        ]
+
+        with connections["rds"].cursor() as cursor:
+            for sql in lookups:
+                cursor.execute(sql, [order_code])
+                row = cursor.fetchone()
+                if row and row[0]:
+                    return row[0]
+
+        return None
+
+    def _revert_purchase_info_payment_date(self, cursor, order_code, source_date):
+        """購入情報一覧の支払日と登録年月を、上書き前の日付に戻す。"""
+        sql = """
+        UPDATE bonus_db.purchase_info_list
+        SET
+            bonus_payment_date = %s,
+            register_year = %s,
+            register_month = %s,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE order_code = %s
+        """
+
+        cursor.execute(
+            sql,
+            [
+                source_date,
+                source_date.year,
+                source_date.month,
+                order_code,
+            ],
+        )
+        return cursor.rowcount
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
@@ -4803,6 +4982,9 @@ LIMIT %s OFFSET %s
         ctx["q_order_code"] = q_order_code
 
         per_page = self.get_per_page()
+        sort_ctx = self._get_sort_context()
+        ctx.update(sort_ctx)
+
         total_count = self._count_rows(q_order_code=q_order_code)
         total_pages = max(1, math.ceil(total_count / per_page))
         page = self.get_page_number(total_pages)
@@ -4812,11 +4994,14 @@ LIMIT %s OFFSET %s
             q_order_code=q_order_code,
             limit=per_page,
             offset=offset,
+            order_sql=sort_ctx["order_sql"],
         )
 
         base_params = {}
         if q_order_code:
             base_params["q_order_code"] = q_order_code
+
+        add_sort_params(base_params, sort_ctx)
 
         return self.set_page_context(
             ctx=ctx,
@@ -5024,9 +5209,22 @@ LIMIT %s OFFSET %s
                     """,
                     [order_code],
                 )
-                with connections["rds"].cursor() as cursor:
-                    cursor.execute(sql, [order_code])
-                    deleted_count = cursor.rowcount
+                source_date = self._fetch_source_payment_date(order_code)
+
+                with transaction.atomic(using="rds"):
+                    with connections["rds"].cursor() as cursor:
+                        cursor.execute(sql, [order_code])
+                        deleted_count = cursor.rowcount
+
+                        if source_date:
+                            reverted_count = self._revert_purchase_info_payment_date(
+                                cursor,
+                                order_code,
+                                source_date,
+                            )
+                        else:
+                            reverted_count = 0
+
                 if deleted_count:
                     record_change_audit(
                         request,
@@ -5034,11 +5232,32 @@ LIMIT %s OFFSET %s
                         action_type="delete",
                         target_table="bonus_payment_date",
                         target_pk=order_code,
-                        summary=f"注文番号 {order_code} のボーナス支払日を削除",
+                        summary=(
+                            f"注文番号 {order_code} のボーナス支払日を削除"
+                            + (
+                                f"（購入情報の支払日を {source_date} に戻す）"
+                                if source_date
+                                else ""
+                            )
+                        ),
                         before_values=before_row,
-                        after_values=None,
+                        after_values={
+                            "purchase_info_list.bonus_payment_date": source_date,
+                            "reverted_count": reverted_count,
+                        },
                     )
-                messages.success(request, "削除しました。")
+
+                if source_date:
+                    messages.success(
+                        request,
+                        f"削除しました。ボーナス購入情報一覧の支払日を {source_date} に戻しました。",
+                    )
+                else:
+                    messages.success(request, "削除しました。")
+                    messages.warning(
+                        request,
+                        "入金日が見つからないため、ボーナス購入情報一覧の支払日は変更していません。",
+                    )
             except Exception as e:
                 messages.error(request, f"削除に失敗しました: {e}")
 
@@ -5693,6 +5912,42 @@ class PlacementTreeView(KeysetPaginationMixin, generic.TemplateView):
 
     DEFAULT_PER_PAGE = 200
     MAX_PER_PAGE = 500
+    LIST_SORT_COLUMNS = {
+        "id": "c.id",
+        "placement_code": "c.placement_code",
+        "placement_name": "c.placement_name",
+        "placement_rank": "c.placement_rank",
+        "jwoa_code": "c.jwoa_code",
+        "send_bv_name": "c.send_bv_name",
+        "rank": "c.`rank`",
+        "tree_level": "c.tree_level",
+        "created_at": "c.created_at",
+    }
+    DOWNLINE_SORT_COLUMNS = {
+        "rel_level": "d.rel_level",
+        "placement_code": "d.placement_code",
+        "placement_name": "d.placement_name",
+        "placement_rank": "d.placement_rank",
+        "jwoa_code": "d.jwoa_code",
+        "send_bv_name": "d.send_bv_name",
+        "rank": "d.`rank`",
+        "created_at": "d.created_at",
+    }
+
+    def _get_sort_context(self, view_mode="list"):
+        if view_mode == "downline":
+            return get_bonus_sort_context(
+                self.request,
+                self.DOWNLINE_SORT_COLUMNS,
+                default_sort="rel_level",
+                default_direction="asc",
+            )
+        return get_bonus_sort_context(
+            self.request,
+            self.LIST_SORT_COLUMNS,
+            default_sort="id",
+            default_direction="asc",
+        )
 
     def _build_where(
         self,
@@ -5763,6 +6018,7 @@ FROM bonus_db.C_users_placement_tree_cache c
         q_rank: str,
         limit: int,
         offset: int = 0,
+        order_sql: str = "",
     ):
         where_sql, params = self._build_where(
             q_jwoa_code,
@@ -5785,7 +6041,7 @@ SELECT
     c.created_at
 FROM bonus_db.C_users_placement_tree_cache c
 {where_sql}
-ORDER BY c.id
+ORDER BY {order_sql or "c.id ASC"}, c.id ASC
 LIMIT %s OFFSET %s
         """
 
@@ -5891,6 +6147,7 @@ FROM downline d
         q_rank: str,
         limit: int,
         offset: int = 0,
+        order_sql: str = "",
     ):
         if not q_jwoa_code:
             return []
@@ -5947,7 +6204,7 @@ SELECT
     d.created_at
 FROM downline d
 {where_sql}
-ORDER BY d.rel_level, d.placement_code, d.jwoa_code
+ORDER BY {order_sql or "d.rel_level ASC"}, d.placement_code ASC, d.jwoa_code ASC
 LIMIT %s OFFSET %s
         """
         with connections["rds"].cursor() as cursor:
@@ -5959,8 +6216,8 @@ LIMIT %s OFFSET %s
         return fetch_tree_search_path(q_jwoa_code, tree_search)
 
     def _fetch_last_recreated_at(self):
-        # 再作成は全削除＋一括INSERTのため、MAX(created_at) が最終再作成日時になる。
-        sql = "SELECT MAX(created_at) FROM bonus_db.C_users_placement_tree_cache"
+        # 再作成は全削除＋一括INSERTのため、先頭行の created_at が最終再作成日時になる。
+        sql = "SELECT created_at FROM bonus_db.C_users_placement_tree_cache LIMIT 1"
 
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql)
@@ -6060,13 +6317,33 @@ LIMIT %s OFFSET %s
         else:
             per_page = max(1, min(per_page, self.MAX_PER_PAGE))
 
-        if view_mode == "downline":
+        sort_ctx = self._get_sort_context(view_mode)
+        ctx.update(sort_ctx)
+
+        if view_mode == "tree":
+            # 一覧件数・行は Tree タブでは使わないので取得しない。
+            total_count = 0
+            rows = []
+            page = 1
+        elif view_mode == "downline":
             total_count = self._fetch_downline_total_count(
                 q_jwoa_code,
                 q_name,
                 q_placement_code,
                 q_placement_rank,
                 q_rank,
+            )
+            total_pages = max(1, math.ceil(total_count / per_page)) if total_count > 0 else 1
+            page = self.get_page_number(total_pages)
+            rows = self._fetch_downline_rows(
+                q_jwoa_code=q_jwoa_code,
+                q_name=q_name,
+                q_placement_code=q_placement_code,
+                q_placement_rank=q_placement_rank,
+                q_rank=q_rank,
+                limit=per_page,
+                offset=(page - 1) * per_page,
+                order_sql=sort_ctx["order_sql"],
             )
         else:
             total_count = self._fetch_total_count(
@@ -6076,22 +6353,8 @@ LIMIT %s OFFSET %s
                 q_placement_rank,
                 q_rank,
             )
-        total_pages = max(1, math.ceil(total_count / per_page)) if total_count > 0 else 1
-        page = self.get_page_number(total_pages)
-        fetch_limit = per_page
-        offset = (page - 1) * per_page
-
-        if view_mode == "downline":
-            rows = self._fetch_downline_rows(
-                q_jwoa_code=q_jwoa_code,
-                q_name=q_name,
-                q_placement_code=q_placement_code,
-                q_placement_rank=q_placement_rank,
-                q_rank=q_rank,
-                limit=fetch_limit,
-                offset=offset,
-            )
-        else:
+            total_pages = max(1, math.ceil(total_count / per_page)) if total_count > 0 else 1
+            page = self.get_page_number(total_pages)
             rows = self._fetch_rows(
                 q_jwoa_code=q_jwoa_code,
                 q_name=q_name,
@@ -6099,8 +6362,11 @@ LIMIT %s OFFSET %s
                 q_placement_rank=q_placement_rank,
                 q_rank=q_rank,
                 limit=per_page,
-                offset=offset,
+                offset=(page - 1) * per_page,
+                order_sql=sort_ctx["order_sql"],
             )
+
+        total_pages = max(1, math.ceil(total_count / per_page)) if total_count > 0 else 1
 
         base_params = {}
         if q_jwoa_code:
@@ -6149,7 +6415,17 @@ LIMIT %s OFFSET %s
         ctx["downline_fullscreen_query"] = urlencode(downline_fullscreen_params)
         ctx["downline_exit_fullscreen_query"] = urlencode(downline_tab_params)
 
-        tree_context = build_member_tree_view(q_jwoa_code)
+        if view_mode == "tree":
+            tree_context = build_member_tree_view(q_jwoa_code)
+        else:
+            tree_context = {
+                "tree_ancestors": [],
+                "tree_focus": None,
+                "tree_children": [],
+                "tree_truncated": False,
+                "tree_unavailable_reason": None,
+                "tree_node_count": 0,
+            }
         ctx.update(tree_context)
         tree_search_path_rows = (
             self._fetch_tree_search_path(q_jwoa_code, tree_search)
@@ -6170,6 +6446,9 @@ LIMIT %s OFFSET %s
             if view_mode == "downline" and not q_jwoa_code
             else None
         )
+
+        # 表示モードごとに並び替え可能な列が違うので、タブ切替リンクには引き継がない。
+        add_sort_params(base_params, sort_ctx)
 
         return self.set_page_context(
             ctx=ctx,
@@ -6223,7 +6502,7 @@ SELECT
     c.created_at
 FROM bonus_db.C_users_placement_tree_cache c
 {where_sql}
-ORDER BY c.id
+ORDER BY {self._get_sort_context()["order_sql"]}, c.id ASC
         """
 
         wb = openpyxl.Workbook(write_only=True)
@@ -8342,6 +8621,34 @@ def _kana_search_variants(value):
 class UsersView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "users.html"
     EXPORT_FETCH_SIZE = 5000
+    SORT_COLUMNS = {
+        "group_code": "u.group_code",
+        "jmoa_code": "u.jmoa_code",
+        "send_bv_name": "u.send_bv_name",
+        "name_kana": "u.name_kana",
+        "introducer_code": "u.introducer_code",
+        "placement_code": "u.placement_code",
+        "prev_month_active_status": "prev_month_active_status",
+        "rank": "u.`rank`",
+        "status_code": "u.status_code",
+        "activated": "u.activated",
+        "company": "u.company",
+        "interim_at": "u.interim_at",
+        "activated_at": "u.activated_at",
+        "last_purchase_at": "u.last_purchase_at",
+        "created_at": "u.created_at",
+        "updated_at": "u.updated_at",
+    }
+    DEFAULT_SORT = "created_at"
+    DEFAULT_SORT_DIRECTION = "desc"
+
+    def _get_sort_context(self):
+        return get_bonus_sort_context(
+            self.request,
+            self.SORT_COLUMNS,
+            default_sort=self.DEFAULT_SORT,
+            default_direction=self.DEFAULT_SORT_DIRECTION,
+        )
 
     def _build_where(
         self,
@@ -8362,7 +8669,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
 
         if q_jpid:
             where.append("u.jmoa_code LIKE %s")
-            params.append(f"%{q_jpid}%")
+            params.append(f"{q_jpid}%")
 
         if q_name:
             where.append("(u.send_bv_name LIKE %s OR u.name LIKE %s)")
@@ -8381,11 +8688,11 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
 
         if q_introducer:
             where.append("u.introducer_code LIKE %s")
-            params.append(f"%{q_introducer}%")
+            params.append(f"{q_introducer}%")
 
         if q_placement:
             where.append("u.placement_code LIKE %s")
-            params.append(f"%{q_placement}%")
+            params.append(f"{q_placement}%")
 
         if q_status:
             where.append("u.status_code = %s")
@@ -8451,6 +8758,16 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
               ON pb.jwoa_code = u.jmoa_code
             """
 
+    @staticmethod
+    def _needs_inline_active_join(q_active_result="", order_sql="", force_active_join=False):
+        # 判定結果で絞り込む／アクティブ確認列で並べ替える場合だけ、
+        # 全会員に購入集計をJOINする。一覧表示は LIMIT 後に200件だけ判定する。
+        if force_active_join:
+            return True
+        if q_active_result in ("active", "inactive"):
+            return True
+        return "prev_month_active_status" in (order_sql or "")
+
     def _fetch_total_count(
         self,
         q_jpid: str = "",
@@ -8504,8 +8821,9 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             ]
             where_sql = self._apply_active_result_filter(where_sql, q_active_result)
 
+        count_expr = "COUNT(DISTINCT u.id)" if active_join_sql else "COUNT(*)"
         sql = f"""
-            SELECT COUNT(DISTINCT u.id)
+            SELECT {count_expr}
             FROM nexus_production.users u
             {active_join_sql}
             {where_sql}
@@ -8535,6 +8853,8 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         active_start_date=None,
         active_end_date=None,
         q_active_result: str = "",
+        order_sql: str = "",
+        force_active_join: bool = False,
     ):
         """一覧のSQLとパラメータを返す。LIMIT/OFFSET は呼び出し側で付ける。"""
 
@@ -8553,12 +8873,18 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         )
 
         active_params = []
-        if self._has_active_period(
+        has_period = self._has_active_period(
             active_year,
             active_month,
             active_start_date,
             active_end_date,
-        ):
+        )
+        use_inline_join = has_period and self._needs_inline_active_join(
+            q_active_result=q_active_result,
+            order_sql=order_sql,
+            force_active_join=force_active_join,
+        )
+        if use_inline_join:
             active_select_sql = """
                 CASE
                     WHEN au.active_status = 1 OR IFNULL(pb.prev_month_bv, 0) >= 50 THEN 1
@@ -8603,10 +8929,71 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             FROM nexus_production.users u
             {active_join_sql}
             {where_sql}
-            ORDER BY u.created_at DESC, u.id DESC
+            ORDER BY {order_sql or "u.created_at DESC"}, u.id DESC
         """
 
         return sql, active_params + params
+
+    def _attach_prev_month_active_status(
+        self,
+        rows,
+        active_year,
+        active_month,
+        active_start_date,
+        active_end_date,
+    ):
+        if not rows or not self._has_active_period(
+            active_year,
+            active_month,
+            active_start_date,
+            active_end_date,
+        ):
+            return rows
+
+        codes = [str(row.get("jmoa_code")) for row in rows if row.get("jmoa_code")]
+        if not codes:
+            return rows
+
+        placeholders = ", ".join(["%s"] * len(codes))
+        active_map = {}
+        bv_map = {}
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(
+                f"""
+SELECT jwoa_code, active_status
+FROM bonus_db.active_users
+WHERE year = %s
+  AND month = %s
+  AND jwoa_code IN ({placeholders})
+                """,
+                [active_year, active_month, *codes],
+            )
+            for code, status in cursor.fetchall():
+                active_map[str(code)] = status
+
+            cursor.execute(
+                f"""
+SELECT jwoa_code, SUM(IFNULL(bv, 0))
+FROM bonus_db.purchase_info_list
+WHERE bonus_payment_date >= %s
+  AND bonus_payment_date < %s
+  AND jwoa_code IN ({placeholders})
+GROUP BY jwoa_code
+                """,
+                [active_start_date, active_end_date, *codes],
+            )
+            for code, bv in cursor.fetchall():
+                bv_map[str(code)] = bv
+
+        for row in rows:
+            code = str(row.get("jmoa_code") or "")
+            bv = bv_map.get(code) or 0
+            row["prev_month_bv"] = bv
+            row["prev_month_active_status"] = (
+                1 if active_map.get(code) == 1 or bv >= 50 else 0
+            )
+        return rows
 
     def _fetch_rows(self, limit: int = 200, offset: int = 0, **filters):
         sql, params = self._build_rows_sql(**filters)
@@ -8615,6 +9002,26 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             cursor.execute(sql + " LIMIT %s OFFSET %s", params + [limit, offset])
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+        if (
+            self._has_active_period(
+                filters.get("active_year"),
+                filters.get("active_month"),
+                filters.get("active_start_date"),
+                filters.get("active_end_date"),
+            )
+            and not self._needs_inline_active_join(
+                q_active_result=filters.get("q_active_result") or "",
+                order_sql=filters.get("order_sql") or "",
+            )
+        ):
+            self._attach_prev_month_active_status(
+                rows,
+                filters.get("active_year"),
+                filters.get("active_month"),
+                filters.get("active_start_date"),
+                filters.get("active_end_date"),
+            )
 
         return rows
 
@@ -8667,6 +9074,8 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         ) = self._resolve_active_period(q_active_kibetu)
 
         per_page = self.get_per_page()
+        sort_ctx = self._get_sort_context()
+        ctx.update(sort_ctx)
 
         total_count = self._fetch_total_count(
             q_jpid=q_jpid,
@@ -8708,6 +9117,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
             active_start_date=active_start_date,
             active_end_date=active_end_date,
             q_active_result=q_active_result,
+            order_sql=sort_ctx["order_sql"],
             limit=per_page,
             offset=offset,
         )
@@ -8730,6 +9140,7 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         ctx["active_month"] = active_month
         ctx["monthly_period_choices"] = (
             MonthlyPeriod.objects.using("rds")
+            .only("kibetu", "year", "month")
             .order_by("-kibetu")
         )
         # Excel出力は件数が多いと時間がかかるため、上限を超えたらCSVへ誘導する。
@@ -8782,6 +9193,8 @@ class UsersView(KeysetPaginationMixin, generic.TemplateView):
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
 
+        add_sort_params(base_params, sort_ctx)
+
         return self.set_page_context(
             ctx=ctx,
             rows=rows,
@@ -8797,7 +9210,6 @@ class UsersExportView(UsersView):
     # Excelは1行あたりの書き出しが重く、上限なしだと7万件で1分近くかかる。
     EXCEL_EXPORT_MAX_ROWS = 10000
     EXPORT_HEADERS = [
-        "ID",
         "グループID",
         "会員ID",
         "会員名",
@@ -8851,7 +9263,6 @@ class UsersExportView(UsersView):
 
     def _row_to_excel(self, row, q_active_kibetu):
         return [
-            row.get("id"),
             row.get("group_code"),
             row.get("jmoa_code"),
             row.get("send_bv_name"),
@@ -8863,11 +9274,11 @@ class UsersExportView(UsersView):
             self._status_label(row.get("status_code")),
             self._activated_label(row.get("activated")),
             self._company_label(row.get("company")),
-            row.get("interim_at"),
-            row.get("activated_at"),
-            row.get("last_purchase_at"),
-            row.get("created_at"),
-            row.get("updated_at"),
+            _excel_jst_datetime(row.get("interim_at")),
+            _excel_jst_datetime(row.get("activated_at")),
+            _excel_jst_datetime(row.get("last_purchase_at")),
+            _excel_jst_datetime(row.get("created_at")),
+            _excel_jst_datetime(row.get("updated_at")),
         ]
 
     def _build_row_mapper(self, cols, q_active_kibetu):
@@ -8887,7 +9298,6 @@ class UsersExportView(UsersView):
                     else "非アクティブ"
                 )
             return [
-                row[pos["id"]],
                 row[pos["group_code"]],
                 row[pos["jmoa_code"]],
                 row[pos["send_bv_name"]],
@@ -8899,11 +9309,11 @@ class UsersExportView(UsersView):
                 self.STATUS_LABELS.get(row[pos["status_code"]], "-"),
                 "本登録" if row[pos["activated"]] == 1 else "仮登録中",
                 "法人" if row[pos["company"]] == 1 else "-",
-                row[pos["interim_at"]],
-                row[pos["activated_at"]],
-                row[pos["last_purchase_at"]],
-                row[pos["created_at"]],
-                row[pos["updated_at"]],
+                _excel_jst_datetime(row[pos["interim_at"]]),
+                _excel_jst_datetime(row[pos["activated_at"]]),
+                _excel_jst_datetime(row[pos["last_purchase_at"]]),
+                _excel_jst_datetime(row[pos["created_at"]]),
+                _excel_jst_datetime(row[pos["updated_at"]]),
             ]
 
         return to_excel_row
@@ -8948,7 +9358,11 @@ class UsersExportView(UsersView):
         LIMIT/OFFSET で分割すると毎回7万件超を並べ替え直すことになるため、
         クエリは1回だけ実行して結果を少しずつ読み出す。
         """
-        sql, params = self._build_rows_sql(**filters)
+        sql, params = self._build_rows_sql(
+            order_sql=self._get_sort_context()["order_sql"],
+            force_active_join=True,
+            **filters,
+        )
 
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql, params)
@@ -9740,6 +10154,102 @@ class S_GlobalBonusView(generic.ListView):
 class OrdersView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "orders.html"
 
+    # nexus_production.orders のインデックスは id / order_code / order_status /
+    # order_type / payment_option だけで created_at には無い。created_at で並べると
+    # 10 万行のフルスキャン + filesort になるが、id は採番順で created_at と並びが
+    # 完全に一致する（全件で逆行 0 件、NULL なし）ため主キー走査に置き換えている。
+    SORT_COLUMNS = {
+        "order_code": "o.order_code",
+        "order_status": "o.order_status",
+        "order_type": "o.order_type",
+        "order_year": "o.order_year",
+        "order_month": "o.order_month",
+        "jwoa_code": "o.jwoa_code",
+        "order_name": "o.order_name",
+        "total_price": "o.total_price",
+        "total_bv": "o.total_bv",
+        "bv_actived_flg": "o.bv_actived_flg",
+        "distribution_count": "distribution_count",
+        "deposit_at": "o.deposit_at",
+        "created_at": "o.id",
+    }
+
+    DISTRIBUTION_COUNT_SORT = "distribution_count"
+
+    # 注文番号は "MF" + 数字（末尾に _FI / _FR が付くものもある）で、"MF" は先頭以外に
+    # 現れない。そのため "MF" で始まる入力なら部分一致と前方一致の結果は同じになる。
+    # 前方一致にすると order_code のインデックスが使えて、部分一致の約 6 秒が 0.1 秒になる。
+    ORDER_CODE_PREFIX = "MF"
+
+    # 会員ID部分一致で拾う振分先 order_code の上限。これを超えたら IN 句が
+    # 肥大するので従来の相関 EXISTS に戻す。
+    MAX_DISTRIBUTION_MATCH_CODES = 10000
+
+    TOTAL_COUNT_CACHE_TIMEOUT = 30
+
+    def setup(self, request, *args, **kwargs):
+        super().setup(request, *args, **kwargs)
+        # 一覧・件数・Excel出力で同じ結果を使い回すためのリクエスト内キャッシュ
+        self._distribution_code_cache = {}
+
+    def _get_sort_context(self):
+        return get_bonus_sort_context(
+            self.request,
+            self.SORT_COLUMNS,
+            default_sort="created_at",
+            default_direction="desc",
+        )
+
+    def _build_order_by(self, sort_ctx):
+        """並び替え句を組み立てる。
+
+        同順位を決める id は並び替え列と同じ向きに揃える。向きが混ざると MySQL は
+        二次インデックス（末尾に主キーを含む）を並び替えに使えず、フルスキャン +
+        filesort に落ちる。
+        """
+        column = self.SORT_COLUMNS.get(sort_ctx["sort"], "o.id")
+        direction = "DESC" if sort_ctx["direction"] == "desc" else "ASC"
+
+        if column == "o.id":
+            return f"o.id {direction}"
+
+        return f"{column} {direction}, o.id {direction}"
+
+    def _distribution_order_codes(self, q_jwoa_code):
+        """会員IDの部分一致に該当する BV 振分先の order_code を返す。
+
+        相関 EXISTS のままだと orders の 10 万行ごとに振分テーブルを引くうえ、
+        一覧と件数で 2 回走る。先に振分テーブルだけを引いて order_code の集合に
+        しておき、一覧・件数・Excel出力で使い回す。
+
+        該当が上限を超えたときは None を返し、呼び出し側で EXISTS に戻す。
+        """
+        if q_jwoa_code in self._distribution_code_cache:
+            return self._distribution_code_cache[q_jwoa_code]
+
+        sql = """
+            SELECT d.order_code
+            FROM nexus_production.orders_distribution_bv d
+            WHERE d.jwoa_code LIKE %s
+            LIMIT %s
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(
+                sql,
+                [f"%{q_jwoa_code}%", self.MAX_DISTRIBUTION_MATCH_CODES + 1],
+            )
+            fetched = [row[0] for row in cursor.fetchall() if row[0]]
+
+        if len(fetched) > self.MAX_DISTRIBUTION_MATCH_CODES:
+            codes = None
+        else:
+            # SQL 側の DISTINCT は一時テーブルを作って数倍遅くなるので Python で重複を除く
+            codes = list(dict.fromkeys(fetched))
+
+        self._distribution_code_cache[q_jwoa_code] = codes
+        return codes
+
     def _build_where(
         self,
         q_order_code="",
@@ -9751,6 +10261,7 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
         q_deposit_to="",
         q_year="",
         q_month="",
+        q_bv_actived_flg="",
     ):
         if q_order_statuses is None:
             q_order_statuses = []
@@ -9762,24 +10273,43 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
 
         if q_order_code:
             where.append("o.order_code LIKE %s")
-            params.append(f"%{q_order_code}%")
+            if q_order_code.startswith(self.ORDER_CODE_PREFIX):
+                params.append(f"{q_order_code}%")
+            else:
+                params.append(f"%{q_order_code}%")
 
         if q_jwoa_code:
-            where.append(
-                """
-                (
-                    o.jwoa_code LIKE %s
-                    OR EXISTS (
-                        SELECT 1
-                        FROM nexus_production.orders_distribution_bv d
-                        WHERE d.order_code = o.order_code
-                          AND d.jwoa_code LIKE %s
+            like = f"%{q_jwoa_code}%"
+            matched_codes = self._distribution_order_codes(q_jwoa_code)
+
+            if matched_codes is None:
+                where.append(
+                    """
+                    (
+                        o.jwoa_code LIKE %s
+                        OR EXISTS (
+                            SELECT 1
+                            FROM nexus_production.orders_distribution_bv d
+                            WHERE d.order_code = o.order_code
+                              AND d.jwoa_code LIKE %s
+                        )
                     )
+                    """
                 )
-                """
-            )
-            params.append(f"%{q_jwoa_code}%")
-            params.append(f"%{q_jwoa_code}%")
+                params.append(like)
+                params.append(like)
+
+            elif matched_codes:
+                placeholders = ", ".join(["%s"] * len(matched_codes))
+                where.append(
+                    f"(o.jwoa_code LIKE %s OR o.order_code IN ({placeholders}))"
+                )
+                params.append(like)
+                params.extend(matched_codes)
+
+            else:
+                where.append("o.jwoa_code LIKE %s")
+                params.append(like)
 
         if q_name:
             where.append("o.order_name LIKE %s")
@@ -9811,10 +10341,30 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
             where.append("o.order_month = %s")
             params.append(q_month)
 
+        if q_bv_actived_flg in ("0", "1", "3"):
+            where.append("o.bv_actived_flg = %s")
+            params.append(int(q_bv_actived_flg))
+
         where_sql = "WHERE " + " AND ".join(where) if where else ""
         return where_sql, params
 
+    def _total_count_cache_key(self, **filters):
+        signature = json.dumps(filters, sort_keys=True, default=str)
+        digest = hashlib.md5(signature.encode("utf-8")).hexdigest()
+        return f"orders:total_count:{digest}"
+
     def _fetch_total_count(self, **filters):
+        """一覧の総件数を返す。
+
+        orders は絞り込み対象の列にインデックスがほとんど無く、COUNT(*) だけで
+        1 秒前後（会員ID絞り込みでは数秒）かかる。ページを送るたびに同じ数を
+        数え直さないよう、条件ごとに短時間だけキャッシュする。
+        """
+        cache_key = self._total_count_cache_key(**filters)
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         where_sql, params = self._build_where(**filters)
 
         sql = f"""
@@ -9827,59 +10377,89 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
             cursor.execute(sql, params)
             row = cursor.fetchone()
 
-        return int(row[0]) if row else 0
+        total_count = int(row[0]) if row else 0
+        cache.set(cache_key, total_count, self.TOTAL_COUNT_CACHE_TIMEOUT)
+        return total_count
 
-    def _fetch_rows(self, limit=200, offset=0, **filters):
+    def _fetch_distribution_counts(self, order_codes):
+        """表示するページ分の BV 振分件数だけをまとめて 1 クエリで取得する。"""
+        codes = list(dict.fromkeys(code for code in order_codes if code))
+        if not codes:
+            return {}
+
+        placeholders = ", ".join(["%s"] * len(codes))
+        sql = f"""
+            SELECT d.order_code, COUNT(*)
+            FROM nexus_production.orders_distribution_bv d
+            WHERE d.order_code IN ({placeholders})
+            GROUP BY d.order_code
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, codes)
+            return {row[0]: int(row[1]) for row in cursor.fetchall()}
+
+    def _fetch_rows(self, limit=200, offset=0, order_by="", sort="", **filters):
         where_sql, params = self._build_where(**filters)
         q_jwoa_code = (filters.get("q_jwoa_code") or "").strip()
-        match_select_params = []
+        select_params = []
 
         if q_jwoa_code:
-            member_match_select = """
-                CASE WHEN o.jwoa_code LIKE %s THEN 1 ELSE 0 END AS order_member_matched,
-            """
-            match_select_params.append(f"%{q_jwoa_code}%")
+            member_match_select = (
+                "CASE WHEN o.jwoa_code LIKE %s THEN 1 ELSE 0 END AS order_member_matched"
+            )
+            select_params.append(f"%{q_jwoa_code}%")
         else:
-            member_match_select = """
-                0 AS order_member_matched,
-            """
+            member_match_select = "0 AS order_member_matched"
+
+        # 振分件数を相関サブクエリで持つと 1 行ごとに振分テーブルを引くことになるので、
+        # 通常は SELECT に含めず取得後にまとめて引く。振分件数で並び替えるときだけは
+        # SQL 側に値が必要なのでサブクエリを使う。
+        sort_by_distribution = sort == self.DISTRIBUTION_COUNT_SORT
+
+        if sort_by_distribution:
+            distribution_select = """,
+                (
+                    SELECT COUNT(*)
+                    FROM nexus_production.orders_distribution_bv d_count
+                    WHERE d_count.order_code = o.order_code
+                ) AS distribution_count"""
+        else:
+            distribution_select = ""
 
         sql = f"""
             SELECT
                 o.id,
                 o.order_code,
                 o.order_status,
-                o.order_option,
                 o.order_type,
                 o.order_year,
                 o.order_month,
                 o.jwoa_code,
                 o.order_name,
                 o.total_price,
-                o.total_delivery_cost,
                 o.total_bv,
-                o.jwoa_point,
-                o.order_at,
+                o.bv_actived_flg,
                 o.deposit_at,
-                o.delivery_date_at,
                 o.created_at,
-                o.updated_at,
-                {member_match_select}
-                (
-                    SELECT COUNT(*)
-                    FROM nexus_production.orders_distribution_bv d_count
-                    WHERE d_count.order_code = o.order_code
-                ) AS distribution_count
+                {member_match_select}{distribution_select}
             FROM nexus_production.orders o
             {where_sql}
-            ORDER BY o.created_at DESC, o.id DESC
+            ORDER BY {order_by or "o.id DESC"}
             LIMIT %s OFFSET %s
         """
 
         with connections["rds"].cursor() as cursor:
-            cursor.execute(sql, match_select_params + params + [limit, offset])
+            cursor.execute(sql, select_params + params + [limit, offset])
             cols = [c[0] for c in cursor.description]
             rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
+
+        if not sort_by_distribution:
+            counts = self._fetch_distribution_counts(
+                row["order_code"] for row in rows
+            )
+            for row in rows:
+                row["distribution_count"] = counts.get(row["order_code"], 0)
 
         return rows
 
@@ -9902,6 +10482,7 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
             "q_deposit_to": (self.request.GET.get("q_deposit_to") or "").strip(),
             "q_year": (self.request.GET.get("q_year") or "").strip(),
             "q_month": (self.request.GET.get("q_month") or "").strip(),
+            "q_bv_actived_flg": (self.request.GET.get("q_bv_actived_flg") or "").strip(),
         }
 
     def get_context_data(self, **kwargs):
@@ -9912,6 +10493,8 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
         q_order_types = filters["q_order_types"]
 
         per_page = self.get_per_page()
+        sort_ctx = self._get_sort_context()
+        ctx.update(sort_ctx)
 
         total_count = self._fetch_total_count(**filters)
         total_pages = max(1, math.ceil(total_count / per_page))
@@ -9921,6 +10504,8 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
         rows = self._fetch_rows(
             limit=per_page,
             offset=offset,
+            order_by=self._build_order_by(sort_ctx),
+            sort=sort_ctx["sort"],
             **filters,
         )
 
@@ -9933,6 +10518,7 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
         ctx["q_deposit_to"] = filters["q_deposit_to"]
         ctx["q_year"] = filters["q_year"]
         ctx["q_month"] = filters["q_month"]
+        ctx["q_bv_actived_flg"] = filters["q_bv_actived_flg"]
 
         base_params = {}
         for key in (
@@ -9943,6 +10529,7 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
             "q_deposit_to",
             "q_year",
             "q_month",
+            "q_bv_actived_flg",
         ):
             value = filters[key]
             if value:
@@ -9950,6 +10537,8 @@ class OrdersView(KeysetPaginationMixin, generic.TemplateView):
 
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
+
+        add_sort_params(base_params, sort_ctx)
 
         ctx = self.set_page_context(
             ctx=ctx,
@@ -10015,6 +10604,12 @@ class OrdersExportView(OrdersView):
         200: "クーリングオフ",
     }
 
+    BV_ACTIVED_FLG_LABELS = {
+        0: "未反映",
+        1: "反映済",
+        3: "反映無効",
+    }
+
     EXPORT_HEADER = [
         "ID",
         "注文番号",
@@ -10022,10 +10617,11 @@ class OrdersExportView(OrdersView):
         "注文区分",
         "注文年",
         "注文月",
-        "会員ID",
+        "注文者_会員ID",
         "注文者_氏名",
         "購入合計金額",
         "合計BV",
+        "BV反映FLG",
         "BV振分件数",
         "入金日",
         "作成日時",
@@ -10055,6 +10651,7 @@ class OrdersExportView(OrdersView):
                 o.order_name,
                 o.total_price,
                 o.total_bv,
+                o.bv_actived_flg,
                 (
                     SELECT COUNT(*)
                     FROM nexus_production.orders_distribution_bv d_count
@@ -10075,9 +10672,7 @@ class OrdersExportView(OrdersView):
     @staticmethod
     def _excel_value(value):
         """Excel はタイムゾーン付き日時を扱えないので、naive に落としてから渡す。"""
-        if isinstance(value, datetime) and value.tzinfo is not None:
-            return value.replace(tzinfo=None)
-        return value
+        return _excel_jst_datetime(value)
 
     def _row_to_excel(self, row):
         (
@@ -10091,6 +10686,7 @@ class OrdersExportView(OrdersView):
             order_name,
             total_price,
             total_bv,
+            bv_actived_flg,
             distribution_count,
             deposit_at,
             created_at,
@@ -10107,6 +10703,7 @@ class OrdersExportView(OrdersView):
             order_name,
             total_price,
             total_bv,
+            self.BV_ACTIVED_FLG_LABELS.get(bv_actived_flg, bv_actived_flg),
             distribution_count,
             self._excel_value(deposit_at),
             self._excel_value(created_at),
@@ -10175,9 +10772,7 @@ class OrderDetailView(generic.TemplateView):
         if value is None:
             return ""
         if isinstance(value, datetime):
-            if value.time() == time.min:
-                return value.strftime("%Y-%m-%d")
-            return value.strftime("%Y-%m-%d %H:%M:%S")
+            return jst_datetime(value).strftime("%Y-%m-%d %H:%M:%S")
         return value
 
     def get_context_data(self, **kwargs):
@@ -10223,11 +10818,70 @@ class OrderDetailView(generic.TemplateView):
 class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "orders_distribution_bv.html"
 
+    # created_at にはインデックスが無く、並べると 24 万行の filesort になる。
+    # id は採番順で created_at と並びが完全に一致する（全件で逆行 0 件、NULL なし）
+    # ため、作成日時ソートは主キー走査に置き換える。
+    SORT_COLUMNS = {
+        "order_code": "a.order_code",
+        "purchaser_jwoa_code": "b.jwoa_code",
+        "jwoa_code": "a.jwoa_code",
+        "distribution_bv": "a.distribution_bv",
+        "usage_fee": "a.usage_fee",
+        "bv_actived_flg": "b.bv_actived_flg",
+        "created_at": "a.id",
+        "updated_at": "a.updated_at",
+    }
+    ORDERS_JOIN_SORTS = frozenset({"purchaser_jwoa_code", "bv_actived_flg"})
+    ORDER_CODE_PREFIX = "MF"
+    JWOA_CODE_PREFIXES = ("JP", "JN", "FREE")
+    TOTAL_COUNT_CACHE_TIMEOUT = 30
+
+    def _get_sort_context(self):
+        return get_bonus_sort_context(
+            self.request,
+            self.SORT_COLUMNS,
+            default_sort="created_at",
+            default_direction="desc",
+        )
+
+    def _build_order_by(self, sort_ctx):
+        """並び替え句を組み立てる。
+
+        同順位を決める id は並び替え列と同じ向きに揃える。向きが混ざると MySQL は
+        二次インデックス（末尾に主キーを含む）を並び替えに使えず、フルスキャン +
+        filesort に落ちる。
+        """
+        column = self.SORT_COLUMNS.get(sort_ctx["sort"], "a.id")
+        direction = "DESC" if sort_ctx["direction"] == "desc" else "ASC"
+
+        if column == "a.id":
+            return f"a.id {direction}"
+
+        return f"{column} {direction}, a.id {direction}"
+
+    @staticmethod
+    def _like_param(value, prefix=None, prefixes=()):
+        if prefix and value.startswith(prefix):
+            return f"{value}%"
+        if prefixes and any(value.startswith(p) for p in prefixes):
+            return f"{value}%"
+        return f"%{value}%"
+
+    def _needs_orders_join(self, sort="", **filters):
+        """購入者側の列で絞り込む／並べ替えるときだけ orders を JOIN する。"""
+        if (filters.get("q_purchaser_jwoa_code") or "").strip():
+            return True
+        if (filters.get("q_bv_actived_flg") or "").strip() in ("0", "1", "3"):
+            return True
+        return sort in self.ORDERS_JOIN_SORTS
+
     def _build_where(
         self,
         q_order_code="",
         q_user_id="",
         q_jwoa_code="",
+        q_purchaser_jwoa_code="",
+        q_bv_actived_flg="",
         q_created_from="",
         q_created_to="",
     ):
@@ -10236,7 +10890,9 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
 
         if q_order_code:
             where.append("a.order_code LIKE %s")
-            params.append(f"%{q_order_code}%")
+            params.append(
+                self._like_param(q_order_code, prefix=self.ORDER_CODE_PREFIX)
+            )
 
         if q_user_id:
             where.append("a.user_id = %s")
@@ -10244,7 +10900,21 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
 
         if q_jwoa_code:
             where.append("a.jwoa_code LIKE %s")
-            params.append(f"%{q_jwoa_code}%")
+            params.append(
+                self._like_param(q_jwoa_code, prefixes=self.JWOA_CODE_PREFIXES)
+            )
+
+        if q_purchaser_jwoa_code:
+            where.append("b.jwoa_code LIKE %s")
+            params.append(
+                self._like_param(
+                    q_purchaser_jwoa_code, prefixes=self.JWOA_CODE_PREFIXES
+                )
+            )
+
+        if q_bv_actived_flg in ("0", "1", "3"):
+            where.append("b.bv_actived_flg = %s")
+            params.append(int(q_bv_actived_flg))
 
         if q_created_from:
             where.append("a.created_at >= %s")
@@ -10258,12 +10928,36 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
 
         return where_sql, params
 
+    def _total_count_cache_key(self, **filters):
+        signature = json.dumps(filters, sort_keys=True, default=str)
+        digest = hashlib.md5(signature.encode("utf-8")).hexdigest()
+        return f"orders_distribution_bv:total_count:{digest}"
+
+    def _orders_join_sql(self):
+        return """
+            LEFT JOIN nexus_production.orders AS b
+                ON a.order_code = b.order_code
+        """
+
     def _fetch_total_count(self, **filters):
+        """一覧の総件数を返す。
+
+        購入者側の列を使わない件数は JOIN 不要。orders とつなぐと 24 万行の
+        突合せになり、COUNT だけで 10 秒超になる。ページを送るたびに同じ数を
+        数え直さないよう、条件ごとに短時間だけキャッシュする。
+        """
+        cache_key = self._total_count_cache_key(**filters)
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         where_sql, params = self._build_where(**filters)
+        join_sql = self._orders_join_sql() if self._needs_orders_join(**filters) else ""
 
         sql = f"""
             SELECT COUNT(*)
             FROM nexus_production.orders_distribution_bv AS a
+            {join_sql}
             {where_sql}
         """
 
@@ -10271,10 +10965,42 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
             cursor.execute(sql, params)
             row = cursor.fetchone()
 
-        return int(row[0]) if row else 0
+        total_count = int(row[0]) if row else 0
+        cache.set(cache_key, total_count, self.TOTAL_COUNT_CACHE_TIMEOUT)
+        return total_count
 
-    def _fetch_rows(self, limit=200, offset=0, **filters):
+    def _fetch_order_info(self, order_codes):
+        """表示するページ分の購入者情報だけをまとめて 1 クエリで取得する。"""
+        codes = list(dict.fromkeys(code for code in order_codes if code))
+        if not codes:
+            return {}
+
+        placeholders = ", ".join(["%s"] * len(codes))
+        sql = f"""
+            SELECT order_code, jwoa_code, bv_actived_flg
+            FROM nexus_production.orders
+            WHERE order_code IN ({placeholders})
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, codes)
+            return {
+                row[0]: {"jwoa_code": row[1], "bv_actived_flg": row[2]}
+                for row in cursor.fetchall()
+            }
+
+    def _fetch_rows(self, limit=200, offset=0, order_sql="", sort="", **filters):
         where_sql, params = self._build_where(**filters)
+        needs_join = self._needs_orders_join(sort=sort, **filters)
+
+        if needs_join:
+            extra_select = """,
+                b.jwoa_code AS purchaser_jwoa_code,
+                b.bv_actived_flg"""
+            join_sql = self._orders_join_sql()
+        else:
+            extra_select = ""
+            join_sql = ""
 
         sql = f"""
             SELECT
@@ -10286,9 +11012,11 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
                 a.usage_fee,
                 a.created_at,
                 a.updated_at
+                {extra_select}
             FROM nexus_production.orders_distribution_bv AS a
+            {join_sql}
             {where_sql}
-            ORDER BY a.id DESC
+            ORDER BY {order_sql or "a.id DESC"}
             LIMIT %s OFFSET %s
         """
 
@@ -10300,6 +11028,13 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
                 for r in cursor.fetchall()
             ]
 
+        if not needs_join:
+            order_info = self._fetch_order_info(row["order_code"] for row in rows)
+            for row in rows:
+                info = order_info.get(row["order_code"], {})
+                row["purchaser_jwoa_code"] = info.get("jwoa_code")
+                row["bv_actived_flg"] = info.get("bv_actived_flg")
+
         return rows
 
     def get_context_data(self, **kwargs):
@@ -10309,6 +11044,12 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
             "q_order_code": (self.request.GET.get("q_order_code") or "").strip(),
             "q_user_id": (self.request.GET.get("q_user_id") or "").strip(),
             "q_jwoa_code": (self.request.GET.get("q_jwoa_code") or "").strip(),
+            "q_purchaser_jwoa_code": (
+                self.request.GET.get("q_purchaser_jwoa_code") or ""
+            ).strip(),
+            "q_bv_actived_flg": (
+                self.request.GET.get("q_bv_actived_flg") or ""
+            ).strip(),
             "q_created_from": (self.request.GET.get("q_created_from") or "").strip(),
             "q_created_to": (self.request.GET.get("q_created_to") or "").strip(),
         }
@@ -10317,6 +11058,8 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
             return_to = ""
 
         per_page = self.get_per_page()
+        sort_ctx = self._get_sort_context()
+        ctx.update(sort_ctx)
 
         total_count = self._fetch_total_count(**filters)
         total_pages = max(1, math.ceil(total_count / per_page))
@@ -10326,6 +11069,8 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
         rows = self._fetch_rows(
             limit=per_page,
             offset=offset,
+            order_sql=self._build_order_by(sort_ctx),
+            sort=sort_ctx["sort"],
             **filters,
         )
 
@@ -10341,6 +11086,8 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
 
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
+
+        add_sort_params(base_params, sort_ctx)
 
         return self.set_page_context(
             ctx=ctx,
@@ -10567,6 +11314,31 @@ class OrdersDistributionBvUpdateView(OrdersDistributionBvView):
 
 class ApiUsersBvView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "api_users_bv.html"
+    SORT_COLUMNS = {
+        "id": "a.id",
+        "doc_no": "a.doc_no",
+        "member_no": "a.member_no",
+        "firstname": "a.firstname",
+        "order_type": "a.order_type",
+        "order_year": "a.order_year",
+        "order_month": "a.order_month",
+        "price": "a.price",
+        "total_bv": "a.total_bv",
+        "payment_date": "a.payment_date",
+        "is_posted": "a.is_posted",
+        "choice_type": "a.choice_type",
+        "desc": "a.`desc`",
+        "created_by": "a.created_by",
+        "post_by": "a.post_by",
+    }
+
+    def _get_sort_context(self):
+        return get_bonus_sort_context(
+            self.request,
+            self.SORT_COLUMNS,
+            default_sort="id",
+            default_direction="desc",
+        )
 
     def _build_where(
         self,
@@ -10637,7 +11409,7 @@ class ApiUsersBvView(KeysetPaginationMixin, generic.TemplateView):
 
         return int(row[0]) if row else 0
 
-    def _fetch_rows(self, limit=200, offset=0, **filters):
+    def _fetch_rows(self, limit=200, offset=0, order_sql="", **filters):
         where_sql, params = self._build_where(**filters)
 
         sql = f"""
@@ -10659,7 +11431,7 @@ class ApiUsersBvView(KeysetPaginationMixin, generic.TemplateView):
                 a.post_by
             FROM nexus_production.api_users_bv AS a
             {where_sql}
-            ORDER BY a.id DESC
+            ORDER BY {order_sql or "a.id DESC"}, a.id DESC
             LIMIT %s OFFSET %s
         """
 
@@ -10686,6 +11458,8 @@ class ApiUsersBvView(KeysetPaginationMixin, generic.TemplateView):
         }
 
         per_page = self.get_per_page()
+        sort_ctx = self._get_sort_context()
+        ctx.update(sort_ctx)
 
         total_count = self._fetch_total_count(**filters)
         total_pages = max(1, math.ceil(total_count / per_page))
@@ -10695,6 +11469,7 @@ class ApiUsersBvView(KeysetPaginationMixin, generic.TemplateView):
         rows = self._fetch_rows(
             limit=per_page,
             offset=offset,
+            order_sql=sort_ctx["order_sql"],
             **filters,
         )
 
@@ -10704,6 +11479,8 @@ class ApiUsersBvView(KeysetPaginationMixin, generic.TemplateView):
 
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
+
+        add_sort_params(base_params, sort_ctx)
 
         return self.set_page_context(
             ctx=ctx,
@@ -11246,6 +12023,7 @@ class S_WeekBonusView(generic.ListView):
     template_name = "s_week_bonus.html"
     context_object_name = "object_list"
     model = PeriodMaster
+    ALL_KIBETU_VALUE = "__all__"
 
     def get_queryset(self):
         # B_week_bonus_result に登録済みの期別だけ取得
@@ -11273,6 +12051,8 @@ class S_WeekBonusView(generic.ListView):
         if request.GET.get("export") == "excel":
             rows = context.get("rows", [])
             kibetu = context.get("selected_kibetu", "")
+            if kibetu == self.ALL_KIBETU_VALUE:
+                kibetu = "all"
             filename = build_bonus_export_filename("week_bonus_result", kibetu=kibetu)
             return export_search_rows_to_excel(
                 rows,
@@ -11287,23 +12067,33 @@ class S_WeekBonusView(generic.ListView):
         ctx = super().get_context_data(**kwargs)
 
         selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
+        jwoa_code = (self.request.GET.get("jwoa_code") or "").strip()
+        jwoa_name = (self.request.GET.get("jwoa_name") or "").strip()
 
         # 期別未選択なら、登録済み期別の先頭を自動選択
         if not selected_kibetu and self.object_list:
             selected_kibetu = self.object_list[0].kibetu
 
         ctx["selected_kibetu"] = selected_kibetu
+        ctx["all_kibetu_value"] = self.ALL_KIBETU_VALUE
+        ctx["is_all_kibetu"] = selected_kibetu == self.ALL_KIBETU_VALUE
+        ctx["jwoa_code"] = jwoa_code
+        ctx["jwoa_name"] = jwoa_name
         ctx["rows"] = []
         ctx["selected_period"] = None
 
         if not selected_kibetu:
             return ctx
 
-        period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
-        if not period:
-            return ctx
-
-        ctx["selected_period"] = period
+        if ctx["is_all_kibetu"]:
+            if not jwoa_code and not jwoa_name:
+                ctx["all_kibetu_requires_member_filter"] = True
+                return ctx
+        else:
+            period = PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
+            if not period:
+                return ctx
+            ctx["selected_period"] = period
 
         sort_ctx = get_bonus_sort_context(
             self.request,
@@ -11336,10 +12126,14 @@ class S_WeekBonusView(generic.ListView):
                 created_at,
                 updated_at
             FROM bonus_db.B_week_bonus_result
-            WHERE kibetu = %s
+            WHERE 1 = 1
         """
 
-        params = [selected_kibetu]
+        params = []
+        if not ctx["is_all_kibetu"]:
+            sql += "\n            AND kibetu = %s"
+            params.append(selected_kibetu)
+
         sql, filter_values = apply_like_filters(
             sql,
             params,
@@ -12274,6 +13068,7 @@ class S_MonthBonusView(generic.ListView):
     template_name = "s_month_bonus.html"
     context_object_name = "object_list"
     model = MonthlyPeriod
+    ALL_KIBETU_VALUE = "__all__"
 
     def get_queryset(self):
         with connections["rds"].cursor() as cursor:
@@ -12300,6 +13095,8 @@ class S_MonthBonusView(generic.ListView):
         if request.GET.get("export") == "excel":
             rows = context.get("rows", [])
             kibetu = context.get("selected_kibetu", "")
+            if kibetu == self.ALL_KIBETU_VALUE:
+                kibetu = "all"
             filename = build_bonus_export_filename("month_bonus_result", kibetu=kibetu)
             return export_search_rows_to_excel(
                 rows,
@@ -12314,27 +13111,36 @@ class S_MonthBonusView(generic.ListView):
         ctx = super().get_context_data(**kwargs)
 
         selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
+        jwoa_code = (self.request.GET.get("jwoa_code") or "").strip()
+        jwoa_name = (self.request.GET.get("jwoa_name") or "").strip()
 
         if not selected_kibetu and self.object_list:
             selected_kibetu = self.object_list[0].kibetu
 
         ctx["selected_kibetu"] = selected_kibetu
+        ctx["all_kibetu_value"] = self.ALL_KIBETU_VALUE
+        ctx["is_all_kibetu"] = selected_kibetu == self.ALL_KIBETU_VALUE
+        ctx["jwoa_code"] = jwoa_code
+        ctx["jwoa_name"] = jwoa_name
         ctx["rows"] = []
         ctx["selected_period"] = None
 
         if not selected_kibetu:
             return ctx
 
-        period = (
-            MonthlyPeriod.objects.using("rds")
-            .filter(kibetu=selected_kibetu)
-            .first()
-        )
-
-        if not period:
-            return ctx
-
-        ctx["selected_period"] = period
+        if ctx["is_all_kibetu"]:
+            if not jwoa_code and not jwoa_name:
+                ctx["all_kibetu_requires_member_filter"] = True
+                return ctx
+        else:
+            period = (
+                MonthlyPeriod.objects.using("rds")
+                .filter(kibetu=selected_kibetu)
+                .first()
+            )
+            if not period:
+                return ctx
+            ctx["selected_period"] = period
 
         sort_ctx = get_bonus_sort_context(
             self.request,
@@ -12371,10 +13177,14 @@ class S_MonthBonusView(generic.ListView):
                 created_at,
                 updated_at
             FROM bonus_db.B_month_bonus_result
-            WHERE kibetu = %s
+            WHERE 1 = 1
         """
 
-        params = [selected_kibetu]
+        params = []
+        if not ctx["is_all_kibetu"]:
+            sql += "\n            AND kibetu = %s"
+            params.append(selected_kibetu)
+
         sql, filter_values = apply_like_filters(
             sql,
             params,
@@ -12479,6 +13289,27 @@ class BonusHistryMonthView(generic.TemplateView):
 
 class CoolingOffView(generic.TemplateView):
     template_name = "cooling_off.html"
+    SORT_COLUMNS = {
+        "register_year": "p.register_year",
+        "register_month": "p.register_month",
+        "order_code": "c.order_code",
+        "active_flag": "c.active_flag",
+        "jwoa_code": "o.jwoa_code",
+        "order_name": "o.order_name",
+        "order_type": "o.order_type",
+        "bv": "p.bv",
+        "remarks": "c.remarks",
+        "registered_by": "c.registered_by",
+        "created_at": "c.created_at",
+    }
+
+    def _get_sort_context(self):
+        return get_bonus_sort_context(
+            self.request,
+            self.SORT_COLUMNS,
+            default_sort="created_at",
+            default_direction="desc",
+        )
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -12490,12 +13321,16 @@ class CoolingOffView(generic.TemplateView):
         q_register_month = (self.request.GET.get("q_register_month") or "").strip()
         q_jwoa_code = (self.request.GET.get("q_jwoa_code") or "").strip()
 
+        sort_ctx = self._get_sort_context()
+        ctx.update(sort_ctx)
+
         ctx["rows"] = self._get_rows(
             q_order_code=q_order_code,
             q_active_flag=q_active_flag,
             q_register_year=q_register_year,
             q_register_month=q_register_month,
             q_jwoa_code=q_jwoa_code,
+            order_sql=sort_ctx["order_sql"],
         )
         ctx["detail_order"] = None
         ctx["q_order_code"] = q_order_code
@@ -12549,6 +13384,7 @@ class CoolingOffView(generic.TemplateView):
         q_register_year="",
         q_register_month="",
         q_jwoa_code="",
+        order_sql="",
     ):
         where = []
         params = []
@@ -12602,8 +13438,8 @@ class CoolingOffView(generic.TemplateView):
             ) p
                 ON c.order_code = p.order_code
             {where_sql}
-            ORDER BY c.created_at DESC
-        """.format(where_sql=where_sql)
+            ORDER BY {order_sql}, c.id DESC
+        """.format(where_sql=where_sql, order_sql=order_sql or "c.created_at DESC")
 
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql, params)

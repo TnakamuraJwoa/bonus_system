@@ -6,7 +6,7 @@ bonus_db.JP_OM_ORDERS をそのまま表示する。
 
 import logging
 import math
-from datetime import date, datetime, time
+from datetime import date, datetime
 from urllib.parse import urlencode
 
 import openpyxl
@@ -19,7 +19,12 @@ from django.views import generic
 
 from connect.business_search_registration import is_missing_table_error
 from connect.order_field_labels import get_legacy_order_field_label
-from connect.views import KeysetPaginationMixin
+from connect.templatetags.custom_filters import jst_datetime
+from connect.views import (
+    KeysetPaginationMixin,
+    add_sort_params,
+    get_bonus_sort_context,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -55,6 +60,12 @@ ORDER_STATUS_LABELS = {
     "-100": "無効",
     "-110": "取消",
 }
+ORDER_STATUS_BADGE_CLASSES = {
+    "20": "order-status-badge--done",
+    "35": "order-status-badge--waiting",
+    "-100": "order-status-badge--canceled",
+    "-110": "order-status-badge--canceled",
+}
 
 ORDER_TYPE_CHOICES = tuple(ORDER_TYPE_LABELS.items())
 ORDER_STATUS_CHOICES = tuple(ORDER_STATUS_LABELS.items())
@@ -74,6 +85,15 @@ def order_status_label(value):
         return ""
     key = str(value).strip()
     return ORDER_STATUS_LABELS.get(key, key)
+
+
+def order_status_badge_class(value):
+    """旧注文状況コードに対応するバッジ色を返す。"""
+    if value in (None, ""):
+        return "order-status-badge--unknown"
+    key = str(value).strip()
+    return ORDER_STATUS_BADGE_CLASSES.get(key, "order-status-badge--unknown")
+
 
 MIN_ORDER_YEAR = 1900
 MAX_ORDER_YEAR = 2999
@@ -103,6 +123,29 @@ def order_date_range(year, month):
 
 class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "legacy_orders.html"
+    SORT_COLUMNS = {
+        # id は列として出していないが、既定の並び順（採番順＝新しい順）に使う。
+        "id": "o.ID",
+        "order_code": "o.DOC_NO",
+        "order_status": "o.ORDER_STATUS",
+        "order_type": "o.ORDER_TYPE",
+        "order_year": "YEAR(o.ORDER_DATE)",
+        "order_month": "MONTH(o.ORDER_DATE)",
+        "member_no": "m.MEMBER_NO",
+        "order_name": "o.FIRSTNAME",
+        "total_price": "o.TOTAL_NET_AMOUNT",
+        "total_bv": "o.TOTAL_BV",
+        "order_at": "o.ORDER_DATE",
+        "created_at": "o.CREATE_DATE",
+    }
+
+    def _get_sort_context(self):
+        return get_bonus_sort_context(
+            self.request,
+            self.SORT_COLUMNS,
+            default_sort="id",
+            default_direction="desc",
+        )
 
     def _build_where(
         self,
@@ -193,7 +236,7 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
                 raise
         return int(row[0]) if row else 0
 
-    def _fetch_rows(self, limit=200, offset=0, **filters):
+    def _fetch_rows(self, limit=200, offset=0, order_sql="", **filters):
         where_sql, params = self._build_where(**filters)
         sql = f"""
             SELECT
@@ -212,7 +255,7 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
             FROM {LEGACY_ORDERS_TABLE} o
             {MEMBER_JOIN_SQL}
             {where_sql}
-            ORDER BY o.ID DESC
+            ORDER BY {order_sql or "o.ID DESC"}, o.ID DESC
             LIMIT %s OFFSET %s
         """
         with connections["rds"].cursor() as cursor:
@@ -230,6 +273,9 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
             if row.get("id") is not None:
                 row["id"] = int(row["id"])
             row["order_status_label"] = order_status_label(row.get("order_status"))
+            row["order_status_badge_class"] = order_status_badge_class(
+                row.get("order_status")
+            )
             row["order_type_label"] = order_type_label(row.get("order_type"))
         return rows
 
@@ -258,12 +304,23 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
         q_order_statuses = filters["q_order_statuses"]
         q_order_types = filters["q_order_types"]
         per_page = self.get_per_page()
+        sort_ctx = self._get_sort_context()
+        ctx.update(sort_ctx)
 
         total_count = self._fetch_total_count(**filters)
         total_pages = max(1, math.ceil(total_count / per_page)) if total_count else 1
         page = self.get_page_number(total_pages)
         offset = (page - 1) * per_page
-        rows = self._fetch_rows(limit=per_page, offset=offset, **filters) if total_count else []
+        rows = (
+            self._fetch_rows(
+                limit=per_page,
+                offset=offset,
+                order_sql=sort_ctx["order_sql"],
+                **filters,
+            )
+            if total_count
+            else []
+        )
 
         ctx["q_order_code"] = filters["q_order_code"]
         ctx["q_member_id"] = filters["q_member_id"]
@@ -294,6 +351,8 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
                 base_params[key] = value
         if per_page != self.DEFAULT_PER_PAGE:
             base_params["per_page"] = per_page
+
+        add_sort_params(base_params, sort_ctx)
 
         ctx = self.set_page_context(
             ctx=ctx,
@@ -384,8 +443,8 @@ class LegacyOrdersExportView(LegacyOrdersView):
 
     @staticmethod
     def _excel_value(value):
-        if isinstance(value, datetime) and value.tzinfo is not None:
-            return value.replace(tzinfo=None)
+        if isinstance(value, datetime):
+            return jst_datetime(value).replace(tzinfo=None)
         return value
 
     def _row_to_excel(self, row):
@@ -454,9 +513,7 @@ class LegacyOrderDetailView(generic.TemplateView):
         if value is None:
             return ""
         if isinstance(value, datetime):
-            if value.time() == time.min:
-                return value.strftime("%Y-%m-%d")
-            return value.strftime("%Y-%m-%d %H:%M:%S")
+            return jst_datetime(value).strftime("%Y-%m-%d %H:%M:%S")
         return value
 
     def _detail_value(self, col, value):

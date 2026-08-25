@@ -212,8 +212,8 @@
                         {{ r.over_bonus }}
                       </td>
 
-                      <td>{{ r.created_at }}</td>
-                      <td>{{ r.updated_at }}</td>
+                      <td>{{ r.created_at|jst_datetime }}</td>
+                      <td>{{ r.updated_at|jst_datetime }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

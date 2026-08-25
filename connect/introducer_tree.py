@@ -16,7 +16,11 @@ from connect.introducer_tree_builder import (
     fetch_introducer_tree_search_path,
 )
 from connect.sql.introducer_tree_sql import INTRODUCER_TREE_REBUILD_CACHE_SQL
-from connect.views import KeysetPaginationMixin
+from connect.views import (
+    KeysetPaginationMixin,
+    add_sort_params,
+    get_bonus_sort_context,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +30,25 @@ class IntroducerTreeView(KeysetPaginationMixin, generic.TemplateView):
 
     DEFAULT_PER_PAGE = 200
     MAX_PER_PAGE = 500
+    SORT_COLUMNS = {
+        "id": "c.id",
+        "introducer_code": "c.introducer_code",
+        "introducer_name": "c.introducer_name",
+        "introducer_rank": "c.introducer_rank",
+        "jwoa_code": "c.jwoa_code",
+        "jwoa_name": "c.jwoa_name",
+        "rank": "c.`rank`",
+        "tree_level": "c.tree_level",
+        "created_at": "c.created_at",
+    }
+
+    def _get_sort_context(self):
+        return get_bonus_sort_context(
+            self.request,
+            self.SORT_COLUMNS,
+            default_sort="id",
+            default_direction="asc",
+        )
 
     def _build_where(
         self,
@@ -96,6 +119,7 @@ FROM bonus_db.C_users_introducer_tree_cache c
         q_rank: str,
         limit: int,
         offset: int = 0,
+        order_sql: str = "",
     ):
         where_sql, params = self._build_where(
             q_jwoa_code,
@@ -118,7 +142,7 @@ SELECT
     c.created_at
 FROM bonus_db.C_users_introducer_tree_cache c
 {where_sql}
-ORDER BY c.id
+ORDER BY {order_sql or "c.id ASC"}, c.id ASC
 LIMIT %s OFFSET %s
         """
 
@@ -128,8 +152,8 @@ LIMIT %s OFFSET %s
             return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
     def _fetch_last_recreated_at(self):
-        # 再作成は全削除＋一括INSERTのため、MAX(created_at) が最終再作成日時になる。
-        sql = "SELECT MAX(created_at) FROM bonus_db.C_users_introducer_tree_cache"
+        # 再作成は全削除＋一括INSERTのため、先頭行の created_at が最終再作成日時になる。
+        sql = "SELECT created_at FROM bonus_db.C_users_introducer_tree_cache LIMIT 1"
 
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql)
@@ -225,26 +249,40 @@ LIMIT %s OFFSET %s
             per_page = self.DEFAULT_PER_PAGE
         per_page = max(1, min(per_page, self.MAX_PER_PAGE))
 
-        total_count = self._fetch_total_count(
-            q_jwoa_code,
-            q_name,
-            q_introducer_code,
-            q_introducer_rank,
-            q_rank,
-        )
-        total_pages = max(1, math.ceil(total_count / per_page)) if total_count > 0 else 1
-        page = self.get_page_number(total_pages)
-        offset = (page - 1) * per_page
+        view_mode = (self.request.GET.get("view") or "list").strip()
+        if view_mode not in ("list", "tree"):
+            view_mode = "list"
 
-        rows = self._fetch_rows(
-            q_jwoa_code=q_jwoa_code,
-            q_name=q_name,
-            q_introducer_code=q_introducer_code,
-            q_introducer_rank=q_introducer_rank,
-            q_rank=q_rank,
-            limit=per_page,
-            offset=offset,
-        )
+        sort_ctx = self._get_sort_context()
+        ctx.update(sort_ctx)
+
+        if view_mode == "tree":
+            # 一覧件数・行は Tree タブでは使わないので取得しない。
+            total_count = 0
+            rows = []
+            page = 1
+        else:
+            total_count = self._fetch_total_count(
+                q_jwoa_code,
+                q_name,
+                q_introducer_code,
+                q_introducer_rank,
+                q_rank,
+            )
+            total_pages = max(1, math.ceil(total_count / per_page)) if total_count > 0 else 1
+            page = self.get_page_number(total_pages)
+            rows = self._fetch_rows(
+                q_jwoa_code=q_jwoa_code,
+                q_name=q_name,
+                q_introducer_code=q_introducer_code,
+                q_introducer_rank=q_introducer_rank,
+                q_rank=q_rank,
+                limit=per_page,
+                offset=(page - 1) * per_page,
+                order_sql=sort_ctx["order_sql"],
+            )
+
+        total_pages = max(1, math.ceil(total_count / per_page)) if total_count > 0 else 1
 
         base_params = {}
         if q_jwoa_code:
@@ -269,10 +307,6 @@ LIMIT %s OFFSET %s
         ctx["q_rank"] = q_rank
         ctx["tree_search"] = tree_search
         ctx["last_recreated_at"] = self._fetch_last_recreated_at()
-
-        view_mode = (self.request.GET.get("view") or "list").strip()
-        if view_mode not in ("list", "tree"):
-            view_mode = "list"
         ctx["view_mode"] = view_mode
 
         tab_params = dict(base_params)
@@ -282,7 +316,17 @@ LIMIT %s OFFSET %s
         ctx["tree_tab_query"] = urlencode(tree_tab_params)
 
         tree_root_code = q_jwoa_code or q_introducer_code
-        tree_context = build_introducer_tree_view(tree_root_code)
+        if view_mode == "tree":
+            tree_context = build_introducer_tree_view(tree_root_code)
+        else:
+            tree_context = {
+                "tree_ancestors": [],
+                "tree_focus": None,
+                "tree_children": [],
+                "tree_truncated": False,
+                "tree_unavailable_reason": None,
+                "tree_node_count": 0,
+            }
         ctx.update(tree_context)
         tree_search_path_rows = (
             fetch_introducer_tree_search_path(tree_root_code, tree_search)
@@ -301,6 +345,9 @@ LIMIT %s OFFSET %s
             and tree_search
             and not tree_search_path_rows
         )
+
+        # Tree表示には並び替えがないので、タブ切替リンクには引き継がない。
+        add_sort_params(base_params, sort_ctx)
 
         return self.set_page_context(
             ctx=ctx,
@@ -354,7 +401,7 @@ SELECT
     c.created_at
 FROM bonus_db.C_users_introducer_tree_cache c
 {where_sql}
-ORDER BY c.id
+ORDER BY {self._get_sort_context()["order_sql"]}, c.id ASC
         """
 
         wb = openpyxl.Workbook(write_only=True)

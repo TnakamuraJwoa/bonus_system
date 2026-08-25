@@ -1,5 +1,5 @@
 ﻿{% extends 'base.html' %}
-{% load static humanize %}
+{% load static humanize custom_filters %}
 
 {% block head %}
   <link href="{% static 'css/common.css' %}" rel="stylesheet">
@@ -99,6 +99,12 @@
 
     .users-search-date {
       width: 150px;
+    }
+
+    /* ランク・FLG列は列名から数値列と判定され共通JSに右寄せされるため、
+       中央寄せを指定したセルは中央に戻す */
+    .users-table tbody td.col-num.text-center {
+      text-align: center !important;
     }
   </style>
 {% endblock %}
@@ -369,30 +375,28 @@
 
                 <thead class="table-light">
                   <tr>
-                    <th class="text-center">ID</th>
-                    <th class="text-center">グループID</th>
-                    <th class="text-center">会員ID</th>
-                    <th class="text-center col-member-name">会員名</th>
-                    <th class="text-center col-member-kana">氏名(カナ)</th>
-                    <th class="text-center">上位者ID</th>
-                    <th class="text-center">紹介者ID</th>
-                    <th class="text-center">アクティブ確認</th>
-                    <th class="text-center">ランク</th>
-                    <th class="text-center">ステータス</th>
-                    <th class="text-center">本登録FLG</th>
-                    <th class="text-center">法人FLG</th>
-                    <th class="text-center">仮登録日時</th>
-                    <th class="text-center">本登録日時</th>
-                    <th class="text-center">最終購入日</th>
-                    <th class="text-center">作成日時</th>
-                    <th class="text-center">更新日時</th>
+                    {% sortable_th "group_code" "グループID" %}
+                    {% sortable_th "jmoa_code" "会員ID" %}
+                    {% sortable_th "send_bv_name" "会員名" "col-member-name" %}
+                    {% sortable_th "name_kana" "氏名(カナ)" "col-member-kana" %}
+                    {% sortable_th "introducer_code" "上位者ID" %}
+                    {% sortable_th "placement_code" "紹介者ID" %}
+                    {% sortable_th "prev_month_active_status" "アクティブ確認" %}
+                    {% sortable_th "rank" "ランク" %}
+                    {% sortable_th "status_code" "ステータス" %}
+                    {% sortable_th "activated" "本登録FLG" %}
+                    {% sortable_th "company" "法人FLG" %}
+                    {% sortable_th "interim_at" "仮登録日時" %}
+                    {% sortable_th "activated_at" "本登録日時" %}
+                    {% sortable_th "last_purchase_at" "最終購入日" %}
+                    {% sortable_th "created_at" "作成日時" %}
+                    {% sortable_th "updated_at" "更新日時" %}
                   </tr>
                 </thead>
 
                 <tbody>
                   {% for r in rows %}
                   <tr>
-                    <td class="text-end">{{ r.id }}</td>
                     <td>{{ r.group_code }}</td>
                     <td>{{ r.jmoa_code }}</td>
                     <td class="col-member-name">{{ r.send_bv_name }}</td>
@@ -414,16 +418,10 @@
 
                     <!-- ランク -->
                     <td class="text-center">
-                      {% if r.rank == 1 %}
-                        シルバー
-                      {% elif r.rank == 2 %}
-                        ゴールド
-                      {% elif r.rank == 3 %}
-                        プラチナ
-                      {% elif r.rank == 4 %}
-                        ダイヤ
-                      {% elif r.rank == 9 %}
-                        一般会員
+                      {% if r.rank %}
+                        <span class="badge {{ r.rank|rank_badge_class }}">
+                          {{ r.rank|rank_label }}
+                        </span>
                       {% else %}
                         -
                       {% endif %}
@@ -431,16 +429,10 @@
 
                     <!-- ステータス -->
                     <td class="text-center">
-                      {% if r.status_code == 1 %}
-                        アクティブ
-                      {% elif r.status_code == 2 %}
-                        凍結
-                      {% elif r.status_code == 3 %}
-                        退会
-                      {% elif r.status_code == 4 %}
-                        中途解約
-                      {% elif r.status_code == 5 %}
-                        非アクティブ
+                      {% if r.status_code %}
+                        <span class="badge {{ r.status_code|member_status_badge_class }}">
+                          {{ r.status_code|member_status_label }}
+                        </span>
                       {% else %}
                         -
                       {% endif %}
@@ -464,11 +456,11 @@
                       {% endif %}
                     </td>
 
-                    <td>{{ r.interim_at }}</td>
-                    <td>{{ r.activated_at }}</td>
-                    <td>{{ r.last_purchase_at }}</td>
-                    <td>{{ r.created_at }}</td>
-                    <td>{{ r.updated_at }}</td>
+                    <td>{{ r.interim_at|jst_datetime }}</td>
+                    <td>{{ r.activated_at|jst_datetime }}</td>
+                    <td>{{ r.last_purchase_at|jst_datetime }}</td>
+                    <td>{{ r.created_at|jst_datetime }}</td>
+                    <td>{{ r.updated_at|jst_datetime }}</td>
                   </tr>
                   {% endfor %}
                 </tbody>

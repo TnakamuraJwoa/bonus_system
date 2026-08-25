@@ -226,7 +226,8 @@ income_detail_source AS (
         2 AS detail_sort
     FROM active_prev_basic_carry_over_bv AS a
     LEFT JOIN nexus_production.users AS u
-      ON u.jmoa_code = a.placement_code
+      ON u.jmoa_code =
+         CONVERT(a.placement_code USING utf8mb3) COLLATE utf8mb3_bin
     LEFT JOIN bonus_db.users_target_rank AS ur
       ON a.placement_code = ur.jmoa_code
 ),

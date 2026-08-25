@@ -1,9 +1,10 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone as datetime_timezone
 
 from django import template
 from django.db.models import Q
 from django.urls import reverse
 from django.utils.html import format_html
+from django.utils import timezone
 from dateutil.relativedelta import relativedelta
 
 from connect.bonus_help import get_bonus_help
@@ -13,11 +14,23 @@ from connect.models import MonthlyPeriod, PeriodMaster
 register = template.Library()
 
 
+@register.filter
+def jst_datetime(value):
+    """Convert datetime values from UTC to the configured Japan timezone."""
+    if value is None or value == "":
+        return value
+    if isinstance(value, datetime):
+        if timezone.is_naive(value):
+            value = timezone.make_aware(value, datetime_timezone.utc)
+        return timezone.localtime(value, timezone.get_default_timezone())
+    return value
+
+
 def _to_date(value):
     if value is None or value == "":
         return None
     if isinstance(value, datetime):
-        return value.date()
+        return jst_datetime(value).date()
     if isinstance(value, date):
         return value
 
@@ -151,6 +164,37 @@ def rank_badge_class(value):
 
 
 @register.filter
+def member_status_label(value):
+    labels = {
+        "1": "アクティブ",
+        "2": "凍結",
+        "3": "退会",
+        "4": "中途解約",
+        "5": "非アクティブ",
+    }
+    if value in (None, ""):
+        return "-"
+    key = str(value).strip()
+    return labels.get(key, key)
+
+
+@register.filter
+def member_status_badge_class(value):
+    # 稼働中＝緑／一時停止＝黄／解約＝赤／退会・停止＝暗色で状態の重さを表す。
+    classes = {
+        "1": "badge-success",
+        "2": "badge-warning",
+        "3": "badge-dark",
+        "4": "badge-danger",
+        "5": "badge-secondary",
+    }
+    if value in (None, ""):
+        return "badge-light"
+    key = str(value).strip()
+    return classes.get(key, "badge-light")
+
+
+@register.filter
 def title_badge_class(value):
     """3スターダイヤ(title_id>=6)以上だけ色分けする（青・緑以外）。"""
     classes = {
@@ -171,6 +215,28 @@ def title_badge_class(value):
     if title_id < 6:
         return ""
     return classes.get(key, "badge-title-slate")
+
+
+@register.filter
+def title_tier_badge_class(value):
+    """タイトルを下位から上位へ段階的に色分けする（一覧のバッジ表示用）。"""
+    classes = {
+        "1": "badge-secondary",
+        "2": "badge-info",
+        "3": "badge-primary",
+        "4": "badge-success",
+        "5": "badge-title-teal",
+        "6": "badge-title-orange",
+        "7": "badge-title-purple",
+        "8": "badge-title-rose",
+        "9": "badge-title-amber",
+        "10": "badge-title-fuchsia",
+        "11": "badge-title-slate",
+    }
+    if value in (None, ""):
+        return "badge-light text-muted"
+    key = str(value).strip()
+    return classes.get(key, "badge-light text-muted")
 
 
 ORDER_STATUS_LABELS = {
@@ -224,6 +290,66 @@ def order_status_label(value):
 def order_status_badge_class(value):
     status = _to_order_status(value)
     return ORDER_STATUS_BADGE_CLASSES.get(status, "order-status-badge--unknown")
+
+
+BV_ACTIVED_FLG_LABELS = {
+    0: "未反映",
+    1: "反映済",
+    3: "反映無効",
+}
+
+BV_ACTIVED_FLG_BADGE_CLASSES = {
+    0: "order-status-badge--waiting",
+    1: "order-status-badge--done",
+    3: "order-status-badge--canceled",
+}
+
+
+@register.filter
+def bv_actived_flg_label(value):
+    """BV反映FLGを日本語ラベルにする。未知の値はそのまま返す。"""
+    flag = _to_order_status(value)
+    if flag is None:
+        return value if value not in (None, "") else ""
+    return BV_ACTIVED_FLG_LABELS.get(flag, flag)
+
+
+@register.filter
+def bv_actived_flg_badge_class(value):
+    flag = _to_order_status(value)
+    return BV_ACTIVED_FLG_BADGE_CLASSES.get(flag, "order-status-badge--unknown")
+
+
+ORDER_TYPE_LABELS = {
+    101: "再購入品",
+    102: "初回購入品",
+    103: "ランクアップ購入品",
+    105: "特別対応購入品",
+    200: "クーリングオフ",
+}
+
+ORDER_TYPE_BADGE_CLASSES = {
+    101: "order-status-badge--progress",
+    102: "order-status-badge--done",
+    103: "order-status-badge--exchange",
+    105: "order-status-badge--waiting",
+    200: "order-status-badge--canceled",
+}
+
+
+@register.filter
+def order_type_label(value):
+    """注文区分コードを日本語ラベルにする。未知のコードはそのまま返す。"""
+    order_type = _to_order_status(value)
+    if order_type is None:
+        return value if value not in (None, "") else ""
+    return ORDER_TYPE_LABELS.get(order_type, order_type)
+
+
+@register.filter
+def order_type_badge_class(value):
+    order_type = _to_order_status(value)
+    return ORDER_TYPE_BADGE_CLASSES.get(order_type, "order-status-badge--unknown")
 
 
 @register.filter
@@ -476,14 +602,21 @@ def bonus_calc_period_status(context, empty_message="期別を指定してくだ
 
 
 @register.simple_tag(takes_context=True)
-def sortable_th(context, column, label):
+def sortable_th(context, column, label, css_class="", width=""):
     request = context.get("request")
     sort = context.get("sort", "")
     direction = context.get("direction", "asc")
     next_direction = context.get("next_direction", "desc")
+    extra_class = f" {css_class}" if css_class else ""
+    width_attr = format_html(' width="{}"', width) if width else ""
 
     if not request:
-        return format_html('<th class="text-center">{}</th>', label)
+        return format_html(
+            '<th class="text-center{}"{}>{}</th>',
+            extra_class,
+            width_attr,
+            label,
+        )
 
     params = request.GET.copy()
     params["sort"] = column
@@ -491,15 +624,19 @@ def sortable_th(context, column, label):
         params["direction"] = next_direction
     else:
         params["direction"] = "asc"
+    # 並び替え直後は先頭ページから見せる。
+    params.pop("page", None)
 
     indicator = ""
     if sort == column:
         indicator = " ▲" if direction == "asc" else " ▼"
 
     return format_html(
-        '<th class="text-center sortable-th">'
+        '<th class="text-center sortable-th{}"{}>'
         '<a href="?{}" class="sortable-th__link text-dark text-decoration-none">'
         "{}{}</a></th>",
+        extra_class,
+        width_attr,
         params.urlencode(),
         label,
         indicator,

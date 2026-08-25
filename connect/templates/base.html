@@ -15,7 +15,7 @@
 
     <link href="{% static 'css/base_style.css' %}" rel="stylesheet"/>
     <link href="{% static 'css/theme.css' %}?v=27" rel="stylesheet"/>
-    <link href="{% static 'css/common.css' %}?v=51" rel="stylesheet"/>
+    <link href="{% static 'css/common.css' %}?v=55" rel="stylesheet"/>
     <!-- Bootstrap CSS (v4) -->
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap JS: jQuery → Popper 1 → Bootstrap 4 の順 -->
@@ -307,6 +307,9 @@ document.addEventListener("DOMContentLoaded", function(){
                     return;
                 }
                 if (cell.classList.contains("text-start") || cell.classList.contains("text-left")) {
+                    return;
+                }
+                if (cell.querySelector(".badge")) {
                     return;
                 }
 

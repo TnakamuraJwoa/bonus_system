@@ -2,10 +2,14 @@
 {% load static custom_filters %}
 
 {% block head %}
-  <link href="{% static 'css/common.css' %}?v=51" rel="stylesheet">
+  <link href="{% static 'css/common.css' %}?v=55" rel="stylesheet">
   <style>
     .placement-tree-tabs .btn {
       min-width: 5.5rem;
+    }
+
+    .table tbody td.text-center {
+      text-align: center !important;
     }
 
     .placement-tree-panel {
@@ -462,7 +466,7 @@
             </div>
             <div class="d-flex gap-2 flex-wrap align-items-center">
               <span class="text-muted small">
-                最終再作成：{% if last_recreated_at %}{{ last_recreated_at|date:"Y年n月j日 G:i" }}{% else %}-{% endif %}
+                最終再作成：{% if last_recreated_at %}{{ last_recreated_at|jst_datetime|date:"Y年n月j日 G:i" }}{% else %}-{% endif %}
               </span>
               {% if view_mode == "tree" and not tree_unavailable_reason %}
                 <div class="d-flex gap-2 flex-wrap align-items-center">
@@ -514,14 +518,14 @@
                 <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
                   <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                     <tr>
-                      <th class="text-end">階層</th>
-                      <th>上位者コード</th>
-                      <th>上位者名</th>
-                      <th class="text-end">上位者ランク</th>
-                      <th>会員コード</th>
-                      <th>会員名</th>
-                      <th class="text-end">ランク</th>
-                      <th>作成日時</th>
+                      {% sortable_th "rel_level" "階層" %}
+                      {% sortable_th "placement_code" "上位者コード" %}
+                      {% sortable_th "placement_name" "上位者名" %}
+                      {% sortable_th "placement_rank" "上位者ランク" %}
+                      {% sortable_th "jwoa_code" "会員コード" %}
+                      {% sortable_th "send_bv_name" "会員名" %}
+                      {% sortable_th "rank" "ランク" %}
+                      {% sortable_th "created_at" "作成日時" %}
                     </tr>
                   </thead>
                   <tbody>
@@ -530,11 +534,23 @@
                         <td class="text-end">{{ r.rel_level }}</td>
                         <td class="font-weight-bold">{{ r.placement_code }}</td>
                         <td>{{ r.placement_name|default:"-" }}</td>
-                        <td class="text-end">{{ r.placement_rank|rank_label }}</td>
+                        <td class="text-center">
+                          {% if r.placement_rank %}
+                            <span class="badge {{ r.placement_rank|rank_badge_class }}">{{ r.placement_rank|rank_label }}</span>
+                          {% else %}
+                            -
+                          {% endif %}
+                        </td>
                         <td class="font-weight-bold">{{ r.jwoa_code }}</td>
                         <td>{{ r.send_bv_name|default:"-" }}</td>
-                        <td class="text-end">{{ r.rank|rank_label }}</td>
-                        <td>{{ r.created_at }}</td>
+                        <td class="text-center">
+                          {% if r.rank %}
+                            <span class="badge {{ r.rank|rank_badge_class }}">{{ r.rank|rank_label }}</span>
+                          {% else %}
+                            -
+                          {% endif %}
+                        </td>
+                        <td>{{ r.created_at|jst_datetime }}</td>
                       </tr>
                     {% endfor %}
                   </tbody>
@@ -553,15 +569,15 @@
               <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                   <tr>
-                    <th class="text-end">ID</th>
-                    <th>上位者コード</th>
-                    <th>上位者名</th>
-                    <th class="text-end">上位者ランク</th>
-                    <th>会員コード</th>
-                    <th>会員名</th>
-                    <th class="text-end">ランク</th>
-                    <th class="text-end">階層</th>
-                    <th>作成日時</th>
+                    {% sortable_th "id" "ID" %}
+                    {% sortable_th "placement_code" "上位者コード" %}
+                    {% sortable_th "placement_name" "上位者名" %}
+                    {% sortable_th "placement_rank" "上位者ランク" %}
+                    {% sortable_th "jwoa_code" "会員コード" %}
+                    {% sortable_th "send_bv_name" "会員名" %}
+                    {% sortable_th "rank" "ランク" %}
+                    {% sortable_th "tree_level" "階層" %}
+                    {% sortable_th "created_at" "作成日時" %}
                   </tr>
                 </thead>
                 <tbody>
@@ -570,12 +586,24 @@
                       <td class="text-end">{{ r.id }}</td>
                       <td class="font-weight-bold">{{ r.placement_code }}</td>
                       <td>{{ r.placement_name|default:"-" }}</td>
-                      <td class="text-end">{{ r.placement_rank|rank_label }}</td>
+                      <td class="text-center">
+                        {% if r.placement_rank %}
+                          <span class="badge {{ r.placement_rank|rank_badge_class }}">{{ r.placement_rank|rank_label }}</span>
+                        {% else %}
+                          -
+                        {% endif %}
+                      </td>
                       <td class="font-weight-bold">{{ r.jwoa_code }}</td>
                       <td>{{ r.send_bv_name|default:"-" }}</td>
-                      <td class="text-end">{{ r.rank|rank_label }}</td>
+                      <td class="text-center">
+                        {% if r.rank %}
+                          <span class="badge {{ r.rank|rank_badge_class }}">{{ r.rank|rank_label }}</span>
+                        {% else %}
+                          -
+                        {% endif %}
+                      </td>
                       <td class="text-end">{{ r.tree_level }}</td>
-                      <td>{{ r.created_at }}</td>
+                      <td>{{ r.created_at|jst_datetime }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

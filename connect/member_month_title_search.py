@@ -6,7 +6,11 @@ from django.db import connections
 from django.views import generic
 
 from connect.models import TitleMaster
-from connect.views import KeysetPaginationMixin
+from connect.views import (
+    KeysetPaginationMixin,
+    add_sort_params,
+    get_bonus_sort_context,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -16,6 +20,24 @@ class MemberMonthTitleSearchView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "member_month_title_search.html"
     DEFAULT_PER_PAGE = 200
     MAX_PER_PAGE = 500
+    SORT_COLUMNS = {
+        "kibetu": "mt.kibetu",
+        "jwoa_code": "mt.jwoa_code",
+        "jwoa_name": "mt.jwoa_name",
+        "income_line_bv": "mt.income_line_bv",
+        "basic_line_bv": "mt.basic_line_bv",
+        "title_name": "mt.title_id",
+        "created_at": "mt.created_at",
+        "updated_at": "mt.updated_at",
+    }
+
+    def _get_sort_context(self):
+        return get_bonus_sort_context(
+            self.request,
+            self.SORT_COLUMNS,
+            default_sort="jwoa_code",
+            default_direction="asc",
+        )
 
     def get_title_options(self):
         title_options = [{"title_id": "0", "title_name": "タイトルなし"}]
@@ -102,6 +124,7 @@ class MemberMonthTitleSearchView(KeysetPaginationMixin, generic.TemplateView):
         q_jwoa_code="",
         q_name="",
         q_title_id="",
+        order_sql="",
         limit=200,
         offset=0,
     ):
@@ -113,7 +136,6 @@ class MemberMonthTitleSearchView(KeysetPaginationMixin, generic.TemplateView):
         )
         sql = f"""
             SELECT
-                mt.id,
                 mt.kibetu,
                 mt.jwoa_code,
                 mt.jwoa_name,
@@ -127,7 +149,7 @@ class MemberMonthTitleSearchView(KeysetPaginationMixin, generic.TemplateView):
             LEFT JOIN bonus_db.title_master AS tm
               ON mt.title_id = tm.title_id
             {where_sql}
-            ORDER BY mt.jwoa_code
+            ORDER BY {order_sql or "mt.jwoa_code ASC"}, mt.id ASC
             LIMIT %s OFFSET %s
         """
         params.extend([limit, offset])
@@ -145,7 +167,9 @@ class MemberMonthTitleSearchView(KeysetPaginationMixin, generic.TemplateView):
         q_jwoa_code = self.request.GET.get("q_jwoa_code", "").strip()
         q_name = self.request.GET.get("q_name", "").strip()
         q_title_id = self.request.GET.get("q_title_id", "").strip()
+        sort_ctx = self._get_sort_context()
 
+        ctx.update(sort_ctx)
         ctx.update(
             {
                 "q_kibetu": q_kibetu,
@@ -193,6 +217,7 @@ class MemberMonthTitleSearchView(KeysetPaginationMixin, generic.TemplateView):
                 q_jwoa_code=q_jwoa_code,
                 q_name=q_name,
                 q_title_id=q_title_id,
+                order_sql=sort_ctx["order_sql"],
                 limit=per_page,
                 offset=offset,
             )
@@ -208,10 +233,11 @@ class MemberMonthTitleSearchView(KeysetPaginationMixin, generic.TemplateView):
         )
 
     def _build_base_params(self, q_kibetu, q_jwoa_code, q_name, q_title_id):
-        return {
+        base_params = {
             "q_kibetu": q_kibetu,
             "q_jwoa_code": q_jwoa_code,
             "q_name": q_name,
             "q_title_id": q_title_id,
             "per_page": self.get_per_page(),
         }
+        return add_sort_params(base_params, self._get_sort_context())

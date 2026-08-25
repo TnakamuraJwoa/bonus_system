@@ -172,7 +172,7 @@
                       <td class="text-end">{{ r.income_line_bv }}</td>
                       <td class="text-end">{{ r.basic_line_bv }}</td>
                       <td class="fw-bold text-primary">{{ r.title_name }}</td>
-                      <td>{{ r.updated_at }}</td>
+                      <td>{{ r.updated_at|jst_datetime }}</td>
                       <td class="text-center">
                         <a class="btn btn-sm btn-outline-primary"
                            href="{% url 'connect:month_title_detail' %}?kibetu={{ r.kibetu|urlencode }}&jwoa_code={{ r.jwoa_code|urlencode }}">

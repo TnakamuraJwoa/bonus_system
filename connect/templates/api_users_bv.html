@@ -1,5 +1,5 @@
 ﻿{% extends 'base.html' %}
-{% load static %}
+{% load static custom_filters %}
 {% load humanize %}
 
 {% block head %}
@@ -132,21 +132,21 @@
 
                 <thead class="table-light">
                   <tr>
-                    <th>ID</th>
-                    <th>注文番号</th>
-                    <th>会員番号</th>
-                    <th>氏名</th>
-                    <th>注文区分</th>
-                    <th>注文年</th>
-                    <th>注文月</th>
-                    <th>金額</th>
-                    <th>合計BV</th>
-                    <th>支払日</th>
-                    <th>送信状態</th>
-                    <th>選択区分</th>
-                    <th>説明</th>
-                    <th>作成者</th>
-                    <th>送信者</th>
+                    {% sortable_th "id" "ID" %}
+                    {% sortable_th "doc_no" "注文番号" %}
+                    {% sortable_th "member_no" "会員番号" %}
+                    {% sortable_th "firstname" "氏名" %}
+                    {% sortable_th "order_type" "注文区分" %}
+                    {% sortable_th "order_year" "注文年" %}
+                    {% sortable_th "order_month" "注文月" %}
+                    {% sortable_th "price" "金額" %}
+                    {% sortable_th "total_bv" "合計BV" %}
+                    {% sortable_th "payment_date" "支払日" %}
+                    {% sortable_th "is_posted" "送信状態" %}
+                    {% sortable_th "choice_type" "選択区分" %}
+                    {% sortable_th "desc" "説明" %}
+                    {% sortable_th "created_by" "作成者" %}
+                    {% sortable_th "post_by" "送信者" %}
                   </tr>
                 </thead>
 
