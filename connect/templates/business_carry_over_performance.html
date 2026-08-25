@@ -133,7 +133,7 @@
                     <td>{{ r.jmoa_code }}</td>
                     <td class="text-end">{{ r.bv|default:0|intcomma }}</td>
                     <td class="fw-bold text-primary text-end">{{ r.carry_over_bv|default:0|intcomma }}</td>
-                    <td class="text-center">{{ r.created_at|date:"Y-m-d H:i:s" }}</td>
+                    <td class="text-center">{{ r.created_at|db_datetime }}</td>
                   </tr>
                   {% endfor %}
                 </tbody>

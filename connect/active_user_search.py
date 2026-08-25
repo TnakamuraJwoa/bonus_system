@@ -7,7 +7,7 @@ from django.http import HttpResponse
 from django.views import generic
 import openpyxl
 
-from connect.templatetags.custom_filters import jst_datetime
+from connect.templatetags.custom_filters import as_db_datetime
 from connect.views import (
     KeysetPaginationMixin,
     add_sort_params,
@@ -257,9 +257,7 @@ class ActiveUserSearchExportView(ActiveUserSearchView):
             status_label = "アクティブ" if active_status == 1 else "非アクティブ"
             year = row.get("year")
             month = row.get("month")
-            created_at = jst_datetime(row.get("created_at"))
-            if getattr(created_at, "tzinfo", None) is not None:
-                created_at = created_at.replace(tzinfo=None)
+            created_at = as_db_datetime(row.get("created_at"))
             ws.append([
                 row.get("id"),
                 row.get("jwoa_code"),

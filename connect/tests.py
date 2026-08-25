@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 from django.test import RequestFactory, SimpleTestCase, override_settings
 
-from connect.templatetags.custom_filters import jp_date, jst_datetime
+from connect.templatetags.custom_filters import as_db_datetime, db_datetime, jp_date, jst_datetime
 from connect.views import (
     BonusPaymentDateView,
     OrdersDistributionBvView,
@@ -39,6 +39,34 @@ class JstDatetimeFilterTests(SimpleTestCase):
         value = datetime(2026, 1, 15, 16, 0, tzinfo=timezone.utc)
 
         self.assertEqual(jp_date(value), "2026年1月16日")
+
+
+@override_settings(TIME_ZONE="Asia/Tokyo", USE_TZ=True)
+class DbDatetimeFilterTests(SimpleTestCase):
+    def test_naive_datetime_keeps_db_wall_clock(self):
+        result = db_datetime(datetime(2026, 1, 15, 0, 30))
+
+        self.assertEqual(result, "2026/01/15 00:30:00")
+
+    def test_aware_utc_datetime_does_not_add_jst_offset(self):
+        result = db_datetime(datetime(2026, 1, 15, 0, 30, tzinfo=timezone.utc))
+
+        self.assertEqual(result, "2026/01/15 00:30:00")
+
+    def test_date_has_no_time(self):
+        self.assertEqual(db_datetime(date(2026, 7, 24)), "2026/07/24")
+
+    def test_empty_values_are_unchanged(self):
+        self.assertIsNone(db_datetime(None))
+        self.assertEqual(db_datetime(""), "")
+
+    def test_as_db_datetime_strips_timezone_without_conversion(self):
+        value = datetime(2026, 1, 15, 0, 30, tzinfo=timezone.utc)
+
+        result = as_db_datetime(value)
+
+        self.assertEqual(result, datetime(2026, 1, 15, 0, 30))
+        self.assertIsNone(result.tzinfo)
 
 
 class WeekBonusAllPeriodsSearchTests(SimpleTestCase):

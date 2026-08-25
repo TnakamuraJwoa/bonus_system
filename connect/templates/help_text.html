@@ -90,7 +90,7 @@
                           </div>
 
                           {% if r.updated_at %}
-                            <div class="text-muted small mb-2">最終更新：{{ r.updated_at|jst_datetime|date:"Y-m-d H:i" }}</div>
+                            <div class="text-muted small mb-2">最終更新：{{ r.updated_at|db_datetime }}</div>
                           {% endif %}
 
                           <div class="text-right">
@@ -101,7 +101,7 @@
                         <div class="mb-2 text-muted">{{ r.help_key }}</div>
                         <div>{{ r.content|linebreaksbr }}</div>
                         {% if r.updated_at %}
-                          <div class="text-muted small mt-2">最終更新：{{ r.updated_at|jst_datetime|date:"Y-m-d H:i" }}</div>
+                          <div class="text-muted small mt-2">最終更新：{{ r.updated_at|db_datetime }}</div>
                         {% endif %}
                       {% endif %}
                     </div>

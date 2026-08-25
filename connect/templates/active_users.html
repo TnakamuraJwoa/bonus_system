@@ -477,7 +477,7 @@
                                             </td>
 
                                             <td class="col-created-at created-at">
-                                                {{ r.created_at|jst_datetime|date:"Y-m-d H:i:s" }}
+                                                {{ r.created_at|db_datetime }}
                                             </td>
 
                                             <td class="col-display-month">

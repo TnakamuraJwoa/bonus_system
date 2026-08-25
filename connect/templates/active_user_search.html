@@ -166,7 +166,7 @@
                           <span class="badge badge-secondary">非アクティブ</span>
                         {% endif %}
                       </td>
-                      <td>{{ r.created_at|jst_datetime|date:"Y-m-d H:i:s" }}</td>
+                      <td>{{ r.created_at|db_datetime }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

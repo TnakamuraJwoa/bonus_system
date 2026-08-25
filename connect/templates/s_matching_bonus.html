@@ -167,7 +167,7 @@
                       <td class="text-end">{{ r.level }}</td>
                       <td class="text-end">{{ r.tree_level }}</td>
                       <td class="text-end">{{ r.active_count }}</td>
-                      <td>{{ r.created_at|jst_datetime }}</td>
+                      <td>{{ r.created_at|db_datetime }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

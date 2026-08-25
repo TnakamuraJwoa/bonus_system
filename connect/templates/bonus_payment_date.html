@@ -264,7 +264,7 @@
                           {% endif %}
                         </td>
 
-                        <td>{{ r.created_at|jst_datetime }}</td>
+                        <td>{{ r.created_at|db_datetime }}</td>
 
                         <td class="bonus-payment-date-action-cell">
                           {% if user_access.can_delete %}
@@ -281,7 +281,7 @@
                         </td>
                       {% else %}
                         <td>{{ r.bonus_payment_date|date:'Y-m-d' }}</td>
-                        <td>{{ r.created_at|jst_datetime }}</td>
+                        <td>{{ r.created_at|db_datetime }}</td>
                       {% endif %}
                     </tr>
                   {% endfor %}

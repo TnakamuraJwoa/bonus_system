@@ -26,6 +26,26 @@ def jst_datetime(value):
     return value
 
 
+def as_db_datetime(value):
+    """Keep the wall-clock time stored in DB. Do not convert timezones."""
+    if isinstance(value, datetime) and value.tzinfo is not None:
+        return value.replace(tzinfo=None)
+    return value
+
+
+@register.filter
+def db_datetime(value):
+    """DBに保存されている値をそのまま表示する。日付型には時刻を付けない。"""
+    if value is None or value == "":
+        return value
+    value = as_db_datetime(value)
+    if isinstance(value, datetime):
+        return value.strftime("%Y/%m/%d %H:%M:%S")
+    if isinstance(value, date):
+        return value.strftime("%Y/%m/%d")
+    return value
+
+
 def _to_date(value):
     if value is None or value == "":
         return None

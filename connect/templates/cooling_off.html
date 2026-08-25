@@ -242,12 +242,12 @@
 
                         <tr>
                             <th>入金日</th>
-                            <td>{{ detail_order.deposit_at|jst_datetime|date:"Y/m/d H:i:s" }}</td>
+                            <td>{{ detail_order.deposit_at|db_datetime }}</td>
                         </tr>
 
                         <tr>
                             <th>注文日</th>
-                            <td>{{ detail_order.order_at|jst_datetime|date:"Y/m/d H:i:s" }}</td>
+                            <td>{{ detail_order.order_at|db_datetime }}</td>
                         </tr>
                     </table>
 
@@ -338,7 +338,7 @@
                                     <td class="text-end">{{ row.bv }}</td>
                                     <td>{{ row.remarks|default:'' }}</td>
                                     <td>{{ row.registered_by }}</td>
-                                    <td>{{ row.created_at|jst_datetime|date:"Y/m/d H:i:s" }}</td>
+                                    <td>{{ row.created_at|db_datetime }}</td>
 
                                     <td class="text-center">
                                         <a href="?detail_order_code={{ row.order_code }}"

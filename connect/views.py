@@ -67,16 +67,14 @@ from accounts.access import get_user_access
 from connect.audit import fetch_one_dict, record_change_audit
 from connect.bonus_help import list_bonus_help, save_bonus_help
 from connect.sql.placement_tree_sql import PLACEMENT_TREE_REBUILD_CACHE_SQL
-from connect.templatetags.custom_filters import jst_datetime
+from connect.templatetags.custom_filters import as_db_datetime, db_datetime
 
 logger = logging.getLogger(__name__)
 
 
-def _excel_jst_datetime(value):
-    value = jst_datetime(value)
-    if isinstance(value, datetime) and value.tzinfo is not None:
-        return value.replace(tzinfo=None)
-    return value
+def _excel_db_datetime(value):
+    """Excel はタイムゾーン付き日時を扱えないので、DBの壁時計時刻を naive で渡す。"""
+    return as_db_datetime(value)
 
 
 def insert_bonus_register_history(bonus_name, kibetu, username, comment_text):
@@ -873,6 +871,7 @@ def build_bonus_export_filename(base_name, kibetu=None, kibetu_list=None):
 def _format_export_cell(value, fmt=None):
     if value is None or value == "":
         return ""
+    value = as_db_datetime(value)
     if fmt == "int":
         try:
             return int(float(value))
@@ -2109,7 +2108,7 @@ class RepurchaseListView(KeysetPaginationMixin, generic.TemplateView):
             row = cursor.fetchone()
 
         last_created_at = row[0] if row else None
-        return jst_datetime(last_created_at)
+        return last_created_at
 
     def _fetch_rows(
         self,
@@ -4737,10 +4736,10 @@ class RepurchaseExportView(RepurchaseListView):
                     r["bv_actived_flg"],
                     r["bv_actived_flg"],
                 ),
-                _excel_jst_datetime(r["deposit_at"]),
-                _excel_jst_datetime(r["order_at"]),
+                _excel_db_datetime(r["deposit_at"]),
+                _excel_db_datetime(r["order_at"]),
                 r["bonus_payment_date"],
-                _excel_jst_datetime(r["created_at"]),
+                _excel_db_datetime(r["created_at"]),
             ])
 
         response = HttpResponse(
@@ -9274,11 +9273,11 @@ class UsersExportView(UsersView):
             self._status_label(row.get("status_code")),
             self._activated_label(row.get("activated")),
             self._company_label(row.get("company")),
-            _excel_jst_datetime(row.get("interim_at")),
-            _excel_jst_datetime(row.get("activated_at")),
-            _excel_jst_datetime(row.get("last_purchase_at")),
-            _excel_jst_datetime(row.get("created_at")),
-            _excel_jst_datetime(row.get("updated_at")),
+            _excel_db_datetime(row.get("interim_at")),
+            _excel_db_datetime(row.get("activated_at")),
+            _excel_db_datetime(row.get("last_purchase_at")),
+            _excel_db_datetime(row.get("created_at")),
+            _excel_db_datetime(row.get("updated_at")),
         ]
 
     def _build_row_mapper(self, cols, q_active_kibetu):
@@ -9309,11 +9308,11 @@ class UsersExportView(UsersView):
                 self.STATUS_LABELS.get(row[pos["status_code"]], "-"),
                 "本登録" if row[pos["activated"]] == 1 else "仮登録中",
                 "法人" if row[pos["company"]] == 1 else "-",
-                _excel_jst_datetime(row[pos["interim_at"]]),
-                _excel_jst_datetime(row[pos["activated_at"]]),
-                _excel_jst_datetime(row[pos["last_purchase_at"]]),
-                _excel_jst_datetime(row[pos["created_at"]]),
-                _excel_jst_datetime(row[pos["updated_at"]]),
+                _excel_db_datetime(row[pos["interim_at"]]),
+                _excel_db_datetime(row[pos["activated_at"]]),
+                _excel_db_datetime(row[pos["last_purchase_at"]]),
+                _excel_db_datetime(row[pos["created_at"]]),
+                _excel_db_datetime(row[pos["updated_at"]]),
             ]
 
         return to_excel_row
@@ -10672,7 +10671,7 @@ class OrdersExportView(OrdersView):
     @staticmethod
     def _excel_value(value):
         """Excel はタイムゾーン付き日時を扱えないので、naive に落としてから渡す。"""
-        return _excel_jst_datetime(value)
+        return _excel_db_datetime(value)
 
     def _row_to_excel(self, row):
         (
@@ -10772,7 +10771,7 @@ class OrderDetailView(generic.TemplateView):
         if value is None:
             return ""
         if isinstance(value, datetime):
-            return jst_datetime(value).strftime("%Y-%m-%d %H:%M:%S")
+            return db_datetime(value)
         return value
 
     def get_context_data(self, **kwargs):

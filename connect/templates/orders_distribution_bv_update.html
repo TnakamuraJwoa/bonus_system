@@ -138,8 +138,8 @@
                           {{ r.bv|intcomma }}
                         {% endif %}
                       </td>
-                      <td>{{ r.created_at|jst_datetime }}</td>
-                      <td>{{ r.updated_at|jst_datetime }}</td>
+                      <td>{{ r.created_at|db_datetime }}</td>
+                      <td>{{ r.updated_at|db_datetime }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

@@ -136,7 +136,7 @@
                       <td class="text-end">{{ r.three_star_diamond_global_bonus }}</td>
                       <td class="text-end">{{ r.crown_three_star_diamond_global_bonus }}</td>
                       <td class="fw-bold text-primary text-end">{{ r.month_bonus }}</td>
-                      <td>{{ r.updated_at }}</td>
+                      <td>{{ r.updated_at|db_datetime }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

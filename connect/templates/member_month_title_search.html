@@ -158,8 +158,8 @@
                       <td class="text-center">
                         <span class="badge {{ r.title_id|title_tier_badge_class }}">{{ r.title_name }}</span>
                       </td>
-                      <td>{{ r.created_at|jst_datetime|date:"Y-m-d H:i:s" }}</td>
-                      <td>{{ r.updated_at|jst_datetime|date:"Y-m-d H:i:s" }}</td>
+                      <td>{{ r.created_at|db_datetime }}</td>
+                      <td>{{ r.updated_at|db_datetime }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

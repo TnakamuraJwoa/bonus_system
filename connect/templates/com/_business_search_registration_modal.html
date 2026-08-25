@@ -72,9 +72,9 @@
                       <span class="business-history-count">{{ h.row_count|intcomma }}</span>
                     </td>
                     <td>
-                      <div>{{ h.created_at|date:"Y-m-d H:i:s" }}</div>
+                      <div>{{ h.created_at|db_datetime }}</div>
                       {% if h.updated_at and h.updated_at != h.created_at %}
-                        <div class="small text-muted">更新：{{ h.updated_at|date:"Y-m-d H:i:s" }}</div>
+                        <div class="small text-muted">更新：{{ h.updated_at|db_datetime }}</div>
                       {% endif %}
                     </td>
                     <td class="text-center">

@@ -371,8 +371,8 @@
                         <span class="text-muted">なし</span>
                       {% endif %}
                     </td>
-                    <td>{{ r.deposit_at|jst_datetime|default:"" }}</td>
-                    <td>{{ r.created_at|jst_datetime }}</td>
+                    <td>{{ r.deposit_at|db_datetime|default:"" }}</td>
+                    <td>{{ r.created_at|db_datetime }}</td>
                     <td class="text-center">
                       <a href="{% url 'connect:order_detail' r.id %}"
                          class="btn btn-sm btn-outline-primary">

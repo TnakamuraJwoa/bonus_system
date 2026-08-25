@@ -386,7 +386,7 @@
             </div>
             <div class="d-flex gap-2 flex-wrap align-items-center">
               <span class="text-muted small">
-                最終再作成：{% if last_recreated_at %}{{ last_recreated_at|jst_datetime|date:"Y年n月j日 G:i" }}{% else %}-{% endif %}
+                最終再作成：{% if last_recreated_at %}{{ last_recreated_at|db_datetime }}{% else %}-{% endif %}
               </span>
               {% if view_mode == "tree" and not tree_unavailable_reason %}
                 <div class="d-flex gap-2 flex-wrap align-items-center">
@@ -463,7 +463,7 @@
                         {% endif %}
                       </td>
                       <td class="text-end">{{ r.tree_level }}</td>
-                      <td>{{ r.created_at|jst_datetime }}</td>
+                      <td>{{ r.created_at|db_datetime }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

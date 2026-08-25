@@ -322,7 +322,7 @@
             <div class="text-right small text-muted mb-1">
               最終作成日時：
               {% if last_created_at %}
-                {{ last_created_at|date:"Y年m月d日 H:i:s" }}
+                {{ last_created_at|db_datetime }}
               {% else %}
                 -
               {% endif %}
@@ -364,7 +364,7 @@
                       </td>
                       <td>{{ r.jwoa_code }}</td>
                       <td>{{ r.send_bv_name }}</td>
-                      <td class="repurchase-bonus-payment-date-col">{{ r.bonus_payment_date }}</td>
+                      <td class="repurchase-bonus-payment-date-col">{{ r.bonus_payment_date|db_datetime }}</td>
                       <td class="text-end">{{ r.bv }}</td>
                       <td class="text-center">
                         {% if r.bv_actived_flg == None %}
@@ -375,9 +375,9 @@
                           </span>
                         {% endif %}
                       </td>
-                      <td>{{ r.deposit_at|jst_datetime }}</td>
-                      <td>{{ r.order_at|jst_datetime }}</td>
-                      <td>{{ r.created_at|jst_datetime }}</td>
+                      <td>{{ r.deposit_at|db_datetime }}</td>
+                      <td>{{ r.order_at|db_datetime }}</td>
+                      <td>{{ r.created_at|db_datetime }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>
