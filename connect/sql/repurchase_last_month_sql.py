@@ -4,7 +4,7 @@ WITH bonus_orders AS (
         o.*,
         b.bonus_payment_date,
         COALESCE(b.bonus_payment_date, o.deposit_at) AS payment_date
-    FROM bonus_db.orders AS o
+    FROM nexus_production.orders AS o
     LEFT JOIN bonus_db.bonus_payment_date AS b
         ON o.order_code = b.order_code
 ),
@@ -25,9 +25,9 @@ SELECT
     %s AS register_year,
     %s AS register_month
 FROM bonus_orders AS a
-LEFT JOIN bonus_db.orders_distribution_bv AS b
+LEFT JOIN nexus_production.orders_distribution_bv AS b
     ON a.order_code = b.order_code
-LEFT JOIN bonus_db.users AS u
+LEFT JOIN nexus_production.users AS u
     ON b.jwoa_code = u.jmoa_code
 WHERE a.order_status NOT IN (206, 207, 208)
   AND a.payment_date >= %s
@@ -50,7 +50,7 @@ SELECT
     order_month,
     %s AS register_year,
     %s AS register_month
-FROM bonus_db.api_users_bv
+FROM nexus_production.api_users_bv
 WHERE order_year = %s
   AND order_month = %s
 )

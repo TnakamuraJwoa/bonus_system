@@ -25,7 +25,7 @@ WITH RECURSIVE user_tree (
         u.send_bv_name,
         u.`rank`,
         0
-    FROM bonus_db.users u
+    FROM nexus_production.users u
     WHERE u.jmoa_code = 'JP1873001'
 
     UNION ALL

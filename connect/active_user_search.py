@@ -69,7 +69,7 @@ class ActiveUserSearchView(KeysetPaginationMixin, generic.TemplateView):
         sql = f"""
             SELECT COUNT(*)
             FROM active_users a
-            LEFT JOIN users u
+            LEFT JOIN nexus_production.users u
                 ON a.jwoa_code = u.jmoa_code
             {where_sql}
         """
@@ -108,7 +108,7 @@ class ActiveUserSearchView(KeysetPaginationMixin, generic.TemplateView):
                 a.active_status,
                 a.created_at
             FROM active_users a
-            LEFT JOIN users u
+            LEFT JOIN nexus_production.users u
                 ON a.jwoa_code = u.jmoa_code
             {where_sql}
             ORDER BY a.year DESC, a.month DESC, a.jwoa_code

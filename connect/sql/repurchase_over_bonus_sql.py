@@ -59,10 +59,10 @@ tree AS (
 
     FROM repurchase_100bv_users AS a
 
-    LEFT JOIN bonus_db.users AS b
+    LEFT JOIN nexus_production.users AS b
         ON a.jwoa_code = b.jmoa_code
 
-    JOIN bonus_db.users AS c
+    JOIN nexus_production.users AS c
         ON a.jwoa_code = c.placement_code
 
     LEFT JOIN repurchase_50bv_users AS r50
@@ -94,7 +94,7 @@ tree AS (
 
     FROM tree AS a
 
-    JOIN bonus_db.users AS b
+    JOIN nexus_production.users AS b
         ON a.down_code = b.placement_code
 
     LEFT JOIN repurchase_50bv_users AS r50

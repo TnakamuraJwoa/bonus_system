@@ -195,7 +195,7 @@ active_three_star_dia_with_placement as (
         u.send_bv_name AS down_name,
         1 AS tree_level
     FROM active_three_star_dia AS ats
-    JOIN bonus_db.users AS u
+    JOIN nexus_production.users AS u
       ON u.placement_code = ats.jwoa_code
 ),
 
@@ -222,7 +222,7 @@ placement_line_tree AS (
         u.send_bv_name AS down_name,
         t.tree_level + 1 AS tree_level
     FROM placement_line_tree AS t
-    JOIN bonus_db.users AS u
+    JOIN nexus_production.users AS u
       ON u.placement_code = t.down_jwoa_code
     WHERE t.tree_level < 10000
 ),
@@ -295,7 +295,7 @@ placement_down_tree AS (
 
     FROM placement_down_tree AS t
 
-    JOIN bonus_db.users AS u
+    JOIN nexus_production.users AS u
       ON u.placement_code = t.down_jwoa_code
 
     LEFT JOIN active_three_star_dia AS ats
@@ -435,7 +435,7 @@ WITH RECURSIVE purchase_team AS (
         root.send_bv_name AS down_name,
         0 AS tree_level,
         CAST(root.jmoa_code AS CHAR(20000)) AS path_codes
-    FROM bonus_db.users AS root
+    FROM nexus_production.users AS root
     WHERE root.jmoa_code = %s
 
     UNION ALL
@@ -450,7 +450,7 @@ WITH RECURSIVE purchase_team AS (
         t.tree_level + 1 AS tree_level,
         CONCAT(t.path_codes, ',', u.jmoa_code) AS path_codes
     FROM purchase_team AS t
-    JOIN bonus_db.users AS u
+    JOIN nexus_production.users AS u
       ON u.placement_code = t.down_jwoa_code
     WHERE t.tree_level < 10000
       AND FIND_IN_SET(u.jmoa_code, t.path_codes) = 0
@@ -469,7 +469,7 @@ WITH RECURSIVE purchase_team AS (
         root.send_bv_name AS down_name,
         0 AS tree_level,
         CAST(root.jmoa_code AS CHAR(20000)) AS path_codes
-    FROM bonus_db.users AS root
+    FROM nexus_production.users AS root
     WHERE root.jmoa_code = %s
 
     UNION ALL
@@ -484,7 +484,7 @@ WITH RECURSIVE purchase_team AS (
         t.tree_level + 1 AS tree_level,
         CONCAT(t.path_codes, ',', u.jmoa_code) AS path_codes
     FROM purchase_team AS t
-    JOIN bonus_db.users AS u
+    JOIN nexus_production.users AS u
       ON u.introducer_code = t.down_jwoa_code
     WHERE t.tree_level < 10000
       AND FIND_IN_SET(u.jmoa_code, t.path_codes) = 0

@@ -43,7 +43,7 @@ payer_tree AS (
         u.placement_code AS upper_code,
         0 AS lvl,
         pu.sum_bv
-    FROM bonus_db.users AS u
+    FROM nexus_production.users AS u
     JOIN T_sum_this_month_purchase_info_list AS pu
       ON pu.jwoa_code = u.jmoa_code
 
@@ -58,7 +58,7 @@ payer_tree AS (
         t.lvl + 1 AS lvl,
         pu.sum_bv
     FROM payer_tree AS t
-    JOIN bonus_db.users AS up
+    JOIN nexus_production.users AS up
       ON up.jmoa_code = t.upper_code
     LEFT JOIN T_sum_this_month_purchase_info_list AS pu
       ON t.payer_code = pu.jwoa_code
@@ -117,7 +117,7 @@ line_type_total_bv2 AS (
         IFNULL(MAX(CASE WHEN rn = 1 THEN sum_bv END), 0) AS basic_line_bv
 
     FROM line_type_total_bv AS a
-    LEFT JOIN bonus_db.users AS b
+    LEFT JOIN nexus_production.users AS b
       ON a.upper_code = b.jmoa_code
 
     GROUP BY

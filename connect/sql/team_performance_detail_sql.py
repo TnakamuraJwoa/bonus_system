@@ -49,7 +49,7 @@ payer_tree AS (
         u.placement_code AS upper_code,
         0 AS lvl,
         pu.sum_bv
-    FROM bonus_db.users AS u
+    FROM nexus_production.users AS u
     JOIN T_sum_this_month_purchase_info_list AS pu
       ON pu.jwoa_code = u.jmoa_code
 
@@ -64,7 +64,7 @@ payer_tree AS (
         t.lvl + 1 AS lvl,
         pu.sum_bv
     FROM payer_tree AS t
-    JOIN bonus_db.users AS up
+    JOIN nexus_production.users AS up
       ON up.jmoa_code = t.upper_code
     LEFT JOIN T_sum_this_month_purchase_info_list AS pu
       ON t.purchaser_code = pu.jwoa_code
@@ -129,7 +129,7 @@ payer_tree AS (
         u.placement_code AS upper_code,
         0 AS lvl,
         pu.sum_bv
-    FROM bonus_db.users AS u
+    FROM nexus_production.users AS u
     JOIN T_sum_this_month_purchase_info_list AS pu
       ON pu.jwoa_code = u.jmoa_code
 
@@ -144,7 +144,7 @@ payer_tree AS (
         t.lvl + 1 AS lvl,
         pu.sum_bv
     FROM payer_tree AS t
-    JOIN bonus_db.users AS up
+    JOIN nexus_production.users AS up
       ON up.jmoa_code = t.upper_code
     LEFT JOIN T_sum_this_month_purchase_info_list AS pu
       ON t.purchaser_code = pu.jwoa_code

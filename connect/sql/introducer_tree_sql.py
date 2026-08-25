@@ -25,8 +25,8 @@ WITH RECURSIVE user_tree (
         u.send_bv_name,
         u.`rank`,
         0
-    FROM bonus_db.users u
-    LEFT JOIN bonus_db.users parent
+    FROM nexus_production.users u
+    LEFT JOIN nexus_production.users parent
         ON parent.jmoa_code = u.introducer_code
     WHERE u.jmoa_code = 'JP1873001'
 
@@ -41,9 +41,9 @@ WITH RECURSIVE user_tree (
         u.`rank`,
         ut.tree_level + 1
     FROM user_tree ut
-    INNER JOIN bonus_db.users u
+    INNER JOIN nexus_production.users u
         ON u.introducer_code = ut.jwoa_code
-    LEFT JOIN bonus_db.users parent
+    LEFT JOIN nexus_production.users parent
         ON parent.jmoa_code = u.introducer_code
 )
 SELECT

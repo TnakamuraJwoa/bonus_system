@@ -115,7 +115,7 @@ introducer_down_tree AS (
         0 as tree_level
     FROM this_month_two_star_dia as a
 
-    left join bonus_db.users as b
+    left join nexus_production.users as b
     on a.jwoa_code = b.placement_code
 
     left join title_result_with_rate as c
@@ -142,7 +142,7 @@ introducer_down_tree AS (
 
     FROM introducer_down_tree AS t
 
-    JOIN bonus_db.users AS u
+    JOIN nexus_production.users AS u
       ON u.placement_code = t.down_jwoa_code
 
     left join title_result_with_rate as c

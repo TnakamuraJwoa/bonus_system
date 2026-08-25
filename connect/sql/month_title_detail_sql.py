@@ -37,7 +37,7 @@ payer_tree AS (
         u.placement_code AS upper_code,
         0 AS lvl,
         pu.sum_bv
-    FROM bonus_db.users AS u
+    FROM nexus_production.users AS u
     JOIN T_sum_this_month_purchase_info_list AS pu
       ON pu.jwoa_code = u.jmoa_code
 
@@ -51,7 +51,7 @@ payer_tree AS (
         t.lvl + 1 AS lvl,
         pu.sum_bv
     FROM payer_tree AS t
-    JOIN bonus_db.users AS up
+    JOIN nexus_production.users AS up
       ON up.jmoa_code = t.upper_code
     LEFT JOIN T_sum_this_month_purchase_info_list AS pu
       ON t.payer_code = pu.jwoa_code
@@ -103,7 +103,7 @@ payer_order_tree AS (
         u.placement_code AS upper_code,
         0 AS lvl,
         p.custom_bv AS sum_bv
-    FROM bonus_db.users AS u
+    FROM nexus_production.users AS u
     JOIN T_this_month_purchase_info_list AS p
       ON p.jwoa_code = u.jmoa_code
     JOIN T_sum_this_month_purchase_info_list AS pu
@@ -124,7 +124,7 @@ payer_order_tree AS (
         t.lvl + 1 AS lvl,
         t.sum_bv
     FROM payer_order_tree AS t
-    JOIN bonus_db.users AS up
+    JOIN nexus_production.users AS up
       ON up.jmoa_code = t.upper_code
     WHERE t.lvl < 5000
       AND t.upper_code IS NOT NULL
@@ -147,9 +147,9 @@ SELECT
     itb.rn AS line_type,
     itb.sum_bv
 FROM introducer_total_bv AS itb
-LEFT JOIN bonus_db.users AS target_user
+LEFT JOIN nexus_production.users AS target_user
   ON itb.upper_code = target_user.jmoa_code
-LEFT JOIN bonus_db.users AS line_user
+LEFT JOIN nexus_production.users AS line_user
   ON itb.line_code = line_user.jmoa_code
 WHERE itb.upper_code = %s
 ORDER BY
@@ -183,9 +183,9 @@ FROM payer_order_tree AS pt
 JOIN introducer_total_bv AS itb
   ON itb.upper_code = pt.upper_code
  AND itb.line_code = pt.line_code
-LEFT JOIN bonus_db.users AS target_user
+LEFT JOIN nexus_production.users AS target_user
   ON pt.upper_code = target_user.jmoa_code
-LEFT JOIN bonus_db.users AS line_user
+LEFT JOIN nexus_production.users AS line_user
   ON pt.line_code = line_user.jmoa_code
 WHERE pt.upper_code = %s
 """

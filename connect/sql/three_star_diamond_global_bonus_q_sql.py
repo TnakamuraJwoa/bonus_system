@@ -83,7 +83,7 @@ payment_target_members AS (
             ELSE 0
         END AS score
 
-    FROM bonus_db.users AS a
+    FROM nexus_production.users AS a
 
     JOIN this_month_three_star_dia AS b
       ON a.jmoa_code = b.jwoa_code

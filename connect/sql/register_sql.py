@@ -45,7 +45,7 @@ SELECT
     ELSE t.`rank`
   END AS new_rank
 
-FROM bonus_db.users t
+FROM nexus_production.users t
 LEFT JOIN (
   SELECT user_id, fluctuation_name, created_at
   FROM (

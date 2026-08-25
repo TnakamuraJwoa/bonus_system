@@ -167,7 +167,7 @@ class TitleBonusDetailView(generic.TemplateView):
             return result
 
         member_count = self._execute_tree_scalar(
-            "SELECT COUNT(*) FROM bonus_db.users WHERE jmoa_code = %s",
+            "SELECT COUNT(*) FROM nexus_production.users WHERE jmoa_code = %s",
             [member_code],
         )
         if member_count == 0:
@@ -191,7 +191,7 @@ class TitleBonusDetailView(generic.TemplateView):
                 u.placement_code,
                 u.introducer_code,
                 0 AS rel_level
-            FROM bonus_db.users AS u
+            FROM nexus_production.users AS u
             WHERE u.jmoa_code = %s
             LIMIT 1
         """
@@ -215,7 +215,7 @@ class TitleBonusDetailView(generic.TemplateView):
                     u.placement_code,
                     u.introducer_code,
                     0 AS rel_level
-                FROM bonus_db.users AS u
+                FROM nexus_production.users AS u
                 WHERE u.jmoa_code = %s
 
                 UNION ALL
@@ -227,7 +227,7 @@ class TitleBonusDetailView(generic.TemplateView):
                     u.placement_code,
                     u.introducer_code,
                     up.rel_level - 1 AS rel_level
-                FROM bonus_db.users AS u
+                FROM nexus_production.users AS u
                 JOIN upline AS up
                   ON u.jmoa_code = up.{parent_column}
                 WHERE up.rel_level > -%s
@@ -255,7 +255,7 @@ class TitleBonusDetailView(generic.TemplateView):
                     u.placement_code,
                     u.introducer_code,
                     1 AS rel_level
-                FROM bonus_db.users AS u
+                FROM nexus_production.users AS u
                 WHERE u.{parent_column} = %s
 
                 UNION ALL
@@ -267,7 +267,7 @@ class TitleBonusDetailView(generic.TemplateView):
                     u.placement_code,
                     u.introducer_code,
                     d.rel_level + 1 AS rel_level
-                FROM bonus_db.users AS u
+                FROM nexus_production.users AS u
                 JOIN downline AS d
                   ON u.{parent_column} = d.jwoa_code
                 WHERE d.rel_level < %s
@@ -334,7 +334,7 @@ class TitleBonusDetailView(generic.TemplateView):
                     u.introducer_code,
                     0 AS rel_level,
                     CAST(u.jmoa_code AS CHAR(20000)) AS path_codes
-                FROM bonus_db.users AS u
+                FROM nexus_production.users AS u
                 WHERE u.jmoa_code = %s
 
                 UNION ALL
@@ -347,7 +347,7 @@ class TitleBonusDetailView(generic.TemplateView):
                     u.introducer_code,
                     scope.rel_level + 1 AS rel_level,
                     CONCAT(scope.path_codes, ',', u.jmoa_code) AS path_codes
-                FROM bonus_db.users AS u
+                FROM nexus_production.users AS u
                 JOIN scope
                   ON u.{parent_column} = scope.jwoa_code
                 WHERE scope.rel_level < %s
@@ -757,7 +757,7 @@ class TitleBonusDetailView(generic.TemplateView):
                     {detail_sql}
                 ) AS detail_rows
             ) AS roots
-            JOIN bonus_db.users AS u
+            JOIN nexus_production.users AS u
               ON u.introducer_code = roots.root_jwoa_code
             LEFT JOIN bonus_db.month_title AS mt
               ON mt.kibetu = %s
@@ -807,7 +807,7 @@ class TitleBonusDetailView(generic.TemplateView):
                     CASE WHEN ats.jwoa_code IS NOT NULL THEN 1 ELSE 0 END AS match_level,
                     CAST(u.jmoa_code AS CHAR(20000)) AS path_codes
                 FROM root_rows AS roots
-                JOIN bonus_db.users AS u
+                JOIN nexus_production.users AS u
                   ON u.introducer_code = roots.root_jwoa_code
                 LEFT JOIN active_three_star_dia AS ats
                   ON ats.jwoa_code = u.jmoa_code
@@ -827,7 +827,7 @@ class TitleBonusDetailView(generic.TemplateView):
                     CASE WHEN ats.jwoa_code IS NOT NULL THEN 1 ELSE 0 END AS match_level,
                     CONCAT(scope.path_codes, ',', u.jmoa_code) AS path_codes
                 FROM introducer_scope AS scope
-                JOIN bonus_db.users AS u
+                JOIN nexus_production.users AS u
                   ON u.introducer_code = scope.jmoa_code
                 LEFT JOIN active_three_star_dia AS ats
                   ON ats.jwoa_code = u.jmoa_code
@@ -855,7 +855,7 @@ class TitleBonusDetailView(generic.TemplateView):
             FROM introducer_scope AS intro
             JOIN active_three_star_dia AS ats
               ON ats.jwoa_code = intro.jmoa_code
-            LEFT JOIN bonus_db.users AS u
+            LEFT JOIN nexus_production.users AS u
               ON u.jmoa_code = intro.jmoa_code
             LEFT JOIN bonus_db.title_master AS tm
               ON tm.title_id = ats.title_id
@@ -1474,7 +1474,7 @@ class TitleBonusDetailTreeExportView(TitleBonusDetailView):
                     u.{parent_column} AS parent_code,
                     0 AS rel_level,
                     CAST(u.jmoa_code AS CHAR(20000)) AS path_codes
-                FROM bonus_db.users AS u
+                FROM nexus_production.users AS u
                 WHERE u.jmoa_code = %s
 
                 UNION ALL
@@ -1487,7 +1487,7 @@ class TitleBonusDetailTreeExportView(TitleBonusDetailView):
                     d.rel_level + 1 AS rel_level,
                     CONCAT(d.path_codes, ',', child.jmoa_code) AS path_codes
                 FROM descendants AS d
-                JOIN bonus_db.users AS child
+                JOIN nexus_production.users AS child
                   ON child.{parent_column} = d.jwoa_code
                 WHERE d.rel_level < %s
                   AND FIND_IN_SET(child.jmoa_code, d.path_codes) = 0
@@ -1559,7 +1559,7 @@ class TitleBonusDetailTreeExportView(TitleBonusDetailView):
                 ps.bv_max50,
                 n.path_codes
             FROM tree_nodes AS n
-            LEFT JOIN bonus_db.users AS parent
+            LEFT JOIN nexus_production.users AS parent
               ON parent.jmoa_code = n.parent_code
             LEFT JOIN bonus_db.month_title AS mt
               ON mt.kibetu = %s

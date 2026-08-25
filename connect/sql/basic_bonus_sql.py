@@ -147,7 +147,7 @@ payer_tree AS (
         u.jmoa_code AS line_code,
         u.placement_code AS upper_code,
         0 AS lvl
-    FROM bonus_db.users AS u
+    FROM nexus_production.users AS u
     JOIN purchase_users AS pu
       ON pu.jwoa_code = u.jmoa_code
 
@@ -161,7 +161,7 @@ payer_tree AS (
         up.placement_code AS upper_code,
         t.lvl + 1 AS lvl
     FROM payer_tree AS t
-    JOIN bonus_db.users AS up
+    JOIN nexus_production.users AS up
       ON up.jmoa_code = t.upper_code
     WHERE t.lvl < 1000
       AND t.upper_code IS NOT NULL
@@ -179,7 +179,7 @@ payer_list AS (
         up.send_bv_name AS 上位者名,
         t.lvl + 1 AS 階層
     FROM payer_tree AS t
-    LEFT JOIN bonus_db.users AS up
+    LEFT JOIN nexus_production.users AS up
       ON up.jmoa_code = t.upper_code
     WHERE t.upper_code IS NOT NULL
       AND t.upper_code <> ''
