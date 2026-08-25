@@ -4,6 +4,8 @@
 bonus_db.JP_OM_ORDERS をそのまま表示する。
 """
 
+import hashlib
+import json
 import logging
 import math
 from datetime import date, datetime
@@ -11,6 +13,7 @@ from urllib.parse import urlencode
 
 import openpyxl
 from django.contrib import messages
+from django.core.cache import cache
 from django.db import ProgrammingError, connections
 from django.http import HttpResponse
 from django.shortcuts import redirect
@@ -123,6 +126,9 @@ def order_date_range(year, month):
 
 class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "legacy_orders.html"
+
+    TOTAL_COUNT_CACHE_TIMEOUT = 600
+
     SORT_COLUMNS = {
         # id は列として出していないが、既定の並び順（採番順＝新しい順）に使う。
         "id": "o.ID",
@@ -214,7 +220,23 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
         where_sql = "WHERE " + " AND ".join(where) if where else ""
         return where_sql, params
 
+    def _total_count_cache_key(self, **filters):
+        signature = json.dumps(filters, sort_keys=True, default=str)
+        digest = hashlib.md5(signature.encode("utf-8")).hexdigest()
+        return f"legacy_orders:total_count:{digest}"
+
     def _fetch_total_count(self, **filters):
+        """一覧の総件数を返す。
+
+        JP_OM_ORDERS は 87 万件・177MB でインデックスが無いため、COUNT(*) だけで
+        6 秒前後かかる。旧システムからの移行コピーで再取込のときしか中身が
+        変わらないので、条件ごとに現行 orders より長めにキャッシュする。
+        """
+        cache_key = self._total_count_cache_key(**filters)
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         where_sql, params = self._build_where(**filters)
         # 件数だけなら会員名は要らないので、会員コードで絞るときにだけ JOIN する。
         # 87万件に対する無駄な結合を避けるため。
@@ -234,7 +256,10 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
                     logger.info("旧システム注文テーブルが未作成です。table=%s", LEGACY_ORDERS_TABLE)
                     return 0
                 raise
-        return int(row[0]) if row else 0
+
+        total_count = int(row[0]) if row else 0
+        cache.set(cache_key, total_count, self.TOTAL_COUNT_CACHE_TIMEOUT)
+        return total_count
 
     def _fetch_rows(self, limit=200, offset=0, order_sql="", **filters):
         where_sql, params = self._build_where(**filters)
