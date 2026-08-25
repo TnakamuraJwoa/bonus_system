@@ -12,6 +12,7 @@ from datetime import date, datetime
 from urllib.parse import urlencode
 
 import openpyxl
+from dateutil.relativedelta import relativedelta
 from django.contrib import messages
 from django.core.cache import cache
 from django.db import ProgrammingError, connections
@@ -22,11 +23,13 @@ from django.views import generic
 
 from connect.business_search_registration import is_missing_table_error
 from connect.order_field_labels import get_legacy_order_field_label
-from connect.templatetags.custom_filters import jst_datetime
+from connect.templatetags.custom_filters import as_db_datetime, db_datetime
 from connect.views import (
     KeysetPaginationMixin,
     add_sort_params,
+    format_target_month,
     get_bonus_sort_context,
+    parse_target_month,
 )
 
 
@@ -41,6 +44,11 @@ MEMBER_JOIN_SQL = f"""
             LEFT JOIN {LEGACY_MEMBER_TABLE} m
               ON m.ID = o.MEMBER_ID
 """
+
+# 注文日の絞り込みがあるとき、MySQL は「ID 順に逆走査すればすぐ 200 件そろう」と
+# 見積もって主キーを選ぶが、その見積もりが実際と 300 倍ずれる（15.7 万件の年指定で
+# 540 件と見積もる）。結果 1 ページに 30 秒かかるので、注文日索引を明示的に選ばせる。
+ORDER_DATE_INDEX = "idx_jp_om_orders_order_date"
 
 # 旧システムにはコードマスタが無いため、現行 orders との突き合わせと
 # 入金日・取消日の有無から意味を割り出したもの。
@@ -102,12 +110,12 @@ MIN_ORDER_YEAR = 1900
 MAX_ORDER_YEAR = 2999
 
 
-def _parse_int(value):
-    """数値以外は None にする。自由入力の年・月に文字が入っても検索を壊さないため。"""
+def parse_order_month(value):
+    """注文年月（YYYY-MM）を年・月に分ける。選択なしや不正な値は (None, None)。"""
     try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
+        return parse_target_month(value)
+    except (AttributeError, TypeError, ValueError):
+        return None, None
 
 
 def order_date_range(year, month):
@@ -153,6 +161,104 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
             default_direction="desc",
         )
 
+    def _get_month_choices(self):
+        """注文年月プルダウンの選択肢を新しい順で返す。
+
+        年月を DISTINCT で数え上げると注文日索引を 43 万件ぶん読むことになり
+        10 秒を超えるので、最初と最後の注文日だけを引いてその間の年月を並べる。
+        どちらも索引の端を見るだけなので 10ms 未満で返る。
+
+        ORDER_DATE には 2201 年のような明らかな誤りが混ざっているため、
+        最新は来月までに収まるもののうち一番新しい注文日から取り、
+        最古もそこから 20 年前までで打ち切る。
+        """
+        # 上限を付けた降順 LIMIT 1 なら、索引をその位置から逆に 1 件読むだけで済む。
+        # MAX(ORDER_DATE) に WHERE を付けると範囲走査に落ちて 9 秒かかる。
+        newest_sql = f"""
+            SELECT o.ORDER_DATE
+            FROM {LEGACY_ORDERS_TABLE} o
+            WHERE o.ORDER_DATE < %s
+            ORDER BY o.ORDER_DATE DESC
+            LIMIT 1
+        """
+        oldest_sql = f"SELECT MIN(o.ORDER_DATE) FROM {LEGACY_ORDERS_TABLE} o"
+
+        today = date.today()
+        upper_bound = date(today.year, today.month, 1) + relativedelta(months=2)
+
+        with connections["rds"].cursor() as cursor:
+            try:
+                cursor.execute(newest_sql, [upper_bound])
+                newest_row = cursor.fetchone()
+                cursor.execute(oldest_sql)
+                oldest_row = cursor.fetchone()
+            except ProgrammingError as exc:
+                if is_missing_table_error(exc):
+                    logger.info(
+                        "旧システム注文テーブルが未作成です。table=%s",
+                        LEGACY_ORDERS_TABLE,
+                    )
+                    return []
+                raise
+
+        newest_date = newest_row[0] if newest_row else None
+        oldest_date = oldest_row[0] if oldest_row else None
+        if not newest_date or not oldest_date:
+            return []
+
+        newest = (newest_date.year, newest_date.month)
+        oldest = max(
+            (oldest_date.year, oldest_date.month),
+            (newest[0] - 20, newest[1]),
+        )
+
+        choices = []
+        year, month = newest
+        while (year, month) >= oldest:
+            choices.append(
+                {
+                    "value": format_target_month(year, month),
+                    "year": year,
+                    "month": month,
+                }
+            )
+            if month == 1:
+                year, month = year - 1, 12
+            else:
+                month -= 1
+        return choices
+
+    def _build_order_by(self, sort_ctx):
+        """並び替え句を組み立てる。
+
+        同順位を決める ID は並び替え列と同じ向きに揃える。向きが混ざると MySQL は
+        二次インデックス（末尾に主キーを含む）を並び替えに使えず、全走査 +
+        filesort に落ちる。
+        """
+        column = self.SORT_COLUMNS.get(sort_ctx["sort"], "o.ID")
+        direction = "DESC" if sort_ctx["direction"] == "desc" else "ASC"
+        if column == "o.ID":
+            return f"o.ID {direction}"
+        return f"{column} {direction}, o.ID {direction}"
+
+    @staticmethod
+    def _needs_member_join(sort_key="", **filters):
+        """会員テーブルの結合が要るか。
+
+        会員コードで絞るときと会員コードで並べるときだけ必要。87 万件に対する
+        無駄な結合を避けるため、それ以外では結合しない。
+        """
+        return bool(filters.get("q_member_id")) or sort_key == "member_no"
+
+    @staticmethod
+    def _has_order_date_condition(**filters):
+        """注文日で絞り込まれるか。_build_where が付ける条件と対応させる。"""
+        if filters.get("q_order_from") or filters.get("q_order_to"):
+            return True
+
+        year, month = parse_order_month(filters.get("target_month"))
+        return order_date_range(year, month) is not None
+
     def _build_where(
         self,
         q_order_code="",
@@ -162,8 +268,7 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
         q_order_types=None,
         q_order_from="",
         q_order_to="",
-        q_year="",
-        q_month="",
+        target_month="",
     ):
         if q_order_statuses is None:
             q_order_statuses = []
@@ -204,18 +309,10 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
             where.append("o.ORDER_DATE < DATE_ADD(%s, INTERVAL 1 DAY)")
             params.append(q_order_to)
 
-        year = _parse_int(q_year)
-        month = _parse_int(q_month)
-        if month is not None and not 1 <= month <= 12:
-            month = None
-
-        date_range = order_date_range(year, month)
+        date_range = order_date_range(*parse_order_month(target_month))
         if date_range:
             where.append("o.ORDER_DATE >= %s AND o.ORDER_DATE < %s")
             params.extend(date_range)
-        elif month is not None:
-            where.append("MONTH(o.ORDER_DATE) = %s")
-            params.append(month)
 
         where_sql = "WHERE " + " AND ".join(where) if where else ""
         return where_sql, params
@@ -261,8 +358,28 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
         cache.set(cache_key, total_count, self.TOTAL_COUNT_CACHE_TIMEOUT)
         return total_count
 
-    def _fetch_rows(self, limit=200, offset=0, order_sql="", **filters):
+    def _fetch_rows(self, limit=200, offset=0, sort_ctx=None, **filters):
+        """1 ページ分を取得する。
+
+        1 行が最大 10KB を超える横に広いテーブルなので、まず ID だけを並べて
+        1 ページ分に絞り、その 200 件だけ本体を読む。並び替えの対象から広い行を
+        外すことで、既定表示が 32 秒から 0.3 秒になる。
+        """
+        sort_ctx = sort_ctx or {"sort": "id", "direction": "desc"}
         where_sql, params = self._build_where(**filters)
+        order_by = self._build_order_by(sort_ctx)
+
+        page_join_sql = (
+            MEMBER_JOIN_SQL
+            if self._needs_member_join(sort_ctx["sort"], **filters)
+            else ""
+        )
+        index_hint = (
+            f"FORCE INDEX ({ORDER_DATE_INDEX})"
+            if self._has_order_date_condition(**filters)
+            else ""
+        )
+
         sql = f"""
             SELECT
                 o.ID AS id,
@@ -277,11 +394,18 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
                 o.TOTAL_BV AS total_bv,
                 o.ORDER_DATE AS order_at,
                 o.CREATE_DATE AS created_at
-            FROM {LEGACY_ORDERS_TABLE} o
+            FROM (
+                SELECT o.ID
+                FROM {LEGACY_ORDERS_TABLE} o {index_hint}
+                {page_join_sql}
+                {where_sql}
+                ORDER BY {order_by}
+                LIMIT %s OFFSET %s
+            ) AS page
+            JOIN {LEGACY_ORDERS_TABLE} o
+              ON o.ID = page.ID
             {MEMBER_JOIN_SQL}
-            {where_sql}
-            ORDER BY {order_sql or "o.ID DESC"}, o.ID DESC
-            LIMIT %s OFFSET %s
+            ORDER BY {order_by}
         """
         with connections["rds"].cursor() as cursor:
             try:
@@ -319,8 +443,7 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
             "q_order_types": q_order_types,
             "q_order_from": (self.request.GET.get("q_order_from") or "").strip(),
             "q_order_to": (self.request.GET.get("q_order_to") or "").strip(),
-            "q_year": (self.request.GET.get("q_year") or "").strip(),
-            "q_month": (self.request.GET.get("q_month") or "").strip(),
+            "target_month": (self.request.GET.get("target_month") or "").strip(),
         }
 
     def get_context_data(self, **kwargs):
@@ -340,7 +463,7 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
             self._fetch_rows(
                 limit=per_page,
                 offset=offset,
-                order_sql=sort_ctx["order_sql"],
+                sort_ctx=sort_ctx,
                 **filters,
             )
             if total_count
@@ -354,8 +477,8 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
         ctx["q_order_types"] = q_order_types
         ctx["q_order_from"] = filters["q_order_from"]
         ctx["q_order_to"] = filters["q_order_to"]
-        ctx["q_year"] = filters["q_year"]
-        ctx["q_month"] = filters["q_month"]
+        ctx["selected_month"] = filters["target_month"]
+        ctx["month_choices"] = self._get_month_choices()
         ctx["order_type_choices"] = ORDER_TYPE_CHOICES
         ctx["order_status_choices"] = ORDER_STATUS_CHOICES
         ctx["active_menu"] = "legacy_orders"
@@ -368,8 +491,7 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
             "q_name",
             "q_order_from",
             "q_order_to",
-            "q_year",
-            "q_month",
+            "target_month",
         ):
             value = filters[key]
             if value:
@@ -405,8 +527,8 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
 class LegacyOrdersExportView(LegacyOrdersView):
     """絞り込み条件そのままで Excel 出力する。
 
-    旧テーブルはインデックスが無く 1 回の取得ごとに全件走査になるため、
-    チャンクを上限と同じにして走査を 1 回で済ませている。
+    ID が主キーなので、キーセット送り（WHERE o.ID < 直前の最小 ID）は
+    主キーの範囲走査で済む。チャンクは上限と同じ 1 回で取り切る。
     """
 
     EXPORT_FETCH_SIZE = 10000
@@ -469,7 +591,7 @@ class LegacyOrdersExportView(LegacyOrdersView):
     @staticmethod
     def _excel_value(value):
         if isinstance(value, datetime):
-            return jst_datetime(value).replace(tzinfo=None)
+            return as_db_datetime(value)
         return value
 
     def _row_to_excel(self, row):
@@ -538,7 +660,7 @@ class LegacyOrderDetailView(generic.TemplateView):
         if value is None:
             return ""
         if isinstance(value, datetime):
-            return jst_datetime(value).strftime("%Y-%m-%d %H:%M:%S")
+            return db_datetime(value)
         return value
 
     def _detail_value(self, col, value):

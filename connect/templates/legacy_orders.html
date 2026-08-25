@@ -132,29 +132,17 @@
               </div>
             </div>
 
-            <div style="width: 120px;">
-              <label class="form-label mb-0 small text-muted">注文年</label>
-              <input type="number" name="q_year" class="form-control"
-                     min="1900" max="2999" step="1" inputmode="numeric"
-                     value="{{ q_year|default:'' }}">
-            </div>
+            <div style="width: 130px;">
+              <label class="form-label mb-0 small text-muted">注文年月</label>
+              <select name="target_month" class="form-select">
+                <option value="">全件表示</option>
 
-            <div>
-              <label class="form-label mb-0 small text-muted">注文月</label>
-              <select name="q_month" class="form-select">
-                <option value="">全て</option>
-                <option value="1" {% if q_month == "1" %}selected{% endif %}>1月</option>
-                <option value="2" {% if q_month == "2" %}selected{% endif %}>2月</option>
-                <option value="3" {% if q_month == "3" %}selected{% endif %}>3月</option>
-                <option value="4" {% if q_month == "4" %}selected{% endif %}>4月</option>
-                <option value="5" {% if q_month == "5" %}selected{% endif %}>5月</option>
-                <option value="6" {% if q_month == "6" %}selected{% endif %}>6月</option>
-                <option value="7" {% if q_month == "7" %}selected{% endif %}>7月</option>
-                <option value="8" {% if q_month == "8" %}selected{% endif %}>8月</option>
-                <option value="9" {% if q_month == "9" %}selected{% endif %}>9月</option>
-                <option value="10" {% if q_month == "10" %}selected{% endif %}>10月</option>
-                <option value="11" {% if q_month == "11" %}selected{% endif %}>11月</option>
-                <option value="12" {% if q_month == "12" %}selected{% endif %}>12月</option>
+                {% for obj in month_choices %}
+                  <option value="{{ obj.value }}"
+                    {% if obj.value == selected_month %}selected{% endif %}>
+                    {{ obj.year }}年{{ obj.month }}月
+                  </option>
+                {% endfor %}
               </select>
             </div>
 
@@ -221,8 +209,8 @@
                     <td>{{ r.order_name }}</td>
                     <td class="text-end">{{ r.total_price|floatformat:0|intcomma }}</td>
                     <td class="text-end">{{ r.total_bv|floatformat:"-2"|intcomma }}</td>
-                    <td>{{ r.order_at|jst_datetime|default:"" }}</td>
-                    <td>{{ r.created_at|jst_datetime }}</td>
+                    <td>{{ r.order_at|db_datetime|default:"" }}</td>
+                    <td>{{ r.created_at|db_datetime }}</td>
                   </tr>
                   {% endfor %}
                 </tbody>
