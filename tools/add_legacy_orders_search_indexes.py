@@ -49,7 +49,7 @@ INDEXES = (
     ("idx_jp_om_orders_member_id", "(MEMBER_ID)", "会員IDの絞り込みと並び替え"),
     ("idx_jp_om_orders_firstname", "(FIRSTNAME)", "注文者_氏名の絞り込みと並び替え"),
     ("idx_jp_om_orders_lastname", "(LASTNAME)", "注文者_氏名の絞り込み"),
-    ("idx_jp_om_orders_bonus_date", "(BONUS_DATE)", "ボーナス計算対象日の並び替え"),
+    ("idx_jp_om_orders_bonus_date", "(BONUS_DATE)", "ボーナス計算対象日の絞り込みと並び替え"),
     ("idx_jp_om_orders_create_date", "(CREATE_DATE)", "作成日時の並び替え"),
     ("idx_jp_om_orders_total_amount", "(TOTAL_NET_AMOUNT)", "購入合計金額の並び替え"),
     ("idx_jp_om_orders_total_bv", "(TOTAL_BV)", "合計BVの並び替え"),

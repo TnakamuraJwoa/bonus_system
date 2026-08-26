@@ -34,7 +34,8 @@ TABLE = "JP_OM_ORDERS"
 
 # ID: 既定の並び順（o.ID DESC）と Excel 出力のキーセット送りに使う。
 #     COUNT(*) もこの小さいインデックスで数えられるようになる。
-# ORDER_DATE: 注文日 FROM/TO・注文年・注文月の絞り込みと並び替えに使う。
+# ORDER_DATE: 注文年・注文月の並び替えに使う。
+# 日付の絞り込み（FROM/TO・注文年月）は BONUS_DATE 側のインデックスを使う。
 INDEXES = (
     ("idx_jp_om_orders_id", "(ID)"),
     ("idx_jp_om_orders_order_date", "(ORDER_DATE)"),
