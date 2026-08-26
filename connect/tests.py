@@ -528,6 +528,8 @@ class LegacyOrdersUpdateTests(SimpleTestCase):
             {
                 "action": "update",
                 "id": "123",
+                "order_code": "ORD-UPDATED",
+                "member_no": "JP9999999",
                 "order_status": "20",
                 "order_type": "30",
                 "order_year": "2025",
@@ -557,6 +559,7 @@ class LegacyOrdersUpdateTests(SimpleTestCase):
         before_row = {
             "ID": 123,
             "DOC_NO": "ORD-123",
+            "MEMBER_ID": "100",
             "ORDER_STATUS": "35",
             "ORDER_TYPE": "20",
             "ORDER_DATE": datetime(2024, 1, 31, 8, 15, 0),
@@ -571,7 +574,8 @@ class LegacyOrdersUpdateTests(SimpleTestCase):
         connection.cursor.return_value.__enter__.return_value = cursor
 
         with patch("connect.legacy_orders.get_user_access", return_value=access), patch(
-            "connect.legacy_orders.fetch_one_dict", return_value=before_row
+            "connect.legacy_orders.fetch_one_dict",
+            side_effect=[{"ID": 999}, before_row],
         ), patch("connect.legacy_orders.connections", {"rds": connection}), patch(
             "connect.legacy_orders.transaction"
         ), patch("connect.legacy_orders.messages"), patch(
@@ -583,13 +587,30 @@ class LegacyOrdersUpdateTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 302)
         update_params = cursor.execute.call_args.args[1]
-        self.assertEqual(update_params[0:2], ["20", "30"])
-        self.assertEqual(update_params[2], datetime(2025, 2, 28, 8, 15, 0))
-        self.assertEqual(update_params[3], "更新 太郎")
-        self.assertEqual(str(update_params[4]), "12345.67")
-        self.assertEqual(str(update_params[5]), "890.5")
-        self.assertEqual(update_params[6], datetime(2025, 2, 20, 12, 34, 56))
-        self.assertEqual(update_params[7], 123)
+        self.assertEqual(update_params[0:4], ["ORD-UPDATED", "999", "20", "30"])
+        self.assertEqual(update_params[4], datetime(2025, 2, 28, 8, 15, 0))
+        self.assertEqual(update_params[5], "更新 太郎")
+        self.assertEqual(str(update_params[6]), "12345.67")
+        self.assertEqual(str(update_params[7]), "890.5")
+        self.assertEqual(update_params[8], datetime(2025, 2, 20, 12, 34, 56))
+        self.assertEqual(update_params[9], 123)
         mock_audit.assert_called_once()
         self.assertEqual(mock_audit.call_args.kwargs["target_pk"], 123)
+        self.assertEqual(mock_audit.call_args.kwargs["after_values"]["DOC_NO"], "ORD-UPDATED")
+        self.assertEqual(mock_audit.call_args.kwargs["after_values"]["MEMBER_ID"], "999")
         mock_invalidate.assert_called_once()
+
+    def test_update_rejects_unknown_member_no(self):
+        access = SimpleNamespace(can_menu=lambda _key: True, can_update=True)
+
+        with patch("connect.legacy_orders.get_user_access", return_value=access), patch(
+            "connect.legacy_orders.fetch_one_dict", return_value=None
+        ), patch("connect.legacy_orders.messages") as mock_messages:
+            response = self.view.post(self._request())
+
+        self.assertEqual(response.status_code, 302)
+        mock_messages.error.assert_called_once()
+        self.assertEqual(
+            mock_messages.error.call_args.args[1],
+            '会員ID「JP9999999」が見つかりません。',
+        )

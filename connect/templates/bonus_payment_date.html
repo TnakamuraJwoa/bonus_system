@@ -58,7 +58,7 @@
   }
 
   .bonus-payment-date-col {
-    width: 260px;
+    width: 340px;
   }
 
   .bonus-payment-date-top {
@@ -72,9 +72,35 @@
   .bonus-payment-date-update-form {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 0.5rem;
     flex-wrap: nowrap;
     min-width: 260px;
+  }
+
+  .bonus-payment-date-view {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .bonus-payment-date-row .bonus-payment-date-edit {
+    display: none;
+  }
+
+  .bonus-payment-date-row.is-editing .bonus-payment-date-view {
+    display: none;
+  }
+
+  .bonus-payment-date-row.is-editing .bonus-payment-date-edit {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .bonus-payment-date-row.is-editing {
+    background-color: #fffbeb;
   }
 
   .bonus-payment-date-update-form .form-control {
@@ -241,7 +267,7 @@
 
                 <tbody>
                   {% for r in rows %}
-                    <tr>
+                    <tr class="bonus-payment-date-row">
                       <td>{{ r.order_code }}</td>
 
                       {% if user_access.can_update or user_access.can_delete %}
@@ -252,12 +278,27 @@
                               <input type="hidden" name="action" value="update">
                               <input type="hidden" name="order_code" value="{{ r.order_code }}">
                               <input type="hidden" name="q_order_code" value="{{ q_order_code|default:'' }}">
-                              <input type="text"
-                                     name="bonus_payment_date"
-                                     class="form-control form-control-sm"
-                                     value="{% if r.bonus_payment_date %}{{ r.bonus_payment_date|date:'Y-m-d' }}{% endif %}"
-                                     placeholder="YYYY-MM-DD">
-                              <button type="submit" class="btn btn-warning btn-sm">更新</button>
+                              <span class="bonus-payment-date-view">
+                                {% if r.bonus_payment_date %}{{ r.bonus_payment_date|date:'Y-m-d' }}{% endif %}
+                                <button type="button"
+                                        class="btn btn-outline-primary btn-sm"
+                                        data-bonus-payment-date-edit>
+                                  編集
+                                </button>
+                              </span>
+                              <span class="bonus-payment-date-edit">
+                                <input type="text"
+                                       name="bonus_payment_date"
+                                       class="form-control form-control-sm"
+                                       value="{% if r.bonus_payment_date %}{{ r.bonus_payment_date|date:'Y-m-d' }}{% endif %}"
+                                       placeholder="YYYY-MM-DD">
+                                <button type="submit" class="btn btn-warning btn-sm">更新</button>
+                                <button type="button"
+                                        class="btn btn-outline-secondary btn-sm"
+                                        data-bonus-payment-date-cancel>
+                                  キャンセル
+                                </button>
+                              </span>
                             </form>
                           {% else %}
                             {{ r.bonus_payment_date|date:'Y-m-d' }}
@@ -329,4 +370,44 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block script %}
+<script>
+(function () {
+    document.addEventListener("click", function (event) {
+        var editButton = event.target.closest("[data-bonus-payment-date-edit]");
+        if (editButton) {
+            var editRow = editButton.closest(".bonus-payment-date-row");
+            if (!editRow) {
+                return;
+            }
+
+            editRow.classList.add("is-editing");
+            var firstField = editRow.querySelector(".bonus-payment-date-edit .form-control");
+            if (firstField && firstField.focus) {
+                firstField.focus();
+                if (firstField.select) {
+                    firstField.select();
+                }
+            }
+            return;
+        }
+
+        var cancelButton = event.target.closest("[data-bonus-payment-date-cancel]");
+        if (!cancelButton) {
+            return;
+        }
+
+        if (cancelButton.form) {
+            cancelButton.form.reset();
+        }
+
+        var cancelRow = cancelButton.closest(".bonus-payment-date-row");
+        if (cancelRow) {
+            cancelRow.classList.remove("is-editing");
+        }
+    });
+})();
+</script>
 {% endblock %}

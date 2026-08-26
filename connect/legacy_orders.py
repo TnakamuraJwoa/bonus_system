@@ -661,6 +661,8 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
 
         try:
             order_id = int((request.POST.get("id") or "").strip())
+            order_code = (request.POST.get("order_code") or "").strip()
+            member_no = (request.POST.get("member_no") or "").strip()
             order_status = (request.POST.get("order_status") or "").strip()
             order_type = (request.POST.get("order_type") or "").strip()
             order_year = int((request.POST.get("order_year") or "").strip())
@@ -672,6 +674,10 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
             total_bv = self._parse_decimal(request.POST.get("total_bv"), "合計BV")
             bonus_date = self._parse_bonus_date(request.POST.get("bonus_date"))
 
+            if not order_code:
+                raise ValueError("注文番号を入力してください。")
+            if not member_no:
+                raise ValueError("会員IDを入力してください。")
             if order_status not in ORDER_STATUS_LABELS:
                 raise ValueError("注文状況が不正です。")
             if order_type not in ORDER_TYPE_LABELS:
@@ -684,12 +690,28 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
             messages.error(request, str(exc) or "入力内容が不正です。")
             return redirect(redirect_url)
 
+        member_row = fetch_one_dict(
+            "rds",
+            f"""
+                SELECT ID
+                FROM {LEGACY_MEMBER_TABLE}
+                WHERE MEMBER_NO = %s
+                LIMIT 1
+            """,
+            [member_no],
+        )
+        if not member_row:
+            messages.error(request, f"会員ID「{member_no}」が見つかりません。")
+            return redirect(redirect_url)
+        member_id = str(member_row["ID"])
+
         before_row = fetch_one_dict(
             "rds",
             f"""
                 SELECT
                     ID,
                     DOC_NO,
+                    MEMBER_ID,
                     ORDER_STATUS,
                     ORDER_TYPE,
                     ORDER_DATE,
@@ -722,6 +744,8 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
         after_row = dict(before_row)
         after_row.update(
             {
+                "DOC_NO": order_code,
+                "MEMBER_ID": member_id,
                 "ORDER_STATUS": order_status,
                 "ORDER_TYPE": order_type,
                 "ORDER_DATE": order_date,
@@ -739,6 +763,8 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
                         f"""
                             UPDATE {LEGACY_ORDERS_TABLE}
                             SET
+                                DOC_NO = %s,
+                                MEMBER_ID = %s,
                                 ORDER_STATUS = %s,
                                 ORDER_TYPE = %s,
                                 ORDER_DATE = %s,
@@ -749,6 +775,8 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
                             WHERE ID = %s
                         """,
                         [
+                            order_code,
+                            member_id,
                             order_status,
                             order_type,
                             order_date,
