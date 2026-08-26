@@ -230,7 +230,17 @@
                 <tbody>
                   {% for r in rows %}
                   <tr class="legacy-order-row">
-                    <td>{{ r.order_code }}</td>
+                    <td>
+                      <span class="legacy-order-view">{{ r.order_code }}</span>
+                      {% if user_access.can_update %}
+                        <input type="text"
+                               name="order_code"
+                               form="legacyOrderForm{{ r.id }}"
+                               class="form-control form-control-sm legacy-order-input legacy-order-edit"
+                               value="{{ r.order_code }}"
+                               required>
+                      {% endif %}
+                    </td>
 
                     <td class="text-center">
                       <span class="order-status-badge {{ r.order_status_badge_class }} legacy-order-view">
@@ -294,7 +304,17 @@
                       {% endif %}
                     </td>
 
-                    <td>{{ r.member_no|default:'' }}</td>
+                    <td>
+                      <span class="legacy-order-view">{{ r.member_no|default:'' }}</span>
+                      {% if user_access.can_update %}
+                        <input type="text"
+                               name="member_no"
+                               form="legacyOrderForm{{ r.id }}"
+                               class="form-control form-control-sm legacy-order-input legacy-order-edit"
+                               value="{{ r.member_no|default:'' }}"
+                               required>
+                      {% endif %}
+                    </td>
 
                     <td>
                       <span class="legacy-order-view">{{ r.order_name }}</span>
