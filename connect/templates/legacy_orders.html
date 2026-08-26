@@ -188,7 +188,7 @@
                     {% sortable_th "order_name" "注文者_氏名" %}
                     {% sortable_th "total_price" "購入合計金額" %}
                     {% sortable_th "total_bv" "合計BV" %}
-                    {% sortable_th "order_at" "注文日" %}
+                    {% sortable_th "bonus_date" "ボーナス計算対象日" %}
                     {% sortable_th "created_at" "作成日時" %}
                   </tr>
                 </thead>
@@ -209,7 +209,7 @@
                     <td>{{ r.order_name }}</td>
                     <td class="text-end">{{ r.total_price|floatformat:0|intcomma }}</td>
                     <td class="text-end">{{ r.total_bv|floatformat:"-2"|intcomma }}</td>
-                    <td>{{ r.order_at|db_datetime|default:"" }}</td>
+                    <td>{{ r.bonus_date|db_datetime|default:"" }}</td>
                     <td>{{ r.created_at|db_datetime }}</td>
                   </tr>
                   {% endfor %}

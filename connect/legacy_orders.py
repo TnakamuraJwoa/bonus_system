@@ -45,10 +45,9 @@ MEMBER_JOIN_SQL = f"""
               ON m.ID = o.MEMBER_ID
 """
 
-# 注文日の絞り込みがあるとき、MySQL は「ID 順に逆走査すればすぐ 200 件そろう」と
-# 見積もって主キーを選ぶが、その見積もりが実際と 300 倍ずれる（15.7 万件の年指定で
-# 540 件と見積もる）。結果 1 ページに 30 秒かかるので、注文日索引を明示的に選ばせる。
-ORDER_DATE_INDEX = "idx_jp_om_orders_order_date"
+# 会員コードの部分一致を IN 句に展開する上限。これを超える会員が該当したときは
+# 従来どおり会員テーブルと結合して絞る。
+MEMBER_MATCH_LIMIT = 10000
 
 # 旧システムにはコードマスタが無いため、現行 orders との突き合わせと
 # 入金日・取消日の有無から意味を割り出したもの。
@@ -137,6 +136,11 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
 
     TOTAL_COUNT_CACHE_TIMEOUT = 600
 
+    def setup(self, request, *args, **kwargs):
+        super().setup(request, *args, **kwargs)
+        # 一覧・件数・Excel出力で同じ会員の引き当てを使い回すリクエスト内キャッシュ
+        self._member_id_cache = {}
+
     SORT_COLUMNS = {
         # id は列として出していないが、既定の並び順（採番順＝新しい順）に使う。
         "id": "o.ID",
@@ -149,7 +153,7 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
         "order_name": "o.FIRSTNAME",
         "total_price": "o.TOTAL_NET_AMOUNT",
         "total_bv": "o.TOTAL_BV",
-        "order_at": "o.ORDER_DATE",
+        "bonus_date": "o.BONUS_DATE",
         "created_at": "o.CREATE_DATE",
     }
 
@@ -241,14 +245,79 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
             return f"o.ID {direction}"
         return f"{column} {direction}, o.ID {direction}"
 
-    @staticmethod
-    def _needs_member_join(sort_key="", **filters):
+    def _resolve_member_ids(self, q_member_id):
+        """会員コードの部分一致を、注文が持つ会員ID（文字列）の一覧に置き換える。
+
+        JP_MM_MEMBER.ID は decimal、JP_OM_ORDERS.MEMBER_ID は varchar なので、
+        この 2 つを結合すると MySQL は数値比較に倒し、注文側の会員IDインデックスを
+        使えない。結果 87 万件を全部読んでから会員名で捨てることになり 95 秒かかる。
+        先に会員を引いて IN 句に文字列で並べれば注文側のインデックスが効き、
+        同じ結果が 0.2 秒で返る。
+
+        該当会員が多すぎるときは None を返し、呼び出し側は従来の結合に戻す。
+        """
+        if q_member_id in self._member_id_cache:
+            return self._member_id_cache[q_member_id]
+
+        sql = f"""
+            SELECT CAST(m.ID AS CHAR)
+            FROM {LEGACY_MEMBER_TABLE} m
+            WHERE m.MEMBER_NO LIKE %s
+            LIMIT %s
+        """
+        with connections["rds"].cursor() as cursor:
+            try:
+                cursor.execute(sql, [f"%{q_member_id}%", MEMBER_MATCH_LIMIT + 1])
+                member_ids = [row[0] for row in cursor.fetchall()]
+            except ProgrammingError as exc:
+                if is_missing_table_error(exc):
+                    logger.info("旧システム会員テーブルが未作成です。table=%s", LEGACY_MEMBER_TABLE)
+                    member_ids = None
+                else:
+                    raise
+
+        if member_ids is not None and len(member_ids) > MEMBER_MATCH_LIMIT:
+            member_ids = None
+
+        self._member_id_cache[q_member_id] = member_ids
+        return member_ids
+
+    def _needs_member_join(self, sort_key="", **filters):
         """会員テーブルの結合が要るか。
 
-        会員コードで絞るときと会員コードで並べるときだけ必要。87 万件に対する
-        無駄な結合を避けるため、それ以外では結合しない。
+        会員コードで並べるときと、会員が多すぎて IN 句に展開できなかったときだけ
+        必要。87 万件に対する無駄な結合を避けるため、それ以外では結合しない。
         """
-        return bool(filters.get("q_member_id")) or sort_key == "member_no"
+        if sort_key == "member_no":
+            return True
+
+        q_member_id = filters.get("q_member_id")
+        if not q_member_id:
+            return False
+        return self._resolve_member_ids(q_member_id) is None
+
+    def _use_no_order_index_hint(self, **filters):
+        """並び替えに主キーを使わせないヒントを付けるか。
+
+        MySQL は「ID 順に逆走査すればすぐ 200 件そろう」と見積もって主キーを選ぶが、
+        絞り込みがあると見積もりが実際と桁違いにずれる（15.7 万件の年指定を 540 件と
+        見積もる）。1 本のインデックスで絞れる条件があるときは、そのインデックスで
+        絞ってから並べた方が速い（注文年 2019 で 38 秒 → 2.6 秒、注文番号の部分一致で
+        63 秒 → 16 秒）。
+
+        氏名だけは FIRSTNAME か LASTNAME のどちらかなので 1 本では絞れず、
+        ヒントを付けると逆に 0.3 秒から 82 秒に落ちるので付けない。
+        """
+        if filters.get("q_name"):
+            return False
+
+        return bool(
+            filters.get("q_order_code")
+            or filters.get("q_member_id")
+            or filters.get("q_order_statuses")
+            or filters.get("q_order_types")
+            or self._has_order_date_condition(**filters)
+        )
 
     @staticmethod
     def _has_order_date_condition(**filters):
@@ -283,8 +352,16 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
             params.append(f"%{q_order_code}%")
 
         if q_member_id:
-            where.append("m.MEMBER_NO LIKE %s")
-            params.append(f"%{q_member_id}%")
+            member_ids = self._resolve_member_ids(q_member_id)
+            if member_ids is None:
+                where.append("m.MEMBER_NO LIKE %s")
+                params.append(f"%{q_member_id}%")
+            elif not member_ids:
+                where.append("1 = 0")
+            else:
+                placeholders = ", ".join(["%s"] * len(member_ids))
+                where.append(f"o.MEMBER_ID IN ({placeholders})")
+                params.extend(member_ids)
 
         if q_name:
             where.append("(o.FIRSTNAME LIKE %s OR o.LASTNAME LIKE %s)")
@@ -325,9 +402,10 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
     def _fetch_total_count(self, **filters):
         """一覧の総件数を返す。
 
-        JP_OM_ORDERS は 87 万件・177MB でインデックスが無いため、COUNT(*) だけで
-        6 秒前後かかる。旧システムからの移行コピーで再取込のときしか中身が
-        変わらないので、条件ごとに現行 orders より長めにキャッシュする。
+        JP_OM_ORDERS は 87 万件・200MB あり、インデックスで数えられない条件だと
+        COUNT(*) だけで 7 秒前後、氏名の部分一致では 80 秒かかる。旧システムからの
+        移行コピーで再取込のときしか中身が変わらないので、条件ごとに現行 orders より
+        長めにキャッシュする。
         """
         cache_key = self._total_count_cache_key(**filters)
         cached = cache.get(cache_key)
@@ -335,9 +413,9 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
             return cached
 
         where_sql, params = self._build_where(**filters)
-        # 件数だけなら会員名は要らないので、会員コードで絞るときにだけ JOIN する。
-        # 87万件に対する無駄な結合を避けるため。
-        join_sql = MEMBER_JOIN_SQL if filters.get("q_member_id") else ""
+        # 件数だけなら会員名は要らない。87万件に対する無駄な結合を避けるため、
+        # 会員を IN 句に展開できなかったときだけ JOIN する。
+        join_sql = MEMBER_JOIN_SQL if self._needs_member_join(**filters) else ""
         sql = f"""
             SELECT COUNT(*)
             FROM {LEGACY_ORDERS_TABLE} o
@@ -374,9 +452,9 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
             if self._needs_member_join(sort_ctx["sort"], **filters)
             else ""
         )
-        index_hint = (
-            f"FORCE INDEX ({ORDER_DATE_INDEX})"
-            if self._has_order_date_condition(**filters)
+        hint = (
+            "/*+ NO_ORDER_INDEX(o PRIMARY) */"
+            if self._use_no_order_index_hint(**filters)
             else ""
         )
 
@@ -392,11 +470,11 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
                 o.FIRSTNAME AS order_name,
                 o.TOTAL_NET_AMOUNT AS total_price,
                 o.TOTAL_BV AS total_bv,
-                o.ORDER_DATE AS order_at,
+                o.BONUS_DATE AS bonus_date,
                 o.CREATE_DATE AS created_at
             FROM (
-                SELECT o.ID
-                FROM {LEGACY_ORDERS_TABLE} o {index_hint}
+                SELECT {hint} o.ID
+                FROM {LEGACY_ORDERS_TABLE} o
                 {page_join_sql}
                 {where_sql}
                 ORDER BY {order_by}
@@ -544,7 +622,7 @@ class LegacyOrdersExportView(LegacyOrdersView):
         "注文者_氏名",
         "購入合計金額",
         "合計BV",
-        "注文日",
+        "ボーナス計算対象日",
         "作成日時",
     ]
 
@@ -570,7 +648,7 @@ class LegacyOrdersExportView(LegacyOrdersView):
                 o.FIRSTNAME,
                 o.TOTAL_NET_AMOUNT,
                 o.TOTAL_BV,
-                o.ORDER_DATE,
+                o.BONUS_DATE,
                 o.CREATE_DATE
             FROM {LEGACY_ORDERS_TABLE} o
             {MEMBER_JOIN_SQL}
