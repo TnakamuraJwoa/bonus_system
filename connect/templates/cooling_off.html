@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static custom_filters %}
 
 {% block head %}
 <link href="{% static 'css/common.css' %}" rel="stylesheet">
@@ -242,12 +242,12 @@
 
                         <tr>
                             <th>入金日</th>
-                            <td>{{ detail_order.deposit_at|date:"Y/m/d H:i:s" }}</td>
+                            <td>{{ detail_order.deposit_at|db_datetime }}</td>
                         </tr>
 
                         <tr>
                             <th>注文日</th>
-                            <td>{{ detail_order.order_at|date:"Y/m/d H:i:s" }}</td>
+                            <td>{{ detail_order.order_at|db_datetime }}</td>
                         </tr>
                     </table>
 
@@ -282,17 +282,17 @@
                                                class="js-cooling-off-select-all"
                                                aria-label="表示中の行をすべて選択">
                                     </th>
-                                    <th width="80">登録年</th>
-                                    <th width="80">登録月</th>
-                                    <th width="180">注文番号</th>
-                                    <th width="100">状態</th>
-                                    <th width="150">会員番号</th>
-                                    <th>注文者名</th>
-                                    <th width="140">order_type</th>
-                                    <th width="100">bv</th>
-                                    <th width="250">備考</th>
-                                    <th width="150">登録者</th>
-                                    <th width="180">登録日時</th>
+                                    {% sortable_th "register_year" "登録年" width="80" %}
+                                    {% sortable_th "register_month" "登録月" width="80" %}
+                                    {% sortable_th "order_code" "注文番号" width="180" %}
+                                    {% sortable_th "active_flag" "状態" width="100" %}
+                                    {% sortable_th "jwoa_code" "会員番号" width="150" %}
+                                    {% sortable_th "order_name" "注文者名" %}
+                                    {% sortable_th "order_type" "order_type" width="140" %}
+                                    {% sortable_th "bv" "bv" width="100" %}
+                                    {% sortable_th "remarks" "備考" width="250" %}
+                                    {% sortable_th "registered_by" "登録者" width="150" %}
+                                    {% sortable_th "created_at" "登録日時" width="180" %}
                                     <th width="260">操作</th>
                                 </tr>
                             </thead>
@@ -338,7 +338,7 @@
                                     <td class="text-end">{{ row.bv }}</td>
                                     <td>{{ row.remarks|default:'' }}</td>
                                     <td>{{ row.registered_by }}</td>
-                                    <td>{{ row.created_at|date:"Y/m/d H:i:s" }}</td>
+                                    <td>{{ row.created_at|db_datetime }}</td>
 
                                     <td class="text-center">
                                         <a href="?detail_order_code={{ row.order_code }}"

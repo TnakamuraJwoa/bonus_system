@@ -79,7 +79,7 @@
                       {% if col.kind == "number" %}
                         <td class="text-end">{{ r|get_item:col.key|floatformat:0|intcomma }}</td>
                       {% elif col.kind == "datetime" %}
-                        <td class="text-center">{{ r|get_item:col.key|date:"Y-m-d H:i:s" }}</td>
+                        <td class="text-center">{{ r|get_item:col.key|db_datetime }}</td>
                       {% else %}
                         <td>{{ r|get_item:col.key|default:"" }}</td>
                       {% endif %}

@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load humanize %}
+{% load humanize custom_filters %}
 {% load static %}
 
 {% block head %}
@@ -91,7 +91,7 @@
                     <td class="text-end">{{ r.order_count|intcomma }}</td>
                     <td class="text-end">{{ r.total_bv|floatformat:0|intcomma }}</td>
                     <td class="text-end">{{ r.total_price|floatformat:0|intcomma }}</td>
-                    <td class="text-center">{{ r.last_order_at|date:"Y-m-d H:i:s"|default:"-" }}</td>
+                    <td class="text-center">{{ r.last_order_at|db_datetime|default:"-" }}</td>
                   </tr>
                   {% endfor %}
                 </tbody>

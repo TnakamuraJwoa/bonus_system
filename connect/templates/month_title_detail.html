@@ -236,7 +236,7 @@
                       <td class="text-end">{{ r.income_line_bv|intcomma }}</td>
                       <td class="text-end">{{ r.basic_line_bv|intcomma }}</td>
                       <td class="fw-bold text-primary">{{ r.title_name }}</td>
-                      <td>{{ r.updated_at }}</td>
+                      <td>{{ r.updated_at|db_datetime }}</td>
                       <td class="text-center">
                         <a class="btn btn-sm btn-outline-primary"
                            href="{% url 'connect:month_title_detail' %}?kibetu={{ r.kibetu|urlencode }}&jwoa_code={{ r.jwoa_code|urlencode }}">
@@ -276,7 +276,7 @@
                     <td class="text-end">{{ title_result.income_line_bv|intcomma }}</td>
                     <td class="text-end">{{ title_result.basic_line_bv|intcomma }}</td>
                     <td class="fw-bold text-primary">{{ title_result.title_name }}</td>
-                    <td>{{ title_result.updated_at }}</td>
+                    <td>{{ title_result.updated_at|db_datetime }}</td>
                   </tr>
                 </tbody>
               </table>

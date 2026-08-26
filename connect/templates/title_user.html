@@ -1,5 +1,5 @@
 ﻿{% extends 'base.html' %}
-{% load static %}
+{% load static custom_filters %}
 
 {% block head %}
   <link href="{% static 'css/common.css' %}" rel="stylesheet">
@@ -20,6 +20,10 @@
       padding-top: 0.12rem;
       padding-bottom: 0.12rem;
       line-height: 1.2;
+    }
+
+    .title-user-table tbody td.text-center {
+      text-align: center !important;
     }
   </style>
 {% endblock %}
@@ -128,10 +132,10 @@
                      style="white-space: nowrap;">
                 <thead class="table-light">
                   <tr>
-                    <th>jmoa_code</th>
-                    <th>jwoa_name</th>
-                    <th>title_name</th>
-                    <th>update_date</th>
+                    {% sortable_th "jmoa_code" "jmoa_code" %}
+                    {% sortable_th "jwoa_name" "jwoa_name" %}
+                    {% sortable_th "title_name" "title_name" %}
+                    {% sortable_th "update_date" "update_date" %}
                     {% if title_user_can_update %}
                       <th class="text-center title-user-action-cell">タイトル変更</th>
                     {% endif %}
@@ -142,7 +146,9 @@
                     <tr>
                       <td>{{ r.jmoa_code }}</td>
                       <td>{{ r.jwoa_name }}</td>
-                      <td>{{ r.title_name }}</td>
+                      <td class="text-center">
+                        <span class="badge {{ r.title_id|title_tier_badge_class }}">{{ r.title_name }}</span>
+                      </td>
                       <td>{{ r.update_date }}</td>
                       {% if title_user_can_update %}
                         <td class="text-center title-user-action-cell">

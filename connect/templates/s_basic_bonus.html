@@ -172,7 +172,7 @@
                       <td>{{ r.bonus_rate }}</td>
                       <td>{{ r.bonus_amount }}</td>
                       <td>{{ r.blue_daiya_flg }}</td>
-                      <td>{{ r.created_at }}</td>
+                      <td>{{ r.created_at|db_datetime }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

@@ -30,6 +30,10 @@
             <div>
               <label class="form-label mb-0 small text-muted">月期別</label>
               <select name="kibetu" class="form-select">
+                <option value="{{ all_kibetu_value }}"
+                        {% if is_all_kibetu %}selected{% endif %}>
+                  すべての期別
+                </option>
                 {% for obj in object_list %}
                   <option value="{{ obj.kibetu }}"
                           {% if obj.kibetu == selected_kibetu %}selected{% endif %}>
@@ -59,7 +63,15 @@
           </form>
 
           <div class="selection-indicator-group mt-3">
-          {% selection_from_period selected_period empty_message="月期別を選択してください" %}
+          {% if is_all_kibetu %}
+            <div class="selection-indicator">
+              <span class="selection-indicator__badge selection-indicator__badge--all badge badge-pill">
+                すべての期別
+              </span>
+            </div>
+          {% else %}
+            {% selection_from_period selected_period empty_message="月期別を選択してください" %}
+          {% endif %}
           {% if jwoa_code or jwoa_name %}
           <div class="selection-indicator">
             {% if jwoa_code %}
@@ -124,7 +136,7 @@
                       <td class="text-end">{{ r.three_star_diamond_global_bonus }}</td>
                       <td class="text-end">{{ r.crown_three_star_diamond_global_bonus }}</td>
                       <td class="fw-bold text-primary text-end">{{ r.month_bonus }}</td>
-                      <td>{{ r.updated_at }}</td>
+                      <td>{{ r.updated_at|db_datetime }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>
@@ -132,7 +144,13 @@
             </div>
 
           {% else %}
-            {% if selected_kibetu %}
+            {% if all_kibetu_requires_member_filter %}
+              <p class="mb-0 text-muted">
+                すべての期別を検索する場合は、会員コードまたは会員名を入力してください。
+              </p>
+            {% elif is_all_kibetu %}
+              <p class="mb-0">検索条件に一致するデータはありません。</p>
+            {% elif selected_kibetu %}
               <p class="mb-0">この月期別のデータはありません。</p>
             {% else %}
               <p class="mb-0 text-muted">月期別を選択して「表示」を押してください。</p>

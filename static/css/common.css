@@ -374,6 +374,10 @@ html, body {
 
 }
 
+.table tbody td.text-center {
+    text-align: center !important;
+}
+
 .table tbody td.table-empty-cell {
 
     text-align: center !important;
@@ -1569,6 +1573,42 @@ tr.field-changed-row {
     border-color: var(--color-border);
     background: #f8fafc;
     color: #475569;
+}
+
+/* タイトルバッジ：title_badge_class / title_tier_badge_class が返すクラス */
+.badge-title-teal {
+    background-color: #0d9488;
+    color: #fff;
+}
+
+.badge-title-orange {
+    background-color: #ea580c;
+    color: #fff;
+}
+
+.badge-title-purple {
+    background-color: #7c3aed;
+    color: #fff;
+}
+
+.badge-title-rose {
+    background-color: #e11d48;
+    color: #fff;
+}
+
+.badge-title-amber {
+    background-color: #d97706;
+    color: #fff;
+}
+
+.badge-title-fuchsia {
+    background-color: #c026d3;
+    color: #fff;
+}
+
+.badge-title-slate {
+    background-color: #475569;
+    color: #fff;
 }
 
 /* 会員一覧のエクスポート。説明文は右端に寄せたまま、読み方向は左揃えにする */

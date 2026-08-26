@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static custom_filters %}
 
 {% block head %}
 <link href="{% static 'css/common.css' %}" rel="stylesheet">
@@ -55,6 +55,10 @@
   .bonus-payment-date-action-cell {
     text-align: center;
     vertical-align: middle !important;
+  }
+
+  .bonus-payment-date-col {
+    width: 260px;
   }
 
   .bonus-payment-date-top {
@@ -226,9 +230,9 @@
               <table class="table table-bordered table-sm align-middle mb-0 bonus-payment-date-table">
                 <thead class="table-light">
                   <tr>
-                    <th>注文番号</th>
-                    <th style="width: 260px;">ボーナス支払日</th>
-                    <th>作成日時</th>
+                    {% sortable_th "order_code" "注文番号" %}
+                    {% sortable_th "bonus_payment_date" "ボーナス支払日" "bonus-payment-date-col" %}
+                    {% sortable_th "created_at" "作成日時" %}
                     {% if user_access.can_update or user_access.can_delete %}
                       <th class="bonus-payment-date-action-cell" style="width: 170px;">操作</th>
                     {% endif %}
@@ -260,7 +264,7 @@
                           {% endif %}
                         </td>
 
-                        <td>{{ r.created_at }}</td>
+                        <td>{{ r.created_at|db_datetime }}</td>
 
                         <td class="bonus-payment-date-action-cell">
                           {% if user_access.can_delete %}
@@ -277,7 +281,7 @@
                         </td>
                       {% else %}
                         <td>{{ r.bonus_payment_date|date:'Y-m-d' }}</td>
-                        <td>{{ r.created_at }}</td>
+                        <td>{{ r.created_at|db_datetime }}</td>
                       {% endif %}
                     </tr>
                   {% endfor %}

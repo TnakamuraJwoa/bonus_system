@@ -395,7 +395,7 @@
                         <td>{{ r.send_bv_name }}</td>
                         <td class="text-right">{{ r.total_bv }}</td>
                         <td class="text-right">{{ r.bv }}</td>
-                        <td>{{ r.bonus_payment_date }}</td>
+                        <td>{{ r.bonus_payment_date|db_datetime }}</td>
                         <td class="text-center">
                           {% if user_access.can_update %}
                             <button type="button"
@@ -510,9 +510,9 @@
                       <td>{{ r.send_bv_name }}</td>
                       <td>{{ r.total_bv }}</td>
                       <td>{{ r.bv }}</td>
-                      <td>{{ r.deposit_at }}</td>
-                      <td>{{ r.order_at }}</td>
-                      <td>{{ r.payment_date }}</td>
+                      <td>{{ r.deposit_at|db_datetime }}</td>
+                      <td>{{ r.order_at|db_datetime }}</td>
+                      <td>{{ r.payment_date|db_datetime }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

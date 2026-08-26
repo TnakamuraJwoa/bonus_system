@@ -90,6 +90,12 @@
                             {{ value|order_status_label }}
                           </span>
 
+                        {% elif col == "bv_actived_flg" %}
+
+                          <span class="order-status-badge {{ value|bv_actived_flg_badge_class }}">
+                            {{ value|bv_actived_flg_label }}
+                          </span>
+
                         {% else %}
 
                           {{ value }}

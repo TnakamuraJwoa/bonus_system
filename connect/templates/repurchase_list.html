@@ -319,25 +319,34 @@
         <div class="card-body">
 
           {% if rows %}
+            <div class="text-right small text-muted mb-1">
+              最終作成日時：
+              {% if last_created_at %}
+                {{ last_created_at|db_datetime }}
+              {% else %}
+                -
+              {% endif %}
+            </div>
             {% include "com/_list_summary.html" %}
 
             <div class="table-responsive">
               <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
                 <thead class="table-light">
                   <tr>
-                    <th>登録年</th>
-                    <th>登録月</th>
-                    <th>注文年</th>
-                    <th>注文月</th>
-                    <th>注文番号</th>
-                    <th>注文区分</th>
-                    <th>会員番号</th>
-                    <th>会員名</th>
-                    <th class="repurchase-bonus-payment-date-col">ボーナス支払日</th>
-                    <th>bv</th>
-                    <th>BV反映日時</th>
-                    <th>注文日時</th>
-                    <th>作成日時</th>
+                    {% sortable_th "register_year" "登録年" %}
+                    {% sortable_th "register_month" "登録月" %}
+                    {% sortable_th "order_year" "注文年" %}
+                    {% sortable_th "order_month" "注文月" %}
+                    {% sortable_th "order_code" "注文番号" %}
+                    {% sortable_th "order_type" "注文区分" %}
+                    {% sortable_th "jwoa_code" "会員番号" %}
+                    {% sortable_th "send_bv_name" "会員名" %}
+                    {% sortable_th "bonus_payment_date" "ボーナス支払日" "repurchase-bonus-payment-date-col" %}
+                    {% sortable_th "bv" "bv" %}
+                    {% sortable_th "bv_actived_flg" "BV反映FLG" %}
+                    {% sortable_th "deposit_at" "BV反映日時" %}
+                    {% sortable_th "order_at" "注文日時" %}
+                    {% sortable_th "created_at" "作成日時" %}
                   </tr>
                 </thead>
                 <tbody>
@@ -348,28 +357,27 @@
                       <td>{{ r.order_year }}</td>
                       <td>{{ r.order_month }}</td>
                       <td>{{ r.order_code }}</td>
-                      <td>
-                        {% if r.order_type == 101 %}
-                          再購入品
-                        {% elif r.order_type == 102 %}
-                          初回購入品
-                        {% elif r.order_type == 103 %}
-                          ランクアップ購入品
-                        {% elif r.order_type == 105 %}
-                          特別対応購入品
-                        {% elif r.order_type == 200 %}
-                          <span class="text-danger fw-bold">クーリングオフ</span>
-                        {% else %}
-                          {{ r.order_type }}
-                        {% endif %}
+                      <td class="text-center">
+                        <span class="order-status-badge {{ r.order_type|order_type_badge_class }}">
+                          {{ r.order_type|order_type_label }}
+                        </span>
                       </td>
                       <td>{{ r.jwoa_code }}</td>
                       <td>{{ r.send_bv_name }}</td>
-                      <td class="repurchase-bonus-payment-date-col">{{ r.bonus_payment_date }}</td>
+                      <td class="repurchase-bonus-payment-date-col">{{ r.bonus_payment_date|db_datetime }}</td>
                       <td class="text-end">{{ r.bv }}</td>
-                      <td>{{ r.deposit_at }}</td>
-                      <td>{{ r.order_at }}</td>
-                      <td>{{ r.created_at }}</td>
+                      <td class="text-center">
+                        {% if r.bv_actived_flg == None %}
+                          <span class="text-muted">-</span>
+                        {% else %}
+                          <span class="order-status-badge {{ r.bv_actived_flg|bv_actived_flg_badge_class }}">
+                            {{ r.bv_actived_flg|bv_actived_flg_label }}
+                          </span>
+                        {% endif %}
+                      </td>
+                      <td>{{ r.deposit_at|db_datetime }}</td>
+                      <td>{{ r.order_at|db_datetime }}</td>
+                      <td>{{ r.created_at|db_datetime }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

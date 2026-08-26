@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static custom_filters %}
 {% load humanize %}
 
 {% block head %}
@@ -138,8 +138,8 @@
                           {{ r.bv|intcomma }}
                         {% endif %}
                       </td>
-                      <td>{{ r.created_at }}</td>
-                      <td>{{ r.updated_at }}</td>
+                      <td>{{ r.created_at|db_datetime }}</td>
+                      <td>{{ r.updated_at|db_datetime }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

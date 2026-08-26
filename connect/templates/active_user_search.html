@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static custom_filters %}
 
 {% block head %}
   <link href="{% static 'css/common.css' %}" rel="stylesheet">
@@ -140,14 +140,14 @@
               <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
                 <thead class="table-light">
                   <tr>
-                    <th class="text-center">ID</th>
-                    <th class="text-center">会員コード</th>
-                    <th class="text-center">会員名</th>
-                    <th class="text-center">年</th>
-                    <th class="text-center">月</th>
-                    <th class="text-center">アクティブ年月</th>
-                    <th class="text-center">ステータス</th>
-                    <th class="text-center">作成日時</th>
+                    {% sortable_th "id" "ID" %}
+                    {% sortable_th "jwoa_code" "会員コード" %}
+                    {% sortable_th "send_bv_name" "会員名" %}
+                    {% sortable_th "year" "年" %}
+                    {% sortable_th "month" "月" %}
+                    {% sortable_th "active_month" "アクティブ年月" %}
+                    {% sortable_th "active_status" "ステータス" %}
+                    {% sortable_th "created_at" "作成日時" %}
                   </tr>
                 </thead>
                 <tbody>
@@ -166,7 +166,7 @@
                           <span class="badge badge-secondary">非アクティブ</span>
                         {% endif %}
                       </td>
-                      <td>{{ r.created_at|date:"Y-m-d H:i:s" }}</td>
+                      <td>{{ r.created_at|db_datetime }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>

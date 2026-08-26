@@ -93,8 +93,8 @@
                     <td class="text-end">{{ r.basic_bonus|floatformat:0|intcomma }}</td>
                     <td class="text-end">{{ r.matching_bonus|floatformat:0|intcomma }}</td>
                     <td class="fw-bold text-primary text-end">{{ r.week_bonus|floatformat:0|intcomma }}</td>
-                    <td class="text-center">{{ r.created_at|date:"Y-m-d H:i:s" }}</td>
-                    <td class="text-center">{{ r.updated_at|date:"Y-m-d H:i:s" }}</td>
+                    <td class="text-center">{{ r.created_at|db_datetime }}</td>
+                    <td class="text-center">{{ r.updated_at|db_datetime }}</td>
                   </tr>
                   {% endfor %}
                 </tbody>
