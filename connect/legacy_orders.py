@@ -8,19 +8,23 @@ import hashlib
 import json
 import logging
 import math
+from calendar import monthrange
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from urllib.parse import urlencode
 
 import openpyxl
+from accounts.access import get_user_access
 from dateutil.relativedelta import relativedelta
 from django.contrib import messages
 from django.core.cache import cache
-from django.db import ProgrammingError, connections
+from django.db import ProgrammingError, connections, transaction
 from django.http import HttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.views import generic
 
+from connect.audit import fetch_one_dict, record_change_audit
 from connect.business_search_registration import is_missing_table_error
 from connect.order_field_labels import get_legacy_order_field_label
 from connect.templatetags.custom_filters import as_db_datetime, db_datetime
@@ -135,6 +139,7 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
     template_name = "legacy_orders.html"
 
     TOTAL_COUNT_CACHE_TIMEOUT = 600
+    TOTAL_COUNT_CACHE_VERSION_KEY = "legacy_orders:total_count_version"
 
     def setup(self, request, *args, **kwargs):
         super().setup(request, *args, **kwargs)
@@ -397,7 +402,14 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
     def _total_count_cache_key(self, **filters):
         signature = json.dumps(filters, sort_keys=True, default=str)
         digest = hashlib.md5(signature.encode("utf-8")).hexdigest()
-        return f"legacy_orders:total_count:{digest}"
+        version = cache.get(self.TOTAL_COUNT_CACHE_VERSION_KEY, 1)
+        return f"legacy_orders:total_count:{version}:{digest}"
+
+    def _invalidate_total_count_cache(self):
+        try:
+            cache.incr(self.TOTAL_COUNT_CACHE_VERSION_KEY)
+        except ValueError:
+            cache.set(self.TOTAL_COUNT_CACHE_VERSION_KEY, 2, None)
 
     def _fetch_total_count(self, **filters):
         """一覧の総件数を返す。
@@ -504,6 +516,13 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
                 row.get("order_status")
             )
             row["order_type_label"] = order_type_label(row.get("order_type"))
+            bonus_date = row.get("bonus_date")
+            if isinstance(bonus_date, datetime):
+                row["bonus_date_input"] = bonus_date.strftime("%Y-%m-%dT%H:%M:%S")
+            elif isinstance(bonus_date, date):
+                row["bonus_date_input"] = bonus_date.strftime("%Y-%m-%dT00:00")
+            else:
+                row["bonus_date_input"] = bonus_date or ""
         return rows
 
     def _get_filters(self):
@@ -600,6 +619,170 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
             base_qs += urlencode({"q_order_type": order_type})
         ctx["base_qs"] = base_qs
         return ctx
+
+    @staticmethod
+    def _parse_decimal(value, label):
+        text = (value or "").strip().replace(",", "")
+        if not text:
+            raise ValueError(f"{label}を入力してください。")
+        try:
+            parsed = Decimal(text)
+        except InvalidOperation as exc:
+            raise ValueError(f"{label}は数値で入力してください。") from exc
+        if not parsed.is_finite():
+            raise ValueError(f"{label}は有限の数値で入力してください。")
+        return parsed
+
+    @staticmethod
+    def _parse_bonus_date(value):
+        text = (value or "").strip()
+        if not text:
+            return None
+        try:
+            return datetime.fromisoformat(text)
+        except ValueError as exc:
+            raise ValueError("ボーナス計算対象日が不正です。") from exc
+
+    @staticmethod
+    def _redirect_url(request):
+        next_query = (request.POST.get("next_query") or "").strip()
+        url = reverse("connect:legacy_orders")
+        return f"{url}?{next_query}" if next_query else url
+
+    def post(self, request, *args, **kwargs):
+        user_access = get_user_access(request.user)
+        if not user_access.can_menu("legacy_orders") or not user_access.can_update:
+            return HttpResponse("権限がありません。", status=403)
+
+        redirect_url = self._redirect_url(request)
+        if (request.POST.get("action") or "").strip() != "update":
+            messages.error(request, "不正な操作です。")
+            return redirect(redirect_url)
+
+        try:
+            order_id = int((request.POST.get("id") or "").strip())
+            order_status = (request.POST.get("order_status") or "").strip()
+            order_type = (request.POST.get("order_type") or "").strip()
+            order_year = int((request.POST.get("order_year") or "").strip())
+            order_month = int((request.POST.get("order_month") or "").strip())
+            order_name = (request.POST.get("order_name") or "").strip()
+            total_price = self._parse_decimal(
+                request.POST.get("total_price"), "購入合計金額"
+            )
+            total_bv = self._parse_decimal(request.POST.get("total_bv"), "合計BV")
+            bonus_date = self._parse_bonus_date(request.POST.get("bonus_date"))
+
+            if order_status not in ORDER_STATUS_LABELS:
+                raise ValueError("注文状況が不正です。")
+            if order_type not in ORDER_TYPE_LABELS:
+                raise ValueError("注文区分が不正です。")
+            if not MIN_ORDER_YEAR <= order_year <= MAX_ORDER_YEAR:
+                raise ValueError("注文年が不正です。")
+            if not 1 <= order_month <= 12:
+                raise ValueError("注文月が不正です。")
+        except (TypeError, ValueError) as exc:
+            messages.error(request, str(exc) or "入力内容が不正です。")
+            return redirect(redirect_url)
+
+        before_row = fetch_one_dict(
+            "rds",
+            f"""
+                SELECT
+                    ID,
+                    DOC_NO,
+                    ORDER_STATUS,
+                    ORDER_TYPE,
+                    ORDER_DATE,
+                    FIRSTNAME,
+                    TOTAL_NET_AMOUNT,
+                    TOTAL_BV,
+                    BONUS_DATE
+                FROM {LEGACY_ORDERS_TABLE}
+                WHERE ID = %s
+                LIMIT 1
+            """,
+            [order_id],
+        )
+        if not before_row:
+            messages.error(request, "更新対象データが見つかりませんでした。")
+            return redirect(redirect_url)
+
+        current_order_date = before_row.get("ORDER_DATE")
+        current_day = getattr(current_order_date, "day", 1)
+        order_day = min(current_day, monthrange(order_year, order_month)[1])
+        if isinstance(current_order_date, (date, datetime)):
+            order_date = current_order_date.replace(
+                year=order_year,
+                month=order_month,
+                day=order_day,
+            )
+        else:
+            order_date = date(order_year, order_month, order_day)
+
+        after_row = dict(before_row)
+        after_row.update(
+            {
+                "ORDER_STATUS": order_status,
+                "ORDER_TYPE": order_type,
+                "ORDER_DATE": order_date,
+                "FIRSTNAME": order_name,
+                "TOTAL_NET_AMOUNT": total_price,
+                "TOTAL_BV": total_bv,
+                "BONUS_DATE": bonus_date,
+            }
+        )
+
+        try:
+            with transaction.atomic(using="rds"):
+                with connections["rds"].cursor() as cursor:
+                    cursor.execute(
+                        f"""
+                            UPDATE {LEGACY_ORDERS_TABLE}
+                            SET
+                                ORDER_STATUS = %s,
+                                ORDER_TYPE = %s,
+                                ORDER_DATE = %s,
+                                FIRSTNAME = %s,
+                                TOTAL_NET_AMOUNT = %s,
+                                TOTAL_BV = %s,
+                                BONUS_DATE = %s
+                            WHERE ID = %s
+                        """,
+                        [
+                            order_status,
+                            order_type,
+                            order_date,
+                            order_name,
+                            total_price,
+                            total_bv,
+                            bonus_date,
+                            order_id,
+                        ],
+                    )
+                    updated_count = cursor.rowcount
+
+                if updated_count:
+                    record_change_audit(
+                        request,
+                        screen_name="旧BONUS_SYSTEM(リンパ) 注文一覧",
+                        action_type="update",
+                        target_table="JP_OM_ORDERS",
+                        target_pk=order_id,
+                        summary=f"注文番号 {before_row.get('DOC_NO')} を更新",
+                        before_values=before_row,
+                        after_values=after_row,
+                    )
+
+            if updated_count:
+                self._invalidate_total_count_cache()
+                messages.success(request, "注文情報を更新しました。")
+            else:
+                messages.info(request, "注文情報は変更されていません。")
+        except Exception:
+            logger.exception("旧システム注文一覧の更新に失敗しました。id=%s", order_id)
+            messages.error(request, "注文情報の更新中にエラーが発生しました。")
+
+        return redirect(redirect_url)
 
 
 class LegacyOrdersExportView(LegacyOrdersView):

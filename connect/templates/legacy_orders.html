@@ -17,6 +17,37 @@
       padding-bottom: 0.12rem;
       line-height: 1.2;
     }
+
+    .orders-table .legacy-order-input {
+      min-width: 90px;
+      height: 28px;
+      padding: 0.15rem 0.35rem;
+      font-size: 0.8rem;
+    }
+
+    .orders-table .legacy-order-input--name {
+      min-width: 150px;
+    }
+
+    .orders-table .legacy-order-input--date {
+      min-width: 175px;
+    }
+
+    .legacy-order-row .legacy-order-edit {
+      display: none;
+    }
+
+    .legacy-order-row.is-editing .legacy-order-view {
+      display: none;
+    }
+
+    .legacy-order-row.is-editing .legacy-order-edit {
+      display: inline-block;
+    }
+
+    .legacy-order-row.is-editing {
+      background-color: #fffbeb;
+    }
   </style>
 {% endblock %}
 
@@ -190,27 +221,157 @@
                     {% sortable_th "total_bv" "合計BV" %}
                     {% sortable_th "bonus_date" "ボーナス計算対象日" %}
                     {% sortable_th "created_at" "作成日時" %}
+                    {% if user_access.can_update %}
+                      <th class="text-center">操作</th>
+                    {% endif %}
                   </tr>
                 </thead>
 
                 <tbody>
                   {% for r in rows %}
-                  <tr>
+                  <tr class="legacy-order-row">
                     <td>{{ r.order_code }}</td>
+
                     <td class="text-center">
-                      <span class="order-status-badge {{ r.order_status_badge_class }}">
+                      <span class="order-status-badge {{ r.order_status_badge_class }} legacy-order-view">
                         {{ r.order_status_label }}
                       </span>
+                      {% if user_access.can_update %}
+                        <select name="order_status"
+                                form="legacyOrderForm{{ r.id }}"
+                                class="form-select form-select-sm legacy-order-input legacy-order-edit"
+                                aria-label="注文状況">
+                          {% for value, label in order_status_choices %}
+                            <option value="{{ value }}" {% if r.order_status|stringformat:"s" == value %}selected{% endif %}>
+                              {{ label }}
+                            </option>
+                          {% endfor %}
+                        </select>
+                      {% endif %}
                     </td>
-                    <td class="text-center">{{ r.order_type_label }}</td>
-                    <td>{{ r.order_year }}</td>
-                    <td>{{ r.order_month }}</td>
+
+                    <td class="text-center">
+                      <span class="legacy-order-view">{{ r.order_type_label }}</span>
+                      {% if user_access.can_update %}
+                        <select name="order_type"
+                                form="legacyOrderForm{{ r.id }}"
+                                class="form-select form-select-sm legacy-order-input legacy-order-edit"
+                                aria-label="注文区分">
+                          {% for value, label in order_type_choices %}
+                            <option value="{{ value }}" {% if r.order_type|stringformat:"s" == value %}selected{% endif %}>
+                              {{ label }}
+                            </option>
+                          {% endfor %}
+                        </select>
+                      {% endif %}
+                    </td>
+
+                    <td>
+                      <span class="legacy-order-view">{{ r.order_year }}</span>
+                      {% if user_access.can_update %}
+                        <input type="number"
+                               name="order_year"
+                               form="legacyOrderForm{{ r.id }}"
+                               class="form-control form-control-sm legacy-order-input legacy-order-edit"
+                               value="{{ r.order_year }}"
+                               min="1900"
+                               max="2999"
+                               required>
+                      {% endif %}
+                    </td>
+
+                    <td>
+                      <span class="legacy-order-view">{{ r.order_month }}</span>
+                      {% if user_access.can_update %}
+                        <input type="number"
+                               name="order_month"
+                               form="legacyOrderForm{{ r.id }}"
+                               class="form-control form-control-sm legacy-order-input legacy-order-edit"
+                               value="{{ r.order_month }}"
+                               min="1"
+                               max="12"
+                               required>
+                      {% endif %}
+                    </td>
+
                     <td>{{ r.member_no|default:'' }}</td>
-                    <td>{{ r.order_name }}</td>
-                    <td class="text-end">{{ r.total_price|floatformat:0|intcomma }}</td>
-                    <td class="text-end">{{ r.total_bv|floatformat:"-2"|intcomma }}</td>
-                    <td>{{ r.bonus_date|db_datetime|default:"" }}</td>
+
+                    <td>
+                      <span class="legacy-order-view">{{ r.order_name }}</span>
+                      {% if user_access.can_update %}
+                        <input type="text"
+                               name="order_name"
+                               form="legacyOrderForm{{ r.id }}"
+                               class="form-control form-control-sm legacy-order-input legacy-order-input--name legacy-order-edit"
+                               value="{{ r.order_name|default:'' }}">
+                      {% endif %}
+                    </td>
+
+                    <td class="text-end">
+                      <span class="legacy-order-view">{{ r.total_price|floatformat:0|intcomma }}</span>
+                      {% if user_access.can_update %}
+                        <input type="number"
+                               name="total_price"
+                               form="legacyOrderForm{{ r.id }}"
+                               class="form-control form-control-sm text-end legacy-order-input legacy-order-edit"
+                               value="{{ r.total_price }}"
+                               step="any"
+                               required>
+                      {% endif %}
+                    </td>
+
+                    <td class="text-end">
+                      <span class="legacy-order-view">{{ r.total_bv|floatformat:"-2"|intcomma }}</span>
+                      {% if user_access.can_update %}
+                        <input type="number"
+                               name="total_bv"
+                               form="legacyOrderForm{{ r.id }}"
+                               class="form-control form-control-sm text-end legacy-order-input legacy-order-edit"
+                               value="{{ r.total_bv }}"
+                               step="any"
+                               required>
+                      {% endif %}
+                    </td>
+
+                    <td>
+                      <span class="legacy-order-view">{{ r.bonus_date|db_datetime|default:"" }}</span>
+                      {% if user_access.can_update %}
+                        <input type="datetime-local"
+                               name="bonus_date"
+                               form="legacyOrderForm{{ r.id }}"
+                               class="form-control form-control-sm legacy-order-input legacy-order-input--date legacy-order-edit"
+                               value="{{ r.bonus_date_input }}"
+                               step="1">
+                      {% endif %}
+                    </td>
+
                     <td>{{ r.created_at|db_datetime }}</td>
+
+                    {% if user_access.can_update %}
+                      <td class="text-center">
+                        <form method="post"
+                              id="legacyOrderForm{{ r.id }}"
+                              class="mb-0"
+                              data-confirm="注文番号 {{ r.order_code }} を更新します。よろしいですか？">
+                          {% csrf_token %}
+                          <input type="hidden" name="action" value="update">
+                          <input type="hidden" name="id" value="{{ r.id }}">
+                          <input type="hidden" name="next_query" value="{{ request.GET.urlencode }}">
+
+                          <button type="button"
+                                  class="btn btn-outline-primary btn-sm legacy-order-view"
+                                  data-legacy-order-edit>
+                            編集
+                          </button>
+                          <button type="submit" class="btn btn-warning btn-sm legacy-order-edit">更新</button>
+                          <button type="button"
+                                  class="btn btn-outline-secondary btn-sm legacy-order-edit ml-1"
+                                  data-legacy-order-cancel>
+                            キャンセル
+                          </button>
+                        </form>
+                      </td>
+                    {% endif %}
                   </tr>
                   {% endfor %}
                 </tbody>
@@ -230,4 +391,42 @@
     </main>
   </div>
 </div>
+{% endblock %}
+
+{% block script %}
+<script>
+(function () {
+    document.addEventListener("click", function (event) {
+        var editButton = event.target.closest("[data-legacy-order-edit]");
+        if (editButton) {
+            var editRow = editButton.closest(".legacy-order-row");
+            if (!editRow) {
+                return;
+            }
+
+            editRow.classList.add("is-editing");
+            var firstField = editRow.querySelector(".legacy-order-edit");
+            if (firstField && firstField.focus) {
+                firstField.focus();
+            }
+            return;
+        }
+
+        var cancelButton = event.target.closest("[data-legacy-order-cancel]");
+        if (!cancelButton) {
+            return;
+        }
+
+        // 入力欄は form 属性で行のフォームに紐づけているので、reset() で行全体が元の値に戻る。
+        if (cancelButton.form) {
+            cancelButton.form.reset();
+        }
+
+        var cancelRow = cancelButton.closest(".legacy-order-row");
+        if (cancelRow) {
+            cancelRow.classList.remove("is-editing");
+        }
+    });
+})();
+</script>
 {% endblock %}
