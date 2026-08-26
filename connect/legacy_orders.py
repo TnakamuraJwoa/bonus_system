@@ -49,6 +49,14 @@ MEMBER_JOIN_SQL = f"""
               ON m.ID = o.MEMBER_ID
 """
 
+# 会員テーブルは注文より古い時点のコピーで、最近の会員は入っていない。
+# 引き当てられない注文は会員コードが空欄になって編集もできなくなるため、
+# 表示では MEMBER_ID の値をそのまま出す。
+MEMBER_NO_SELECT_SQL = "COALESCE(m.MEMBER_NO, o.MEMBER_ID)"
+
+# JP_OM_ORDERS.MEMBER_ID は varchar(60)。
+MAX_MEMBER_ID_LENGTH = 60
+
 # 会員コードの部分一致を IN 句に展開する上限。これを超える会員が該当したときは
 # 従来どおり会員テーブルと結合して絞る。
 MEMBER_MATCH_LIMIT = 10000
@@ -359,14 +367,15 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
         if q_member_id:
             member_ids = self._resolve_member_ids(q_member_id)
             if member_ids is None:
-                where.append("m.MEMBER_NO LIKE %s")
-                params.append(f"%{q_member_id}%")
-            elif not member_ids:
-                where.append("1 = 0")
+                where.append("(m.MEMBER_NO LIKE %s OR o.MEMBER_ID = %s)")
+                params.extend([f"%{q_member_id}%", q_member_id])
             else:
-                placeholders = ", ".join(["%s"] * len(member_ids))
+                # 会員テーブルに無い会員コードをそのまま持っている注文も拾えるよう、
+                # 入力値そのものも候補に入れる。同じ列の IN なので索引はそのまま効く。
+                candidates = member_ids + [q_member_id]
+                placeholders = ", ".join(["%s"] * len(candidates))
                 where.append(f"o.MEMBER_ID IN ({placeholders})")
-                params.extend(member_ids)
+                params.extend(candidates)
 
         if q_name:
             where.append("(o.FIRSTNAME LIKE %s OR o.LASTNAME LIKE %s)")
@@ -478,7 +487,7 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
                 o.ORDER_TYPE AS order_type,
                 YEAR(o.ORDER_DATE) AS order_year,
                 MONTH(o.ORDER_DATE) AS order_month,
-                m.MEMBER_NO AS member_no,
+                {MEMBER_NO_SELECT_SQL} AS member_no,
                 o.FIRSTNAME AS order_name,
                 o.TOTAL_NET_AMOUNT AS total_price,
                 o.TOTAL_BV AS total_bv,
@@ -700,10 +709,19 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
             """,
             [member_no],
         )
-        if not member_row:
-            messages.error(request, f"会員ID「{member_no}」が見つかりません。")
-            return redirect(redirect_url)
-        member_id = str(member_row["ID"])
+        # 会員テーブルは注文より古い時点のコピーなので、最近の会員はここに無い。
+        # 引き当てられないだけで更新を止めると新しい会員に付け替えられないため、
+        # 見つからないときは入力した会員コードをそのまま MEMBER_ID に入れる。
+        if member_row:
+            member_id = str(member_row["ID"])
+        else:
+            if len(member_no) > MAX_MEMBER_ID_LENGTH:
+                messages.error(
+                    request,
+                    f"会員IDは{MAX_MEMBER_ID_LENGTH}文字以内で入力してください。",
+                )
+                return redirect(redirect_url)
+            member_id = member_no
 
         before_row = fetch_one_dict(
             "rds",
@@ -804,6 +822,12 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
             if updated_count:
                 self._invalidate_total_count_cache()
                 messages.success(request, "注文情報を更新しました。")
+                if not member_row:
+                    messages.warning(
+                        request,
+                        f"会員ID「{member_no}」は旧システムの会員一覧に無いため、"
+                        "入力した値をそのまま保存しました。",
+                    )
             else:
                 messages.info(request, "注文情報は変更されていません。")
         except Exception:
@@ -855,7 +879,7 @@ class LegacyOrdersExportView(LegacyOrdersView):
                 o.ORDER_TYPE,
                 YEAR(o.ORDER_DATE),
                 MONTH(o.ORDER_DATE),
-                m.MEMBER_NO,
+                {MEMBER_NO_SELECT_SQL},
                 o.FIRSTNAME,
                 o.TOTAL_NET_AMOUNT,
                 o.TOTAL_BV,

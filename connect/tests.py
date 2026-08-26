@@ -600,17 +600,61 @@ class LegacyOrdersUpdateTests(SimpleTestCase):
         self.assertEqual(mock_audit.call_args.kwargs["after_values"]["MEMBER_ID"], "999")
         mock_invalidate.assert_called_once()
 
-    def test_update_rejects_unknown_member_no(self):
+    def test_update_keeps_unknown_member_no_as_is(self):
+        """会員テーブルに無い会員コードは、入力値をそのまま MEMBER_ID に保存する。"""
         access = SimpleNamespace(can_menu=lambda _key: True, can_update=True)
+        before_row = {
+            "ID": 123,
+            "DOC_NO": "ORD-123",
+            "MEMBER_ID": "100",
+            "ORDER_STATUS": "35",
+            "ORDER_TYPE": "20",
+            "ORDER_DATE": datetime(2024, 1, 31, 8, 15, 0),
+            "FIRSTNAME": "変更前",
+            "TOTAL_NET_AMOUNT": 1000,
+            "TOTAL_BV": 100,
+            "BONUS_DATE": None,
+        }
+        cursor = MagicMock()
+        cursor.rowcount = 1
+        connection = MagicMock()
+        connection.cursor.return_value.__enter__.return_value = cursor
+
+        with patch("connect.legacy_orders.get_user_access", return_value=access), patch(
+            "connect.legacy_orders.fetch_one_dict",
+            side_effect=[None, before_row],
+        ), patch("connect.legacy_orders.connections", {"rds": connection}), patch(
+            "connect.legacy_orders.transaction"
+        ), patch("connect.legacy_orders.messages") as mock_messages, patch(
+            "connect.legacy_orders.record_change_audit"
+        ) as mock_audit, patch.object(
+            self.view, "_invalidate_total_count_cache"
+        ):
+            response = self.view.post(self._request())
+
+        self.assertEqual(response.status_code, 302)
+        mock_messages.error.assert_not_called()
+        mock_messages.warning.assert_called_once()
+        update_params = cursor.execute.call_args.args[1]
+        self.assertEqual(update_params[1], "JP9999999")
+        self.assertEqual(
+            mock_audit.call_args.kwargs["after_values"]["MEMBER_ID"], "JP9999999"
+        )
+
+    def test_update_rejects_too_long_unknown_member_no(self):
+        access = SimpleNamespace(can_menu=lambda _key: True, can_update=True)
+        request = self._request()
+        request.POST = request.POST.copy()
+        request.POST["member_no"] = "J" * 61
 
         with patch("connect.legacy_orders.get_user_access", return_value=access), patch(
             "connect.legacy_orders.fetch_one_dict", return_value=None
         ), patch("connect.legacy_orders.messages") as mock_messages:
-            response = self.view.post(self._request())
+            response = self.view.post(request)
 
         self.assertEqual(response.status_code, 302)
         mock_messages.error.assert_called_once()
         self.assertEqual(
             mock_messages.error.call_args.args[1],
-            '会員ID「JP9999999」が見つかりません。',
+            "会員IDは60文字以内で入力してください。",
         )
