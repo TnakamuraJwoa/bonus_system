@@ -8,6 +8,7 @@ from connect.legacy_orders import LegacyOrdersView
 from connect.templatetags.custom_filters import as_db_datetime, db_datetime, jp_date, jst_datetime
 from connect.views import (
     BonusPaymentDateView,
+    OrdersDistributionBvExportView,
     OrdersDistributionBvView,
     S_MonthBonusView,
     S_WeekBonusView,
@@ -344,6 +345,76 @@ class OrdersDistributionBvViewQueryTests(SimpleTestCase):
         self.assertIn("LEFT JOIN nexus_production.orders", sql)
         self.assertIn("b.jwoa_code AS purchaser_jwoa_code", sql)
         self.assertEqual(params, [200, 0])
+
+
+class OrdersDistributionBvExportTests(SimpleTestCase):
+    def setUp(self):
+        self.view = OrdersDistributionBvExportView()
+        self.view.request = RequestFactory().get(
+            "/orders_distribution_bv/export/",
+            {
+                "q_order_code": " MF30 ",
+                "q_bv_actived_flg": "1",
+            },
+        )
+
+    def test_filters_match_list_search_conditions(self):
+        filters = self.view._get_filters()
+
+        self.assertEqual(filters["q_order_code"], "MF30")
+        self.assertEqual(filters["q_bv_actived_flg"], "1")
+
+    def test_export_query_uses_keyset_and_includes_display_columns(self):
+        cursor = MagicMock()
+        cursor.__enter__.return_value = cursor
+        cursor.fetchall.return_value = []
+        connection = MagicMock()
+        connection.cursor.return_value = cursor
+
+        with patch("connect.views.connections", {"rds": connection}):
+            self.view._fetch_export_rows(
+                last_id=500,
+                limit=100,
+                q_order_code="MF30",
+            )
+
+        sql, params = cursor.execute.call_args.args
+        self.assertIn("LEFT JOIN nexus_production.orders", sql)
+        self.assertIn("a.id < %s", sql)
+        self.assertIn("ORDER BY a.id DESC", sql)
+        self.assertEqual(params, ["MF30%", 500, 100])
+
+    def test_excel_row_converts_flag_and_datetimes(self):
+        created_at = datetime(2026, 8, 26, 10, 20, 30)
+        updated_at = datetime(2026, 8, 26, 11, 20, 30)
+
+        values = self.view._row_to_excel(
+            (
+                10,
+                "MF30",
+                "JP001",
+                "JP002",
+                120,
+                10,
+                1,
+                created_at,
+                updated_at,
+            )
+        )
+
+        self.assertEqual(
+            values,
+            [
+                "MF30",
+                "JP001",
+                "JP002",
+                120,
+                10,
+                "反映済",
+                created_at,
+                updated_at,
+            ],
+        )
 
 
 class BonusPaymentDateDeleteTests(SimpleTestCase):
