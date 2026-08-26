@@ -1,8 +1,10 @@
 from datetime import date, datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from django.test import RequestFactory, SimpleTestCase, override_settings
 
+from connect.legacy_orders import LegacyOrdersView
 from connect.templatetags.custom_filters import as_db_datetime, db_datetime, jp_date, jst_datetime
 from connect.views import (
     BonusPaymentDateView,
@@ -442,3 +444,81 @@ class BonusPaymentDateDeleteTests(SimpleTestCase):
         self.assertEqual(len(self._executed(cursor, "DELETE FROM bonus_db.bonus_payment_date")), 1)
         self.assertEqual(self._executed(cursor, "UPDATE bonus_db.purchase_info_list"), [])
         mock_messages.warning.assert_called_once()
+
+
+class LegacyOrdersUpdateTests(SimpleTestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.view = LegacyOrdersView()
+
+    def _request(self):
+        request = self.factory.post(
+            "/legacy_orders/",
+            {
+                "action": "update",
+                "id": "123",
+                "order_status": "20",
+                "order_type": "30",
+                "order_year": "2025",
+                "order_month": "2",
+                "order_name": "更新 太郎",
+                "total_price": "12,345.67",
+                "total_bv": "890.5",
+                "bonus_date": "2025-02-20T12:34:56",
+            },
+        )
+        request.user = MagicMock()
+        return request
+
+    def test_update_requires_legacy_orders_update_permission(self):
+        access = SimpleNamespace(can_menu=lambda _key: True, can_update=False)
+
+        with patch("connect.legacy_orders.get_user_access", return_value=access), patch(
+            "connect.legacy_orders.fetch_one_dict"
+        ) as mock_fetch:
+            response = self.view.post(self._request())
+
+        self.assertEqual(response.status_code, 403)
+        mock_fetch.assert_not_called()
+
+    def test_update_changes_editable_fields_and_records_audit(self):
+        access = SimpleNamespace(can_menu=lambda _key: True, can_update=True)
+        before_row = {
+            "ID": 123,
+            "DOC_NO": "ORD-123",
+            "ORDER_STATUS": "35",
+            "ORDER_TYPE": "20",
+            "ORDER_DATE": datetime(2024, 1, 31, 8, 15, 0),
+            "FIRSTNAME": "変更前",
+            "TOTAL_NET_AMOUNT": 1000,
+            "TOTAL_BV": 100,
+            "BONUS_DATE": None,
+        }
+        cursor = MagicMock()
+        cursor.rowcount = 1
+        connection = MagicMock()
+        connection.cursor.return_value.__enter__.return_value = cursor
+
+        with patch("connect.legacy_orders.get_user_access", return_value=access), patch(
+            "connect.legacy_orders.fetch_one_dict", return_value=before_row
+        ), patch("connect.legacy_orders.connections", {"rds": connection}), patch(
+            "connect.legacy_orders.transaction"
+        ), patch("connect.legacy_orders.messages"), patch(
+            "connect.legacy_orders.record_change_audit"
+        ) as mock_audit, patch.object(
+            self.view, "_invalidate_total_count_cache"
+        ) as mock_invalidate:
+            response = self.view.post(self._request())
+
+        self.assertEqual(response.status_code, 302)
+        update_params = cursor.execute.call_args.args[1]
+        self.assertEqual(update_params[0:2], ["20", "30"])
+        self.assertEqual(update_params[2], datetime(2025, 2, 28, 8, 15, 0))
+        self.assertEqual(update_params[3], "更新 太郎")
+        self.assertEqual(str(update_params[4]), "12345.67")
+        self.assertEqual(str(update_params[5]), "890.5")
+        self.assertEqual(update_params[6], datetime(2025, 2, 20, 12, 34, 56))
+        self.assertEqual(update_params[7], 123)
+        mock_audit.assert_called_once()
+        self.assertEqual(mock_audit.call_args.kwargs["target_pk"], 123)
+        mock_invalidate.assert_called_once()
