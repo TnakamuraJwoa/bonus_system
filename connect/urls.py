@@ -141,6 +141,11 @@ urlpatterns = [
     path("legacy_orders/<int:pk>/", LegacyOrderDetailView.as_view(), name="legacy_order_detail"),
     path('orders_distribution_bv/', views.OrdersDistributionBvView.as_view(), name = "orders_distribution_bv"),
     path(
+        "orders_distribution_bv/export/",
+        views.OrdersDistributionBvExportView.as_view(),
+        name="orders_distribution_bv_export",
+    ),
+    path(
         "orders_distribution_bv/update/",
         views.OrdersDistributionBvUpdateView.as_view(),
         name="orders_distribution_bv_update",

@@ -11036,10 +11036,8 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
 
         return rows
 
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-
-        filters = {
+    def _get_filters(self):
+        return {
             "q_order_code": (self.request.GET.get("q_order_code") or "").strip(),
             "q_user_id": (self.request.GET.get("q_user_id") or "").strip(),
             "q_jwoa_code": (self.request.GET.get("q_jwoa_code") or "").strip(),
@@ -11052,6 +11050,11 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
             "q_created_from": (self.request.GET.get("q_created_from") or "").strip(),
             "q_created_to": (self.request.GET.get("q_created_to") or "").strip(),
         }
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        filters = self._get_filters()
         return_to = (self.request.GET.get("return_to") or "").strip()
         if not return_to.startswith("/") or return_to.startswith("//"):
             return_to = ""
@@ -11097,6 +11100,125 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
             page=page,
             base_params=base_params,
         )
+
+
+class OrdersDistributionBvExportView(OrdersDistributionBvView):
+    """BV振分一覧の絞り込み条件を保ったまま Excel 出力する。"""
+
+    EXPORT_FETCH_SIZE = 5000
+    MAX_EXPORT_ROWS = 300000
+    BV_ACTIVED_FLG_LABELS = {
+        0: "未反映",
+        1: "反映済",
+        3: "反映無効",
+    }
+    EXPORT_HEADER = [
+        "注文番号",
+        "購入者_会員ID",
+        "振分会員ID",
+        "振分BV",
+        "システム使用料",
+        "BV反映FLG",
+        "作成日時",
+        "更新日時",
+    ]
+
+    def _fetch_export_rows(self, last_id=None, limit=None, **filters):
+        where_sql, params = self._build_where(**filters)
+        if last_id is not None:
+            keyset_sql = "a.id < %s"
+            where_sql = (
+                f"{where_sql} AND {keyset_sql}"
+                if where_sql
+                else f"WHERE {keyset_sql}"
+            )
+            params.append(last_id)
+
+        sql = f"""
+            SELECT
+                a.id,
+                a.order_code,
+                b.jwoa_code AS purchaser_jwoa_code,
+                a.jwoa_code,
+                a.distribution_bv,
+                a.usage_fee,
+                b.bv_actived_flg,
+                a.created_at,
+                a.updated_at
+            FROM nexus_production.orders_distribution_bv AS a
+            {self._orders_join_sql()}
+            {where_sql}
+            ORDER BY a.id DESC
+            LIMIT %s
+        """
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, params + [limit or self.EXPORT_FETCH_SIZE])
+            return cursor.fetchall()
+
+    def _row_to_excel(self, row):
+        return [
+            row[1],
+            row[2],
+            row[3],
+            row[4],
+            row[5],
+            self.BV_ACTIVED_FLG_LABELS.get(row[6], row[6]),
+            _excel_db_datetime(row[7]),
+            _excel_db_datetime(row[8]),
+        ]
+
+    def get(self, request, *args, **kwargs):
+        filters = self._get_filters()
+        total_count = self._fetch_total_count(**filters)
+
+        if total_count == 0:
+            messages.error(request, "出力対象のデータがありません。")
+            return redirect(self._back_url(request))
+
+        if total_count > self.MAX_EXPORT_ROWS:
+            messages.error(
+                request,
+                f"対象が{total_count:,}件あります。"
+                f"Excel出力は{self.MAX_EXPORT_ROWS:,}件までです。"
+                "検索条件を絞り込んでください。",
+            )
+            return redirect(self._back_url(request))
+
+        wb = openpyxl.Workbook(write_only=True)
+        ws = wb.create_sheet("BV振分一覧")
+        ws.append(self.EXPORT_HEADER)
+
+        last_id = None
+        while True:
+            rows = self._fetch_export_rows(
+                last_id=last_id,
+                limit=self.EXPORT_FETCH_SIZE,
+                **filters,
+            )
+            if not rows:
+                break
+
+            for row in rows:
+                ws.append(self._row_to_excel(row))
+
+            last_id = rows[-1][0]
+            if len(rows) < self.EXPORT_FETCH_SIZE:
+                break
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = (
+            'attachment; filename="orders_distribution_bv.xlsx"'
+        )
+        wb.save(response)
+        return response
+
+    @staticmethod
+    def _back_url(request):
+        query = request.GET.urlencode()
+        url = reverse("connect:orders_distribution_bv")
+        return f"{url}?{query}" if query else url
 
 
 class OrdersDistributionBvUpdateView(OrdersDistributionBvView):

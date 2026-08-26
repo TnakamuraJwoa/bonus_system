@@ -902,7 +902,8 @@ class LegacyOrdersExportView(LegacyOrdersView):
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-        response["Content-Disposition"] = 'attachment; filename="legacy_orders.xlsx"'
+        filename = f"linpa_orders_{date.today():%Y%m%d}.xlsx"
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
         wb.save(response)
         return response
 

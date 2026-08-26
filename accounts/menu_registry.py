@@ -65,7 +65,7 @@ MENU_FEATURES = (
         "orders_distribution_bv",
         "BV振分情報",
         "orders",
-        ("orders_distribution_bv",),
+        ("orders_distribution_bv", "orders_distribution_bv_export"),
     ),
     MenuFeature("api_users_bv", "会員BV特別反映情報", "orders", ("api_users_bv",)),
     MenuFeature("repurchase_list", "ボーナス購入情報一覧", "orders", ("repurchase_list",)),
