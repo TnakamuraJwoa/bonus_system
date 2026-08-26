@@ -121,8 +121,8 @@ def parse_order_month(value):
         return None, None
 
 
-def order_date_range(year, month):
-    """注文年・注文月から ORDER_DATE の範囲を返す。年が無いときは範囲を作れないので None。"""
+def bonus_date_range(year, month):
+    """対象年・対象月から BONUS_DATE の範囲を返す。年が無いときは範囲を作れないので None。"""
     if year is None or not MIN_ORDER_YEAR <= year <= MAX_ORDER_YEAR:
         return None
 
@@ -173,24 +173,24 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
     def _get_month_choices(self):
         """注文年月プルダウンの選択肢を新しい順で返す。
 
-        年月を DISTINCT で数え上げると注文日索引を 43 万件ぶん読むことになり
-        10 秒を超えるので、最初と最後の注文日だけを引いてその間の年月を並べる。
+        年月を DISTINCT で数え上げるとボーナス計算対象日の索引を大量に読むことになり
+        10 秒を超えるので、最初と最後のボーナス計算対象日だけを引いてその間の年月を並べる。
         どちらも索引の端を見るだけなので 10ms 未満で返る。
 
-        ORDER_DATE には 2201 年のような明らかな誤りが混ざっているため、
-        最新は来月までに収まるもののうち一番新しい注文日から取り、
+        BONUS_DATE には 2201 年のような明らかな誤りが混ざっているため、
+        最新は来月までに収まるもののうち一番新しいボーナス計算対象日から取り、
         最古もそこから 20 年前までで打ち切る。
         """
         # 上限を付けた降順 LIMIT 1 なら、索引をその位置から逆に 1 件読むだけで済む。
-        # MAX(ORDER_DATE) に WHERE を付けると範囲走査に落ちて 9 秒かかる。
+        # MAX(BONUS_DATE) に WHERE を付けると範囲走査に落ちて遅くなる。
         newest_sql = f"""
-            SELECT o.ORDER_DATE
+            SELECT o.BONUS_DATE
             FROM {LEGACY_ORDERS_TABLE} o
-            WHERE o.ORDER_DATE < %s
-            ORDER BY o.ORDER_DATE DESC
+            WHERE o.BONUS_DATE < %s
+            ORDER BY o.BONUS_DATE DESC
             LIMIT 1
         """
-        oldest_sql = f"SELECT MIN(o.ORDER_DATE) FROM {LEGACY_ORDERS_TABLE} o"
+        oldest_sql = f"SELECT MIN(o.BONUS_DATE) FROM {LEGACY_ORDERS_TABLE} o"
 
         today = date.today()
         upper_bound = date(today.year, today.month, 1) + relativedelta(months=2)
@@ -321,17 +321,17 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
             or filters.get("q_member_id")
             or filters.get("q_order_statuses")
             or filters.get("q_order_types")
-            or self._has_order_date_condition(**filters)
+            or self._has_bonus_date_condition(**filters)
         )
 
     @staticmethod
-    def _has_order_date_condition(**filters):
-        """注文日で絞り込まれるか。_build_where が付ける条件と対応させる。"""
-        if filters.get("q_order_from") or filters.get("q_order_to"):
+    def _has_bonus_date_condition(**filters):
+        """ボーナス計算対象日で絞り込まれるか。_build_where が付ける条件と対応させる。"""
+        if filters.get("q_bonus_from") or filters.get("q_bonus_to"):
             return True
 
         year, month = parse_order_month(filters.get("target_month"))
-        return order_date_range(year, month) is not None
+        return bonus_date_range(year, month) is not None
 
     def _build_where(
         self,
@@ -340,8 +340,8 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
         q_name="",
         q_order_statuses=None,
         q_order_types=None,
-        q_order_from="",
-        q_order_to="",
+        q_bonus_from="",
+        q_bonus_to="",
         target_month="",
     ):
         if q_order_statuses is None:
@@ -383,17 +383,17 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
             where.append(f"o.ORDER_TYPE IN ({placeholders})")
             params.extend(q_order_types)
 
-        if q_order_from:
-            where.append("o.ORDER_DATE >= %s")
-            params.append(q_order_from)
+        if q_bonus_from:
+            where.append("o.BONUS_DATE >= %s")
+            params.append(q_bonus_from)
 
-        if q_order_to:
-            where.append("o.ORDER_DATE < DATE_ADD(%s, INTERVAL 1 DAY)")
-            params.append(q_order_to)
+        if q_bonus_to:
+            where.append("o.BONUS_DATE < DATE_ADD(%s, INTERVAL 1 DAY)")
+            params.append(q_bonus_to)
 
-        date_range = order_date_range(*parse_order_month(target_month))
+        date_range = bonus_date_range(*parse_order_month(target_month))
         if date_range:
-            where.append("o.ORDER_DATE >= %s AND o.ORDER_DATE < %s")
+            where.append("o.BONUS_DATE >= %s AND o.BONUS_DATE < %s")
             params.extend(date_range)
 
         where_sql = "WHERE " + " AND ".join(where) if where else ""
@@ -538,8 +538,8 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
             "q_name": (self.request.GET.get("q_name") or "").strip(),
             "q_order_statuses": q_order_statuses,
             "q_order_types": q_order_types,
-            "q_order_from": (self.request.GET.get("q_order_from") or "").strip(),
-            "q_order_to": (self.request.GET.get("q_order_to") or "").strip(),
+            "q_bonus_from": (self.request.GET.get("q_bonus_from") or "").strip(),
+            "q_bonus_to": (self.request.GET.get("q_bonus_to") or "").strip(),
             "target_month": (self.request.GET.get("target_month") or "").strip(),
         }
 
@@ -572,8 +572,8 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
         ctx["q_name"] = filters["q_name"]
         ctx["q_order_statuses"] = q_order_statuses
         ctx["q_order_types"] = q_order_types
-        ctx["q_order_from"] = filters["q_order_from"]
-        ctx["q_order_to"] = filters["q_order_to"]
+        ctx["q_bonus_from"] = filters["q_bonus_from"]
+        ctx["q_bonus_to"] = filters["q_bonus_to"]
         ctx["selected_month"] = filters["target_month"]
         ctx["month_choices"] = self._get_month_choices()
         ctx["order_type_choices"] = ORDER_TYPE_CHOICES
@@ -586,8 +586,8 @@ class LegacyOrdersView(KeysetPaginationMixin, generic.TemplateView):
             "q_order_code",
             "q_member_id",
             "q_name",
-            "q_order_from",
-            "q_order_to",
+            "q_bonus_from",
+            "q_bonus_to",
             "target_month",
         ):
             value = filters[key]
