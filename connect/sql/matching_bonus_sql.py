@@ -41,7 +41,12 @@ basic_bonus_result AS (
 -- ベーシックボーナス取得者一覧
 basic_id_list AS (
     SELECT
-        placement_code AS get_basic_bonus_code,
+        -- B_basic_bonus_result.placement_code は utf8mb4_bin、
+        -- nexus_production.users の jmoa_code / introducer_code は utf8mb3_bin。
+        -- そのまま結合すると index_users_on_jmoa_code が使えず、
+        -- 最後の users との結合だけで 78,000件 × 57回のフルスキャンになる。
+        -- ここで一度 utf8mb3_bin に揃えておくと、以降の結合すべてでインデックスが効く。
+        CONVERT(placement_code USING utf8mb3) COLLATE utf8mb3_bin AS get_basic_bonus_code,
         placement_name AS get_basic_bonus_name,
         SUM(bonus_amount) AS sum_bonus_amount
     FROM basic_bonus_result

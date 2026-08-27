@@ -8,11 +8,14 @@ from connect.legacy_orders import LegacyOrdersView
 from connect.templatetags.custom_filters import as_db_datetime, db_datetime, jp_date, jst_datetime
 from connect.views import (
     BonusPaymentDateView,
+    ensure_user_target_rank_for_kibetu,
+    register_users_target_rank,
     OrdersDistributionBvExportView,
     OrdersDistributionBvView,
     S_MonthBonusView,
     S_WeekBonusView,
     UsersView,
+    WeekBonusView,
 )
 
 
@@ -248,6 +251,23 @@ class OrdersDistributionBvViewQueryTests(SimpleTestCase):
 
         self.assertEqual(params, ["JP0512%"])
 
+    def test_bonus_payment_date_range_uses_registered_date_or_deposit_date(self):
+        where_sql, params = self.view._build_where(
+            q_bonus_payment_from="2026-08-01",
+            q_bonus_payment_to="2026-08-31",
+        )
+
+        self.assertIn(
+            "COALESCE(p.bonus_payment_date, DATE(b.deposit_at)) >= %s",
+            where_sql,
+        )
+        self.assertIn(
+            "COALESCE(p.bonus_payment_date, DATE(b.deposit_at)) "
+            "< DATE_ADD(%s, INTERVAL 1 DAY)",
+            where_sql,
+        )
+        self.assertEqual(params, ["2026-08-01", "2026-08-31"])
+
     def test_count_skips_orders_join_without_purchaser_filters(self):
         cursor = MagicMock()
         cursor.__enter__.return_value = cursor
@@ -284,6 +304,28 @@ class OrdersDistributionBvViewQueryTests(SimpleTestCase):
         self.assertIn("b.jwoa_code LIKE %s", sql)
         self.assertEqual(params, ["JP05%"])
 
+    def test_count_joins_payment_date_sources_when_filtering_payment_date(self):
+        cursor = MagicMock()
+        cursor.__enter__.return_value = cursor
+        cursor.fetchone.return_value = (10,)
+        connection = MagicMock()
+        connection.cursor.return_value = cursor
+
+        with patch("connect.views.cache") as mock_cache, patch(
+            "connect.views.connections", {"rds": connection}
+        ):
+            mock_cache.get.return_value = None
+            self.view._fetch_total_count(q_bonus_payment_from="2026-08-01")
+
+        sql, params = cursor.execute.call_args.args
+        self.assertIn("LEFT JOIN nexus_production.orders", sql)
+        self.assertIn("LEFT JOIN bonus_db.bonus_payment_date", sql)
+        self.assertIn(
+            "COALESCE(p.bonus_payment_date, DATE(b.deposit_at)) >= %s",
+            sql,
+        )
+        self.assertEqual(params, ["2026-08-01"])
+
     def test_list_sql_defers_orders_join_on_default_sort(self):
         cursor = MagicMock()
         cursor.__enter__.return_value = cursor
@@ -295,11 +337,11 @@ class OrdersDistributionBvViewQueryTests(SimpleTestCase):
             ("distribution_bv",),
             ("usage_fee",),
             ("created_at",),
-            ("updated_at",),
         ]
         cursor.fetchall.side_effect = [
-            [(1, "MF1", 10, "JP1", 100, 0, None, None)],
-            [("MF1", "JP9", 1)],
+            [(1, "MF1", 10, "JP1", 100, 0, None)],
+            [("MF1", "JP9", 1, 204, 101, datetime(2026, 8, 26, 9, 0, 0))],
+            [("MF1", date(2026, 9, 10))],
         ]
         connection = MagicMock()
         connection.cursor.return_value = cursor
@@ -313,6 +355,35 @@ class OrdersDistributionBvViewQueryTests(SimpleTestCase):
         self.assertEqual(list_params, [200, 0])
         self.assertEqual(rows[0]["purchaser_jwoa_code"], "JP9")
         self.assertEqual(rows[0]["bv_actived_flg"], 1)
+        self.assertEqual(rows[0]["order_status"], 204)
+        self.assertEqual(rows[0]["order_type"], 101)
+        self.assertEqual(rows[0]["deposit_at"], datetime(2026, 8, 26, 9, 0, 0))
+        self.assertEqual(rows[0]["bonus_payment_date"], date(2026, 9, 10))
+
+    def test_bonus_payment_date_falls_back_to_deposit_date(self):
+        cursor = MagicMock()
+        cursor.__enter__.return_value = cursor
+        cursor.description = [
+            ("id",),
+            ("order_code",),
+            ("user_id",),
+            ("jwoa_code",),
+            ("distribution_bv",),
+            ("usage_fee",),
+            ("created_at",),
+        ]
+        cursor.fetchall.side_effect = [
+            [(1, "MF1", 10, "JP1", 100, 0, None)],
+            [("MF1", "JP9", 1, 204, 101, datetime(2026, 8, 26, 9, 0, 0))],
+            [],
+        ]
+        connection = MagicMock()
+        connection.cursor.return_value = cursor
+
+        with patch("connect.views.connections", {"rds": connection}):
+            rows = self.view._fetch_rows(limit=200, offset=0, order_sql="a.id DESC")
+
+        self.assertEqual(rows[0]["bonus_payment_date"], date(2026, 8, 26))
 
     def test_list_sql_joins_orders_when_sorting_by_purchaser(self):
         cursor = MagicMock()
@@ -325,9 +396,11 @@ class OrdersDistributionBvViewQueryTests(SimpleTestCase):
             ("distribution_bv",),
             ("usage_fee",),
             ("created_at",),
-            ("updated_at",),
             ("purchaser_jwoa_code",),
             ("bv_actived_flg",),
+            ("order_status",),
+            ("order_type",),
+            ("deposit_at",),
         ]
         cursor.fetchall.return_value = []
         connection = MagicMock()
@@ -355,6 +428,8 @@ class OrdersDistributionBvExportTests(SimpleTestCase):
             {
                 "q_order_code": " MF30 ",
                 "q_bv_actived_flg": "1",
+                "q_bonus_payment_from": "2026-08-01",
+                "q_bonus_payment_to": "2026-08-31",
             },
         )
 
@@ -363,6 +438,8 @@ class OrdersDistributionBvExportTests(SimpleTestCase):
 
         self.assertEqual(filters["q_order_code"], "MF30")
         self.assertEqual(filters["q_bv_actived_flg"], "1")
+        self.assertEqual(filters["q_bonus_payment_from"], "2026-08-01")
+        self.assertEqual(filters["q_bonus_payment_to"], "2026-08-31")
 
     def test_export_query_uses_keyset_and_includes_display_columns(self):
         cursor = MagicMock()
@@ -385,20 +462,23 @@ class OrdersDistributionBvExportTests(SimpleTestCase):
         self.assertEqual(params, ["MF30%", 500, 100])
 
     def test_excel_row_converts_flag_and_datetimes(self):
+        deposit_at = datetime(2026, 8, 26, 9, 20, 30)
         created_at = datetime(2026, 8, 26, 10, 20, 30)
-        updated_at = datetime(2026, 8, 26, 11, 20, 30)
 
         values = self.view._row_to_excel(
             (
                 10,
                 "MF30",
+                204,
+                101,
                 "JP001",
                 "JP002",
                 120,
                 10,
                 1,
+                deposit_at,
+                date(2026, 9, 10),
                 created_at,
-                updated_at,
             )
         )
 
@@ -406,15 +486,40 @@ class OrdersDistributionBvExportTests(SimpleTestCase):
             values,
             [
                 "MF30",
+                "出荷依頼済",
+                "再購入品",
                 "JP001",
                 "JP002",
                 120,
                 10,
                 "反映済",
+                date(2026, 9, 10),
+                deposit_at,
                 created_at,
-                updated_at,
             ],
         )
+
+    def test_excel_row_falls_back_to_deposit_date(self):
+        deposit_at = datetime(2026, 8, 26, 9, 20, 30)
+
+        values = self.view._row_to_excel(
+            (
+                10,
+                "MF30",
+                204,
+                101,
+                "JP001",
+                "JP002",
+                120,
+                10,
+                1,
+                deposit_at,
+                None,
+                datetime(2026, 8, 26, 10, 20, 30),
+            )
+        )
+
+        self.assertEqual(values[8], date(2026, 8, 26))
 
 
 class BonusPaymentDateDeleteTests(SimpleTestCase):
@@ -657,4 +762,165 @@ class LegacyOrdersUpdateTests(SimpleTestCase):
         self.assertEqual(
             mock_messages.error.call_args.args[1],
             "会員IDは60文字以内で入力してください。",
+        )
+
+
+class UserTargetRankRegisterTests(SimpleTestCase):
+    """user_add_rank が保存できずに毎回 78,000件の再構築が走っていた不具合の回帰テスト。"""
+
+    def test_setting_is_upserted_so_it_survives_a_missing_row(self):
+        cursor = MagicMock()
+        cursor.__enter__.return_value = cursor
+        cursor.rowcount = 78553
+        connection = MagicMock()
+        connection.cursor.return_value = cursor
+
+        with patch("connect.views.connections", {"rds": connection}):
+            inserted_count, target_rank = register_users_target_rank(2026, 7)
+
+        self.assertEqual(inserted_count, 78553)
+        self.assertEqual(target_rank, "202607")
+
+        setting_sql, setting_params = cursor.execute.call_args.args
+        self.assertIn("INSERT INTO bonus_db.settings", setting_sql)
+        self.assertIn("ON DUPLICATE KEY UPDATE", setting_sql)
+        self.assertIn("'user_add_rank'", setting_sql)
+        self.assertEqual(setting_params, ["202607"])
+        # 他の設定行を巻き込まないこと
+        self.assertNotIn("old_gyouseki_kibetu", setting_sql)
+        self.assertNotIn("set_title", setting_sql)
+
+
+class EnsureUserTargetRankTests(SimpleTestCase):
+    def setUp(self):
+        self.request = RequestFactory().get("/week_bonus/")
+        self.request.user = SimpleNamespace(username="admin")
+
+    def _run(self, current_rank, has_history):
+        with patch("connect.views.get_user_add_rank_setting", return_value=current_rank), patch(
+            "connect.views.has_user_target_rank_history", return_value=has_history
+        ), patch("connect.views.register_users_target_rank") as mock_register, patch(
+            "connect.views.insert_bonus_register_history"
+        ) as mock_history, patch(
+            "connect.views.transaction"
+        ), patch("connect.views.messages"):
+            result = ensure_user_target_rank_for_kibetu(self.request, "2026C08W3")
+        return result, mock_register, mock_history
+
+    def test_same_rank_skips_the_rebuild(self):
+        result, mock_register, _ = self._run("202607", has_history=True)
+
+        self.assertTrue(result)
+        mock_register.assert_not_called()
+
+    def test_same_rank_does_not_add_another_history_row(self):
+        _result, _mock_register, mock_history = self._run("202607", has_history=True)
+
+        mock_history.assert_not_called()
+
+    def test_same_rank_records_history_once_when_it_is_missing(self):
+        _result, mock_register, mock_history = self._run("202607", has_history=False)
+
+        mock_register.assert_not_called()
+        mock_history.assert_called_once()
+        self.assertEqual(mock_history.call_args.args[1], "202607")
+
+    def test_different_rank_still_rebuilds(self):
+        mock_register_return = (78553, "202607")
+        with patch("connect.views.get_user_add_rank_setting", return_value="202606"), patch(
+            "connect.views.has_user_target_rank_history", return_value=False
+        ), patch(
+            "connect.views.register_users_target_rank", return_value=mock_register_return
+        ) as mock_register, patch(
+            "connect.views.insert_bonus_register_history"
+        ), patch("connect.views.transaction"), patch("connect.views.messages"):
+            result = ensure_user_target_rank_for_kibetu(self.request, "2026C08W3")
+
+        self.assertTrue(result)
+        mock_register.assert_called_once_with(2026, 7)
+
+
+class WeekBonusPreRegisterFlowTests(SimpleTestCase):
+    """「計算」の事前登録はGETの副作用なので、成功したらクリーンなURLへ逃がす。"""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def _view(self, query):
+        request = self.factory.get("/week_bonus/", query)
+        request.user = SimpleNamespace(username="admin")
+        view = WeekBonusView()
+        view.setup(request)
+        return view, request
+
+    @staticmethod
+    def _patched_period_master():
+        mock_pm = patch("connect.views.PeriodMaster").start()
+        mock_pm.objects.using.return_value.filter.return_value.first.return_value = (
+            SimpleNamespace(kibetu="2026C08W3")
+        )
+        mock_pm.objects.using.return_value.all.return_value = []
+        return mock_pm
+
+    def test_checked_boxes_run_pre_register_then_redirect_to_clean_url(self):
+        view, request = self._view(
+            {"kibetu": "2026C08W3", "pre_register": ["drive", "basic", "matching"]}
+        )
+
+        self.addCleanup(patch.stopall)
+        self._patched_period_master()
+        mock_pre = patch.object(
+            WeekBonusView, "_pre_register_selected_bonuses", return_value=True
+        ).start()
+
+        response = view.get(request)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/week_bonus/?kibetu=2026C08W3")
+        mock_pre.assert_called_once()
+        self.assertEqual(
+            mock_pre.call_args.args[2], ["drive", "basic", "matching"]
+        )
+
+    def test_clean_url_does_not_re_register(self):
+        """リダイレクト後のURLをF5しても登録が走らないこと。"""
+        view, request = self._view({"kibetu": "2026C08W3"})
+
+        self.addCleanup(patch.stopall)
+        self._patched_period_master()
+        mock_pre = patch.object(
+            WeekBonusView, "_pre_register_selected_bonuses"
+        ).start()
+        patch.object(WeekBonusView, "_get_week_bonus_rows", return_value=[]).start()
+        patch("connect.views.get_week_bonus_history_rows", return_value=[]).start()
+        patch("connect.views.insert_empty_bonus_history_on_display").start()
+
+        response = view.get(request)
+
+        self.assertEqual(response.status_code, 200)
+        mock_pre.assert_not_called()
+        self.assertEqual(response.context_data["pre_register_targets"], [])
+
+    def test_pre_register_failure_shows_no_rows_and_does_not_redirect(self):
+        view, request = self._view({"kibetu": "2026C08W3", "pre_register": ["drive"]})
+
+        self.addCleanup(patch.stopall)
+        self._patched_period_master()
+        patch.object(
+            WeekBonusView, "_pre_register_selected_bonuses", return_value=False
+        ).start()
+        mock_rows = patch.object(WeekBonusView, "_get_week_bonus_rows").start()
+        patch("connect.views.get_week_bonus_history_rows", return_value=[]).start()
+
+        response = view.get(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context_data["rows"], [])
+        mock_rows.assert_not_called()
+
+    def test_first_visit_defaults_to_all_bonuses_checked(self):
+        view, _request = self._view({})
+
+        self.assertEqual(
+            view._get_pre_register_targets(), ["drive", "basic", "matching"]
         )

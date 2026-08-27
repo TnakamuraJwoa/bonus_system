@@ -20,6 +20,26 @@
     padding: 0.25rem 0.4rem;
     font-size: 0.875rem;
   }
+
+  /* 「編集」を押すまでは入力欄に見せず、ただの表示にする */
+  .bv-update-form .form-control[readonly] {
+    background-color: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    cursor: default;
+    -moz-appearance: textfield;
+  }
+
+  .bv-update-form .form-control[readonly]::-webkit-outer-spin-button,
+  .bv-update-form .form-control[readonly]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .bv-update-form.is-bv-editing .form-control {
+    background-color: #fff;
+    border-color: #80bdff;
+  }
 </style>
 {% endblock %}
 
@@ -121,7 +141,8 @@
                         {% if user_access.can_update %}
                           <form method="post"
                                 class="bv-update-form"
-                                data-confirm="ID {{ r.id }} のBVを更新します。よろしいですか？">
+                                data-confirm="ID {{ r.id }} のBVを更新します。よろしいですか？"
+                                data-bv-row>
                             {% csrf_token %}
                             <input type="hidden" name="id" value="{{ r.id }}">
                             <input type="hidden" name="next_query" value="{{ request.GET.urlencode }}">
@@ -131,8 +152,18 @@
                                    value="{{ r.bv }}"
                                    min="0"
                                    step="1"
-                                   required>
-                            <button type="submit" class="btn btn-warning btn-sm">更新</button>
+                                   required
+                                   readonly
+                                   data-bv-field>
+                            <button type="button"
+                                    class="btn btn-outline-primary btn-sm"
+                                    data-bv-edit-button>編集</button>
+                            <button type="submit"
+                                    class="btn btn-warning btn-sm d-none"
+                                    data-bv-save-button>更新</button>
+                            <button type="button"
+                                    class="btn btn-outline-secondary btn-sm d-none"
+                                    data-bv-cancel-button>キャンセル</button>
                           </form>
                         {% else %}
                           {{ r.bv|intcomma }}
@@ -155,4 +186,50 @@
     </main>
   </div>
 </div>
+{% endblock %}
+
+{% block script %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  function setEditing(form, editing) {
+    form.querySelectorAll("[data-bv-field]").forEach(function (field) {
+      field.readOnly = !editing;
+    });
+    form.querySelectorAll("[data-bv-edit-button]").forEach(function (el) {
+      el.classList.toggle("d-none", editing);
+    });
+    form.querySelectorAll("[data-bv-save-button], [data-bv-cancel-button]").forEach(
+      function (el) {
+        el.classList.toggle("d-none", !editing);
+      }
+    );
+    form.classList.toggle("is-bv-editing", editing);
+  }
+
+  document.querySelectorAll("[data-bv-row]").forEach(function (form) {
+    var editButton = form.querySelector("[data-bv-edit-button]");
+    var cancelButton = form.querySelector("[data-bv-cancel-button]");
+
+    if (editButton) {
+      editButton.addEventListener("click", function () {
+        setEditing(form, true);
+        var field = form.querySelector("[data-bv-field]");
+        if (field) {
+          field.focus();
+          field.select();
+        }
+      });
+    }
+
+    if (cancelButton) {
+      cancelButton.addEventListener("click", function () {
+        form.querySelectorAll("[data-bv-field]").forEach(function (field) {
+          field.value = field.defaultValue;
+        });
+        setEditing(form, false);
+      });
+    }
+  });
+});
+</script>
 {% endblock %}
