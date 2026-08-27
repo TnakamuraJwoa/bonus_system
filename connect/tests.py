@@ -341,6 +341,7 @@ class OrdersDistributionBvViewQueryTests(SimpleTestCase):
         cursor.fetchall.side_effect = [
             [(1, "MF1", 10, "JP1", 100, 0, None)],
             [("MF1", "JP9", 1, 204, 101, datetime(2026, 8, 26, 9, 0, 0))],
+            [("JP1", "振分会員")],
             [("MF1", date(2026, 9, 10))],
         ]
         connection = MagicMock()
@@ -358,6 +359,7 @@ class OrdersDistributionBvViewQueryTests(SimpleTestCase):
         self.assertEqual(rows[0]["order_status"], 204)
         self.assertEqual(rows[0]["order_type"], 101)
         self.assertEqual(rows[0]["deposit_at"], datetime(2026, 8, 26, 9, 0, 0))
+        self.assertEqual(rows[0]["distribution_member_name"], "振分会員")
         self.assertEqual(rows[0]["bonus_payment_date"], date(2026, 9, 10))
 
     def test_bonus_payment_date_falls_back_to_deposit_date(self):
@@ -376,6 +378,7 @@ class OrdersDistributionBvViewQueryTests(SimpleTestCase):
             [(1, "MF1", 10, "JP1", 100, 0, None)],
             [("MF1", "JP9", 1, 204, 101, datetime(2026, 8, 26, 9, 0, 0))],
             [],
+            [],
         ]
         connection = MagicMock()
         connection.cursor.return_value = cursor
@@ -383,6 +386,7 @@ class OrdersDistributionBvViewQueryTests(SimpleTestCase):
         with patch("connect.views.connections", {"rds": connection}):
             rows = self.view._fetch_rows(limit=200, offset=0, order_sql="a.id DESC")
 
+        self.assertEqual(rows[0]["distribution_member_name"], "")
         self.assertEqual(rows[0]["bonus_payment_date"], date(2026, 8, 26))
 
     def test_list_sql_joins_orders_when_sorting_by_purchaser(self):
@@ -479,7 +483,8 @@ class OrdersDistributionBvExportTests(SimpleTestCase):
                 deposit_at,
                 date(2026, 9, 10),
                 created_at,
-            )
+            ),
+            "振分会員",
         )
 
         self.assertEqual(
@@ -490,6 +495,7 @@ class OrdersDistributionBvExportTests(SimpleTestCase):
                 "再購入品",
                 "JP001",
                 "JP002",
+                "振分会員",
                 120,
                 10,
                 "反映済",
@@ -519,7 +525,7 @@ class OrdersDistributionBvExportTests(SimpleTestCase):
             )
         )
 
-        self.assertEqual(values[8], date(2026, 8, 26))
+        self.assertEqual(values[9], date(2026, 8, 26))
 
 
 class BonusPaymentDateDeleteTests(SimpleTestCase):
