@@ -119,8 +119,8 @@
                     <th>年</th>
                     <th>月</th>
                     <th>支払日</th>
-                    {% if user_access.can_delete %}
-                    <th style="width: 70px;">操作</th>
+                    {% if user_access.can_update or user_access.can_delete %}
+                    <th style="width: 120px;">操作</th>
                     {% endif %}
                   </tr>
                 </thead>
@@ -139,6 +139,8 @@
                                  name="bulk_year"
                                  form="kibetu-month-bulk-form"
                                  class="form-control form-control-sm js-track-change"
+                                 readonly
+                                 data-kibetu-field
                                  value="{{ r.year }}"
                                  required>
                         </td>
@@ -148,6 +150,8 @@
                                  name="bulk_month"
                                  form="kibetu-month-bulk-form"
                                  class="form-control form-control-sm js-track-change"
+                                 readonly
+                                 data-kibetu-field
                                  min="1"
                                  max="12"
                                  value="{{ r.month }}"
@@ -159,21 +163,34 @@
                                  name="bulk_payment_date"
                                  form="kibetu-month-bulk-form"
                                  class="form-control form-control-sm js-track-change"
+                                 readonly
+                                 data-kibetu-field
                                  value="{% if r.payment_date %}{{ r.payment_date|date:'Y-m-d' }}{% endif %}"
                                  placeholder="YYYY-MM-DD または YYYY/MM/DD"
                                  autocomplete="off">
                         </td>
 
-                        {% if user_access.can_delete %}
                         <td class="kibetu-row-actions">
+                          <button type="button"
+                                  class="btn btn-outline-primary btn-sm py-0"
+                                  data-kibetu-edit-button>
+                            編集
+                          </button>
+                          <button type="button"
+                                  class="btn btn-outline-secondary btn-sm py-0 d-none"
+                                  data-kibetu-cancel-button>
+                            キャンセル
+                          </button>
+                          {% if user_access.can_delete %}
                           <button type="submit"
                                   form="kibetu-month-delete-{{ forloop.counter }}"
                                   class="btn btn-danger btn-sm py-0"
-                                  data-confirm-submit="{{ r.kibetu }} を削除しますか？">
+                                  data-confirm-submit="{{ r.kibetu }} を削除しますか？"
+                                  data-kibetu-delete-button>
                             削除
                           </button>
+                          {% endif %}
                         </td>
-                        {% endif %}
                       {% else %}
                         <td>{{ r.kibetu }}</td>
                         <td>{{ r.year }}</td>
@@ -228,6 +245,32 @@
   </div>
 </div>
 
+<style>
+  /* 「編集」を押すまでは入力欄に見せず、ただの表示にする */
+  .kibetu-list-table .form-control[readonly] {
+    background-color: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    cursor: default;
+  }
+
+  /* readonly の間は数値入力のスピナーも出さない */
+  .kibetu-list-table input[type="number"][readonly]::-webkit-outer-spin-button,
+  .kibetu-list-table input[type="number"][readonly]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .kibetu-list-table input[type="number"][readonly] {
+    -moz-appearance: textfield;
+  }
+
+  .kibetu-list-table tr.is-kibetu-editing .form-control {
+    background-color: #fff;
+    border-color: #80bdff;
+  }
+</style>
+
 {% endblock %}
 
 {% block script %}
@@ -278,4 +321,52 @@
 })();
 </script>
 <script src="{% static 'js/track-field-changes.js' %}?v=4"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  function setEditing(row, editing) {
+    row.querySelectorAll("[data-kibetu-field]").forEach(function (field) {
+      field.readOnly = !editing;
+    });
+    row.querySelectorAll("[data-kibetu-edit-button], [data-kibetu-delete-button]").forEach(
+      function (el) {
+        el.classList.toggle("d-none", editing);
+      }
+    );
+    row.querySelectorAll("[data-kibetu-cancel-button]").forEach(function (el) {
+      el.classList.toggle("d-none", !editing);
+    });
+    row.classList.toggle("is-kibetu-editing", editing);
+  }
+
+  document.querySelectorAll(".js-kibetu-row").forEach(function (row) {
+    var editButton = row.querySelector("[data-kibetu-edit-button]");
+    var cancelButton = row.querySelector("[data-kibetu-cancel-button]");
+
+    if (editButton) {
+      editButton.addEventListener("click", function () {
+        setEditing(row, true);
+        var firstField = row.querySelector("[data-kibetu-field]");
+        if (firstField) {
+          firstField.focus();
+          firstField.select();
+        }
+      });
+    }
+
+    if (cancelButton) {
+      cancelButton.addEventListener("click", function () {
+        row.querySelectorAll("[data-kibetu-field]").forEach(function (field) {
+          // track-field-changes.js が保持している編集前の値へ戻す
+          var original = field.dataset.originalValue;
+          field.value = original === undefined ? field.defaultValue : original;
+          // 黄色ハイライトと「N 箇所」表示を再計算させる
+          field.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        setEditing(row, false);
+      });
+    }
+  });
+});
+</script>
+
 {% endblock %}

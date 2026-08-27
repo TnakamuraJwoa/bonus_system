@@ -232,9 +232,9 @@
 
                     <th>完成日</th>
 
-                    {% if user_access.can_delete %}
+                    {% if user_access.can_update or user_access.can_delete %}
 
-                    <th style="width: 70px;">操作</th>
+                    <th style="width: 120px;">操作</th>
 
                     {% endif %}
 
@@ -272,6 +272,10 @@
 
                                  class="form-control form-control-sm js-track-change"
 
+                                 readonly
+
+                                 data-kibetu-field
+
                                  value="{{ r.st_date|date:'Y-m-d' }}"
 
                                  placeholder="YYYY-MM-DD">
@@ -289,6 +293,10 @@
                                  form="kibetu-bulk-form"
 
                                  class="form-control form-control-sm js-track-change"
+
+                                 readonly
+
+                                 data-kibetu-field
 
                                  value="{{ r.end_date|date:'Y-m-d' }}"
 
@@ -308,6 +316,10 @@
 
                                  class="form-control form-control-sm js-track-change"
 
+                                 readonly
+
+                                 data-kibetu-field
+
                                  value="{{ r.payment_date|date:'Y-m-d' }}"
 
                                  placeholder="YYYY-MM-DD">
@@ -326,6 +338,10 @@
 
                                  class="form-control form-control-sm js-track-change"
 
+                                 readonly
+
+                                 data-kibetu-field
+
                                  value="{{ r.completion_date|date:'Y-m-d' }}"
 
                                  placeholder="YYYY-MM-DD">
@@ -334,9 +350,29 @@
 
 
 
-                        {% if user_access.can_delete %}
-
                         <td class="kibetu-row-actions">
+
+                          <button type="button"
+
+                                  class="btn btn-outline-primary btn-sm py-0"
+
+                                  data-kibetu-edit-button>
+
+                            編集
+
+                          </button>
+
+                          <button type="button"
+
+                                  class="btn btn-outline-secondary btn-sm py-0 d-none"
+
+                                  data-kibetu-cancel-button>
+
+                            キャンセル
+
+                          </button>
+
+                          {% if user_access.can_delete %}
 
                           <button type="submit"
 
@@ -344,15 +380,17 @@
 
                                   class="btn btn-danger btn-sm py-0"
 
-                                  data-confirm-submit="{{ r.kibetu }} を削除しますか？">
+                                  data-confirm-submit="{{ r.kibetu }} を削除しますか？"
+
+                                  data-kibetu-delete-button>
 
                             削除
 
                           </button>
 
-                        </td>
+                          {% endif %}
 
-                        {% endif %}
+                        </td>
 
                       {% else %}
 
@@ -458,6 +496,21 @@
 
 
 
+<style>
+  /* 「編集」を押すまでは入力欄に見せず、ただの表示にする */
+  .kibetu-list-table .form-control[readonly] {
+    background-color: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    cursor: default;
+  }
+
+  .kibetu-list-table tr.is-kibetu-editing .form-control {
+    background-color: #fff;
+    border-color: #80bdff;
+  }
+</style>
+
 {% endblock %}
 
 
@@ -465,6 +518,54 @@
 {% block script %}
 
 <script src="{% static 'js/track-field-changes.js' %}?v=4"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  function setEditing(row, editing) {
+    row.querySelectorAll("[data-kibetu-field]").forEach(function (field) {
+      field.readOnly = !editing;
+    });
+    row.querySelectorAll("[data-kibetu-edit-button], [data-kibetu-delete-button]").forEach(
+      function (el) {
+        el.classList.toggle("d-none", editing);
+      }
+    );
+    row.querySelectorAll("[data-kibetu-cancel-button]").forEach(function (el) {
+      el.classList.toggle("d-none", !editing);
+    });
+    row.classList.toggle("is-kibetu-editing", editing);
+  }
+
+  document.querySelectorAll(".js-kibetu-row").forEach(function (row) {
+    var editButton = row.querySelector("[data-kibetu-edit-button]");
+    var cancelButton = row.querySelector("[data-kibetu-cancel-button]");
+
+    if (editButton) {
+      editButton.addEventListener("click", function () {
+        setEditing(row, true);
+        var firstField = row.querySelector("[data-kibetu-field]");
+        if (firstField) {
+          firstField.focus();
+          firstField.select();
+        }
+      });
+    }
+
+    if (cancelButton) {
+      cancelButton.addEventListener("click", function () {
+        row.querySelectorAll("[data-kibetu-field]").forEach(function (field) {
+          // track-field-changes.js が保持している編集前の値へ戻す
+          var original = field.dataset.originalValue;
+          field.value = original === undefined ? field.defaultValue : original;
+          // 黄色ハイライトと「N 箇所」表示を再計算させる
+          field.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        setEditing(row, false);
+      });
+    }
+  });
+});
+</script>
 
 {% endblock %}
 

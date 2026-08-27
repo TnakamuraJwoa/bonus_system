@@ -91,46 +91,64 @@
                     <th>値</th>
                     <th>説明</th>
                     {% if user_access.can_update or user_access.can_delete %}
-                    <th style="width: 120px;">操作</th>
+                    <th style="width: 170px;">操作</th>
                     {% endif %}
                   </tr>
                 </thead>
                 <tbody>
                   {% for r in rows %}
-                    <tr>
+                    {# 既定は閲覧状態。「編集」を押した行だけ入力欄に切り替える #}
+                    <tr data-settings-row>
                       <td class="text-left">{{ r.name }}</td>
 
                       {% if user_access.can_update %}
-                        <td>
+                        {# text-center: base.html の共通JSが数値だけのセルを自動で右寄せするため、
+                           値が「202607」の行だけ右にずれるのを防いで中央に揃える #}
+                        <td class="text-center">
+                          <span data-settings-view>{{ r.value|default:'' }}</span>
                           <input type="text"
                                  name="value"
                                  form="settings-edit-{{ r.id }}"
-                                 class="form-control form-control-sm"
+                                 class="form-control form-control-sm text-center d-none"
                                  maxlength="100"
                                  value="{{ r.value|default:'' }}"
-                                 title="値">
+                                 title="値"
+                                 data-settings-field>
                         </td>
-                        <td>
+                        <td class="text-left">
+                          <span data-settings-view>{{ r.comment|default:'' }}</span>
                           <input type="text"
                                  name="comment"
                                  form="settings-edit-{{ r.id }}"
-                                 class="form-control form-control-sm"
+                                 class="form-control form-control-sm d-none"
                                  maxlength="255"
                                  value="{{ r.comment|default:'' }}"
-                                 title="説明">
+                                 title="説明"
+                                 data-settings-field>
                         </td>
                       {% else %}
-                        <td class="text-left">{{ r.value }}</td>
-                        <td class="text-left">{{ r.comment }}</td>
+                        <td class="text-center">{{ r.value|default:'' }}</td>
+                        <td class="text-left">{{ r.comment|default:'' }}</td>
                       {% endif %}
 
                       {% if user_access.can_update or user_access.can_delete %}
                       <td class="text-nowrap">
                         {% if user_access.can_update %}
+                        <button type="button"
+                                class="btn btn-outline-primary btn-sm py-0"
+                                data-settings-edit-button>
+                          編集
+                        </button>
                         <button type="submit"
                                 form="settings-edit-{{ r.id }}"
-                                class="btn btn-primary btn-sm py-0">
-                          保存
+                                class="btn btn-primary btn-sm py-0 d-none"
+                                data-settings-save-button>
+                          更新
+                        </button>
+                        <button type="button"
+                                class="btn btn-outline-secondary btn-sm py-0 d-none"
+                                data-settings-cancel-button>
+                          キャンセル
                         </button>
                         {% endif %}
 
@@ -138,7 +156,8 @@
                         <button type="submit"
                                 form="settings-delete-{{ r.id }}"
                                 class="btn btn-danger btn-sm py-0"
-                                data-confirm-submit="{{ r.name }} を削除しますか？">
+                                data-confirm-submit="{{ r.name }} を削除しますか？"
+                                data-settings-delete-button>
                           削除
                         </button>
                         {% endif %}
@@ -152,6 +171,7 @@
 
             {% if user_access.can_update %}
               <p class="text-muted small mt-2 mb-0">
+                値・説明を変えるときは「編集」を押してから「更新」を押してください。
                 設定キーはプログラムから参照されるため変更できません。キーを変えたい場合は追加・削除で対応してください。
               </p>
             {% endif %}
@@ -187,4 +207,53 @@
     </main>
   </div>
 </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  function setEditing(row, editing) {
+    row.querySelectorAll("[data-settings-view]").forEach(function (el) {
+      el.classList.toggle("d-none", editing);
+    });
+    row.querySelectorAll("[data-settings-field]").forEach(function (el) {
+      el.classList.toggle("d-none", !editing);
+    });
+    row.querySelectorAll(
+      "[data-settings-edit-button], [data-settings-delete-button]"
+    ).forEach(function (el) {
+      el.classList.toggle("d-none", editing);
+    });
+    row.querySelectorAll(
+      "[data-settings-save-button], [data-settings-cancel-button]"
+    ).forEach(function (el) {
+      el.classList.toggle("d-none", !editing);
+    });
+  }
+
+  document.querySelectorAll("[data-settings-row]").forEach(function (row) {
+    var editButton = row.querySelector("[data-settings-edit-button]");
+    var cancelButton = row.querySelector("[data-settings-cancel-button]");
+
+    if (editButton) {
+      editButton.addEventListener("click", function () {
+        setEditing(row, true);
+        var firstField = row.querySelector("[data-settings-field]");
+        if (firstField) {
+          firstField.focus();
+          firstField.select();
+        }
+      });
+    }
+
+    if (cancelButton) {
+      cancelButton.addEventListener("click", function () {
+        // 入力値を編集前（HTMLのvalue属性）に戻してから閲覧状態へ
+        row.querySelectorAll("[data-settings-field]").forEach(function (field) {
+          field.value = field.defaultValue;
+        });
+        setEditing(row, false);
+      });
+    }
+  });
+});
+</script>
 {% endblock %}
