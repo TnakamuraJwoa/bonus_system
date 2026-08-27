@@ -253,6 +253,7 @@
                     {% sortable_th "order_type" "注文区分" %}
                     {% sortable_th "purchaser_jwoa_code" "購入者_会員ID" %}
                     {% sortable_th "jwoa_code" "振分会員ID" %}
+                    <th>振分会員名</th>
                     {% sortable_th "distribution_bv" "振分BV" %}
                     {% sortable_th "usage_fee" "システム使用料" %}
                     {% sortable_th "bv_actived_flg" "BV反映FLG" %}
@@ -289,6 +290,10 @@
 
                       <td>
                         {{ r.jwoa_code }}
+                      </td>
+
+                      <td>
+                        {{ r.distribution_member_name|default:"" }}
                       </td>
 
                       <td class="text-end">

@@ -11073,6 +11073,23 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
             cursor.execute(sql, codes)
             return {row[0]: row[1] for row in cursor.fetchall()}
 
+    def _fetch_distribution_member_names(self, jwoa_codes):
+        """表示対象の振分会員名だけを会員IDでまとめて取得する。"""
+        codes = list(dict.fromkeys(code for code in jwoa_codes if code))
+        if not codes:
+            return {}
+
+        placeholders = ", ".join(["%s"] * len(codes))
+        sql = f"""
+            SELECT jmoa_code, send_bv_name
+            FROM nexus_production.users
+            WHERE jmoa_code IN ({placeholders})
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, codes)
+            return {row[0]: row[1] for row in cursor.fetchall()}
+
     @staticmethod
     def _resolve_bonus_payment_date(bonus_payment_date, deposit_at):
         """ボーナス支払日の登録が無い注文は入金日を支払日として扱う。"""
@@ -11139,10 +11156,16 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
                 row["order_type"] = info.get("order_type")
                 row["deposit_at"] = info.get("deposit_at")
 
+        member_names = self._fetch_distribution_member_names(
+            row["jwoa_code"] for row in rows
+        )
         payment_dates = self._fetch_bonus_payment_dates(
             row["order_code"] for row in rows
         )
         for row in rows:
+            row["distribution_member_name"] = (
+                member_names.get(row["jwoa_code"]) or ""
+            )
             row["bonus_payment_date"] = self._resolve_bonus_payment_date(
                 payment_dates.get(row["order_code"]),
                 row.get("deposit_at"),
@@ -11258,6 +11281,7 @@ class OrdersDistributionBvExportView(OrdersDistributionBvView):
         "注文区分",
         "購入者_会員ID",
         "振分会員ID",
+        "振分会員名",
         "振分BV",
         "システム使用料",
         "BV反映FLG",
@@ -11302,13 +11326,14 @@ class OrdersDistributionBvExportView(OrdersDistributionBvView):
             cursor.execute(sql, params + [limit or self.EXPORT_FETCH_SIZE])
             return cursor.fetchall()
 
-    def _row_to_excel(self, row):
+    def _row_to_excel(self, row, distribution_member_name=""):
         return [
             row[1],
             self.ORDER_STATUS_LABELS.get(row[2], row[2]),
             self.ORDER_TYPE_LABELS.get(row[3], row[3]),
             row[4],
             row[5],
+            distribution_member_name or "",
             row[6],
             row[7],
             self.BV_ACTIVED_FLG_LABELS.get(row[8], row[8]),
@@ -11348,8 +11373,16 @@ class OrdersDistributionBvExportView(OrdersDistributionBvView):
             if not rows:
                 break
 
+            member_names = self._fetch_distribution_member_names(
+                row[5] for row in rows
+            )
             for row in rows:
-                ws.append(self._row_to_excel(row))
+                ws.append(
+                    self._row_to_excel(
+                        row,
+                        member_names.get(row[5]) or "",
+                    )
+                )
 
             last_id = rows[-1][0]
             if len(rows) < self.EXPORT_FETCH_SIZE:
