@@ -17,6 +17,11 @@
     border-color: #c7a86e;
     color: #4a3518;
   }
+
+  .table tbody td.orders-distribution-bonus-payment-date {
+    font-weight: 700;
+    color: lightcoral !important;
+  }
 </style>
 {% endblock %}
 
@@ -135,6 +140,28 @@
 
             <div>
               <label class="form-label mb-0 small text-muted">
+                ボーナス支払日(FROM)
+              </label>
+
+              <input type="date"
+                     name="q_bonus_payment_from"
+                     class="form-control"
+                     value="{{ q_bonus_payment_from|default:'' }}">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">
+                ボーナス支払日(TO)
+              </label>
+
+              <input type="date"
+                     name="q_bonus_payment_to"
+                     class="form-control"
+                     value="{{ q_bonus_payment_to|default:'' }}">
+            </div>
+
+            <div>
+              <label class="form-label mb-0 small text-muted">
                 作成日(FROM)
               </label>
 
@@ -222,13 +249,16 @@
 
                   <tr>
                     {% sortable_th "order_code" "注文番号" %}
+                    {% sortable_th "order_status" "注文状況" %}
+                    {% sortable_th "order_type" "注文区分" %}
                     {% sortable_th "purchaser_jwoa_code" "購入者_会員ID" %}
                     {% sortable_th "jwoa_code" "振分会員ID" %}
                     {% sortable_th "distribution_bv" "振分BV" %}
                     {% sortable_th "usage_fee" "システム使用料" %}
                     {% sortable_th "bv_actived_flg" "BV反映FLG" %}
+                    <th>ボーナス支払日</th>
+                    {% sortable_th "deposit_at" "入金日" %}
                     {% sortable_th "created_at" "作成日時" %}
-                    {% sortable_th "updated_at" "更新日時" %}
                   </tr>
 
                 </thead>
@@ -241,6 +271,16 @@
 
                       <td>
                         {{ r.order_code }}
+                      </td>
+
+                      <td class="text-center">
+                        <span class="order-status-badge {{ r.order_status|order_status_badge_class }}">
+                          {{ r.order_status|order_status_label }}
+                        </span>
+                      </td>
+
+                      <td class="text-center">
+                        {{ r.order_type|order_type_label }}
                       </td>
 
                       <td>
@@ -265,12 +305,16 @@
                         </span>
                       </td>
 
-                      <td>
-                        {{ r.created_at|db_datetime }}
+                      <td class="orders-distribution-bonus-payment-date">
+                        {{ r.bonus_payment_date|db_datetime|default:"" }}
                       </td>
 
                       <td>
-                        {{ r.updated_at|db_datetime }}
+                        {{ r.deposit_at|db_datetime|default:"" }}
+                      </td>
+
+                      <td>
+                        {{ r.created_at|db_datetime }}
                       </td>
 
                     </tr>

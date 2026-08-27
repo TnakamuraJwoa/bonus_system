@@ -251,6 +251,23 @@ class OrdersDistributionBvViewQueryTests(SimpleTestCase):
 
         self.assertEqual(params, ["JP0512%"])
 
+    def test_bonus_payment_date_range_uses_registered_date_or_deposit_date(self):
+        where_sql, params = self.view._build_where(
+            q_bonus_payment_from="2026-08-01",
+            q_bonus_payment_to="2026-08-31",
+        )
+
+        self.assertIn(
+            "COALESCE(p.bonus_payment_date, DATE(b.deposit_at)) >= %s",
+            where_sql,
+        )
+        self.assertIn(
+            "COALESCE(p.bonus_payment_date, DATE(b.deposit_at)) "
+            "< DATE_ADD(%s, INTERVAL 1 DAY)",
+            where_sql,
+        )
+        self.assertEqual(params, ["2026-08-01", "2026-08-31"])
+
     def test_count_skips_orders_join_without_purchaser_filters(self):
         cursor = MagicMock()
         cursor.__enter__.return_value = cursor
@@ -287,6 +304,28 @@ class OrdersDistributionBvViewQueryTests(SimpleTestCase):
         self.assertIn("b.jwoa_code LIKE %s", sql)
         self.assertEqual(params, ["JP05%"])
 
+    def test_count_joins_payment_date_sources_when_filtering_payment_date(self):
+        cursor = MagicMock()
+        cursor.__enter__.return_value = cursor
+        cursor.fetchone.return_value = (10,)
+        connection = MagicMock()
+        connection.cursor.return_value = cursor
+
+        with patch("connect.views.cache") as mock_cache, patch(
+            "connect.views.connections", {"rds": connection}
+        ):
+            mock_cache.get.return_value = None
+            self.view._fetch_total_count(q_bonus_payment_from="2026-08-01")
+
+        sql, params = cursor.execute.call_args.args
+        self.assertIn("LEFT JOIN nexus_production.orders", sql)
+        self.assertIn("LEFT JOIN bonus_db.bonus_payment_date", sql)
+        self.assertIn(
+            "COALESCE(p.bonus_payment_date, DATE(b.deposit_at)) >= %s",
+            sql,
+        )
+        self.assertEqual(params, ["2026-08-01"])
+
     def test_list_sql_defers_orders_join_on_default_sort(self):
         cursor = MagicMock()
         cursor.__enter__.return_value = cursor
@@ -298,11 +337,11 @@ class OrdersDistributionBvViewQueryTests(SimpleTestCase):
             ("distribution_bv",),
             ("usage_fee",),
             ("created_at",),
-            ("updated_at",),
         ]
         cursor.fetchall.side_effect = [
-            [(1, "MF1", 10, "JP1", 100, 0, None, None)],
-            [("MF1", "JP9", 1)],
+            [(1, "MF1", 10, "JP1", 100, 0, None)],
+            [("MF1", "JP9", 1, 204, 101, datetime(2026, 8, 26, 9, 0, 0))],
+            [("MF1", date(2026, 9, 10))],
         ]
         connection = MagicMock()
         connection.cursor.return_value = cursor
@@ -316,6 +355,35 @@ class OrdersDistributionBvViewQueryTests(SimpleTestCase):
         self.assertEqual(list_params, [200, 0])
         self.assertEqual(rows[0]["purchaser_jwoa_code"], "JP9")
         self.assertEqual(rows[0]["bv_actived_flg"], 1)
+        self.assertEqual(rows[0]["order_status"], 204)
+        self.assertEqual(rows[0]["order_type"], 101)
+        self.assertEqual(rows[0]["deposit_at"], datetime(2026, 8, 26, 9, 0, 0))
+        self.assertEqual(rows[0]["bonus_payment_date"], date(2026, 9, 10))
+
+    def test_bonus_payment_date_falls_back_to_deposit_date(self):
+        cursor = MagicMock()
+        cursor.__enter__.return_value = cursor
+        cursor.description = [
+            ("id",),
+            ("order_code",),
+            ("user_id",),
+            ("jwoa_code",),
+            ("distribution_bv",),
+            ("usage_fee",),
+            ("created_at",),
+        ]
+        cursor.fetchall.side_effect = [
+            [(1, "MF1", 10, "JP1", 100, 0, None)],
+            [("MF1", "JP9", 1, 204, 101, datetime(2026, 8, 26, 9, 0, 0))],
+            [],
+        ]
+        connection = MagicMock()
+        connection.cursor.return_value = cursor
+
+        with patch("connect.views.connections", {"rds": connection}):
+            rows = self.view._fetch_rows(limit=200, offset=0, order_sql="a.id DESC")
+
+        self.assertEqual(rows[0]["bonus_payment_date"], date(2026, 8, 26))
 
     def test_list_sql_joins_orders_when_sorting_by_purchaser(self):
         cursor = MagicMock()
@@ -328,9 +396,11 @@ class OrdersDistributionBvViewQueryTests(SimpleTestCase):
             ("distribution_bv",),
             ("usage_fee",),
             ("created_at",),
-            ("updated_at",),
             ("purchaser_jwoa_code",),
             ("bv_actived_flg",),
+            ("order_status",),
+            ("order_type",),
+            ("deposit_at",),
         ]
         cursor.fetchall.return_value = []
         connection = MagicMock()
@@ -358,6 +428,8 @@ class OrdersDistributionBvExportTests(SimpleTestCase):
             {
                 "q_order_code": " MF30 ",
                 "q_bv_actived_flg": "1",
+                "q_bonus_payment_from": "2026-08-01",
+                "q_bonus_payment_to": "2026-08-31",
             },
         )
 
@@ -366,6 +438,8 @@ class OrdersDistributionBvExportTests(SimpleTestCase):
 
         self.assertEqual(filters["q_order_code"], "MF30")
         self.assertEqual(filters["q_bv_actived_flg"], "1")
+        self.assertEqual(filters["q_bonus_payment_from"], "2026-08-01")
+        self.assertEqual(filters["q_bonus_payment_to"], "2026-08-31")
 
     def test_export_query_uses_keyset_and_includes_display_columns(self):
         cursor = MagicMock()
@@ -388,20 +462,23 @@ class OrdersDistributionBvExportTests(SimpleTestCase):
         self.assertEqual(params, ["MF30%", 500, 100])
 
     def test_excel_row_converts_flag_and_datetimes(self):
+        deposit_at = datetime(2026, 8, 26, 9, 20, 30)
         created_at = datetime(2026, 8, 26, 10, 20, 30)
-        updated_at = datetime(2026, 8, 26, 11, 20, 30)
 
         values = self.view._row_to_excel(
             (
                 10,
                 "MF30",
+                204,
+                101,
                 "JP001",
                 "JP002",
                 120,
                 10,
                 1,
+                deposit_at,
+                date(2026, 9, 10),
                 created_at,
-                updated_at,
             )
         )
 
@@ -409,15 +486,40 @@ class OrdersDistributionBvExportTests(SimpleTestCase):
             values,
             [
                 "MF30",
+                "出荷依頼済",
+                "再購入品",
                 "JP001",
                 "JP002",
                 120,
                 10,
                 "反映済",
+                date(2026, 9, 10),
+                deposit_at,
                 created_at,
-                updated_at,
             ],
         )
+
+    def test_excel_row_falls_back_to_deposit_date(self):
+        deposit_at = datetime(2026, 8, 26, 9, 20, 30)
+
+        values = self.view._row_to_excel(
+            (
+                10,
+                "MF30",
+                204,
+                101,
+                "JP001",
+                "JP002",
+                120,
+                10,
+                1,
+                deposit_at,
+                None,
+                datetime(2026, 8, 26, 10, 20, 30),
+            )
+        )
+
+        self.assertEqual(values[8], date(2026, 8, 26))
 
 
 class BonusPaymentDateDeleteTests(SimpleTestCase):

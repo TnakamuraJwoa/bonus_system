@@ -150,7 +150,7 @@
             <div class="repurchase-period-controlled{% if selected_kibetu_period %} is-period-locked{% endif %}"
                  style="width: 130px;"
                  data-period-date-group>
-              <label class="form-label mb-0 small text-muted">ボーナス支払日FROM</label>
+              <label class="form-label mb-0 small text-muted">ボーナス計算日FROM</label>
               <input type="date"
                      name="q_bonus_date_from"
                      class="form-control js-date-paste-normalize"
@@ -162,7 +162,7 @@
             <div class="repurchase-period-controlled{% if selected_kibetu_period %} is-period-locked{% endif %}"
                  style="width: 130px;"
                  data-period-date-group>
-              <label class="form-label mb-0 small text-muted">ボーナス支払日TO</label>
+              <label class="form-label mb-0 small text-muted">ボーナス計算日TO</label>
               <input type="date"
                      name="q_bonus_date_to"
                      class="form-control js-date-paste-normalize"
@@ -306,7 +306,7 @@
               {% endif %}
               {% if q_bonus_date_from or q_bonus_date_to %}
                 <span class="selection-indicator__badge selection-indicator__badge--bonus-date badge badge-pill">
-                  ボーナス支払日={% if q_bonus_date_from %}{{ q_bonus_date_from }}{% else %}指定なし{% endif %} ～ {% if q_bonus_date_to %}{{ q_bonus_date_to }}{% else %}指定なし{% endif %}
+                  ボーナス計算日={% if q_bonus_date_from %}{{ q_bonus_date_from }}{% else %}指定なし{% endif %} ～ {% if q_bonus_date_to %}{{ q_bonus_date_to }}{% else %}指定なし{% endif %}
                 </span>
               {% endif %}
             </div>
@@ -333,15 +333,15 @@
               <table class="table table-bordered table-sm align-middle mb-0" style="white-space: nowrap;">
                 <thead class="table-light">
                   <tr>
-                    {% sortable_th "register_year" "登録年" %}
-                    {% sortable_th "register_month" "登録月" %}
+                    {% sortable_th "register_year" "計算年" %}
+                    {% sortable_th "register_month" "計算月" %}
                     {% sortable_th "order_year" "注文年" %}
                     {% sortable_th "order_month" "注文月" %}
                     {% sortable_th "order_code" "注文番号" %}
                     {% sortable_th "order_type" "注文区分" %}
                     {% sortable_th "jwoa_code" "会員番号" %}
                     {% sortable_th "send_bv_name" "会員名" %}
-                    {% sortable_th "bonus_payment_date" "ボーナス支払日" "repurchase-bonus-payment-date-col" %}
+                    {% sortable_th "bonus_payment_date" "ボーナス計算日" "repurchase-bonus-payment-date-col" %}
                     {% sortable_th "bv" "bv" %}
                     {% sortable_th "bv_actived_flg" "BV反映FLG" %}
                     {% sortable_th "deposit_at" "BV反映日時" %}
@@ -443,8 +443,8 @@
               {% endif %}
             </strong>
           </div>
-          <div class="mb-1">ボーナス支払日FROM：<strong>{{ q_bonus_date_from|default:"指定なし" }}</strong></div>
-          <div class="mb-1">ボーナス支払日TO：<strong>{{ q_bonus_date_to|default:"指定なし" }}</strong></div>
+          <div class="mb-1">ボーナス計算日FROM：<strong>{{ q_bonus_date_from|default:"指定なし" }}</strong></div>
+          <div class="mb-1">ボーナス計算日TO：<strong>{{ q_bonus_date_to|default:"指定なし" }}</strong></div>
           <div>
             注文区分：
             <strong>

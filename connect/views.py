@@ -67,7 +67,7 @@ from accounts.access import get_user_access
 from connect.audit import fetch_one_dict, record_change_audit
 from connect.bonus_help import list_bonus_help, save_bonus_help
 from connect.sql.placement_tree_sql import PLACEMENT_TREE_REBUILD_CACHE_SQL
-from connect.templatetags.custom_filters import as_db_datetime, db_datetime
+from connect.templatetags.custom_filters import as_db_datetime, db_datetime, rank_label
 
 logger = logging.getLogger(__name__)
 
@@ -889,6 +889,8 @@ def _format_export_cell(value, fmt=None):
             return float(value)
         except (TypeError, ValueError):
             return value
+    if fmt == "rank":
+        return rank_label(value)
     return value
 
 
@@ -944,7 +946,7 @@ SEARCH_EXPORT_COLUMNS = {
         ("期別", "kibetu"),
         ("上位者コード", "placement_code"),
         ("上位者名", "placement_name"),
-        ("上位者ランク", "placement_rank"),
+        ("上位者ランク", "placement_rank", "rank"),
         ("ラインコード", "line_code"),
         ("購入者コード", "purchaser_code"),
         ("購入者名", "purchaser_name"),
@@ -4696,8 +4698,8 @@ class RepurchaseExportView(RepurchaseListView):
         ws.title = "購入情報一覧"
 
         ws.append([
-            "登録年",
-            "登録月",
+            "計算年",
+            "計算月",
             "注文年",
             "注文月",
             "注文番号",
@@ -4709,7 +4711,7 @@ class RepurchaseExportView(RepurchaseListView):
             "BV反映FLG",
             "BV反映日時",
             "注文日時",
-            "ボーナス支払日",
+            "ボーナス計算日",
             "作成日時",
         ])
 
@@ -10829,15 +10831,25 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
     # ため、作成日時ソートは主キー走査に置き換える。
     SORT_COLUMNS = {
         "order_code": "a.order_code",
+        "order_status": "b.order_status",
+        "order_type": "b.order_type",
         "purchaser_jwoa_code": "b.jwoa_code",
         "jwoa_code": "a.jwoa_code",
         "distribution_bv": "a.distribution_bv",
         "usage_fee": "a.usage_fee",
         "bv_actived_flg": "b.bv_actived_flg",
+        "deposit_at": "b.deposit_at",
         "created_at": "a.id",
-        "updated_at": "a.updated_at",
     }
-    ORDERS_JOIN_SORTS = frozenset({"purchaser_jwoa_code", "bv_actived_flg"})
+    ORDERS_JOIN_SORTS = frozenset(
+        {
+            "purchaser_jwoa_code",
+            "bv_actived_flg",
+            "order_status",
+            "order_type",
+            "deposit_at",
+        }
+    )
     ORDER_CODE_PREFIX = "MF"
     JWOA_CODE_PREFIXES = ("JP", "JN", "FREE")
     TOTAL_COUNT_CACHE_TIMEOUT = 30
@@ -10879,7 +10891,18 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
             return True
         if (filters.get("q_bv_actived_flg") or "").strip() in ("0", "1", "3"):
             return True
+        if (filters.get("q_bonus_payment_from") or "").strip():
+            return True
+        if (filters.get("q_bonus_payment_to") or "").strip():
+            return True
         return sort in self.ORDERS_JOIN_SORTS
+
+    @staticmethod
+    def _needs_bonus_payment_join(**filters):
+        return bool(
+            (filters.get("q_bonus_payment_from") or "").strip()
+            or (filters.get("q_bonus_payment_to") or "").strip()
+        )
 
     def _build_where(
         self,
@@ -10888,6 +10911,8 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
         q_jwoa_code="",
         q_purchaser_jwoa_code="",
         q_bv_actived_flg="",
+        q_bonus_payment_from="",
+        q_bonus_payment_to="",
         q_created_from="",
         q_created_to="",
     ):
@@ -10922,6 +10947,17 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
             where.append("b.bv_actived_flg = %s")
             params.append(int(q_bv_actived_flg))
 
+        effective_payment_date = "COALESCE(p.bonus_payment_date, DATE(b.deposit_at))"
+        if q_bonus_payment_from:
+            where.append(f"{effective_payment_date} >= %s")
+            params.append(q_bonus_payment_from)
+
+        if q_bonus_payment_to:
+            where.append(
+                f"{effective_payment_date} < DATE_ADD(%s, INTERVAL 1 DAY)"
+            )
+            params.append(q_bonus_payment_to)
+
         if q_created_from:
             where.append("a.created_at >= %s")
             params.append(q_created_from)
@@ -10945,6 +10981,13 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
                 ON a.order_code = b.order_code
         """
 
+    @staticmethod
+    def _bonus_payment_join_sql():
+        return """
+            LEFT JOIN bonus_db.bonus_payment_date AS p
+                ON a.order_code = p.order_code
+        """
+
     def _fetch_total_count(self, **filters):
         """一覧の総件数を返す。
 
@@ -10959,11 +11002,17 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
 
         where_sql, params = self._build_where(**filters)
         join_sql = self._orders_join_sql() if self._needs_orders_join(**filters) else ""
+        payment_join_sql = (
+            self._bonus_payment_join_sql()
+            if self._needs_bonus_payment_join(**filters)
+            else ""
+        )
 
         sql = f"""
             SELECT COUNT(*)
             FROM nexus_production.orders_distribution_bv AS a
             {join_sql}
+            {payment_join_sql}
             {where_sql}
         """
 
@@ -10983,7 +11032,13 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
 
         placeholders = ", ".join(["%s"] * len(codes))
         sql = f"""
-            SELECT order_code, jwoa_code, bv_actived_flg
+            SELECT
+                order_code,
+                jwoa_code,
+                bv_actived_flg,
+                order_status,
+                order_type,
+                deposit_at
             FROM nexus_production.orders
             WHERE order_code IN ({placeholders})
         """
@@ -10991,18 +11046,58 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
         with connections["rds"].cursor() as cursor:
             cursor.execute(sql, codes)
             return {
-                row[0]: {"jwoa_code": row[1], "bv_actived_flg": row[2]}
+                row[0]: {
+                    "jwoa_code": row[1],
+                    "bv_actived_flg": row[2],
+                    "order_status": row[3],
+                    "order_type": row[4],
+                    "deposit_at": row[5],
+                }
                 for row in cursor.fetchall()
             }
+
+    def _fetch_bonus_payment_dates(self, order_codes):
+        """表示するページ分のボーナス支払日だけをまとめて 1 クエリで取得する。"""
+        codes = list(dict.fromkeys(code for code in order_codes if code))
+        if not codes:
+            return {}
+
+        placeholders = ", ".join(["%s"] * len(codes))
+        sql = f"""
+            SELECT order_code, bonus_payment_date
+            FROM bonus_db.bonus_payment_date
+            WHERE order_code IN ({placeholders})
+        """
+
+        with connections["rds"].cursor() as cursor:
+            cursor.execute(sql, codes)
+            return {row[0]: row[1] for row in cursor.fetchall()}
+
+    @staticmethod
+    def _resolve_bonus_payment_date(bonus_payment_date, deposit_at):
+        """ボーナス支払日の登録が無い注文は入金日を支払日として扱う。"""
+        if bonus_payment_date:
+            return bonus_payment_date
+        if isinstance(deposit_at, datetime):
+            return deposit_at.date()
+        return deposit_at
 
     def _fetch_rows(self, limit=200, offset=0, order_sql="", sort="", **filters):
         where_sql, params = self._build_where(**filters)
         needs_join = self._needs_orders_join(sort=sort, **filters)
+        payment_join_sql = (
+            self._bonus_payment_join_sql()
+            if self._needs_bonus_payment_join(**filters)
+            else ""
+        )
 
         if needs_join:
             extra_select = """,
                 b.jwoa_code AS purchaser_jwoa_code,
-                b.bv_actived_flg"""
+                b.bv_actived_flg,
+                b.order_status,
+                b.order_type,
+                b.deposit_at"""
             join_sql = self._orders_join_sql()
         else:
             extra_select = ""
@@ -11016,11 +11111,11 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
                 a.jwoa_code,
                 a.distribution_bv,
                 a.usage_fee,
-                a.created_at,
-                a.updated_at
+                a.created_at
                 {extra_select}
             FROM nexus_production.orders_distribution_bv AS a
             {join_sql}
+            {payment_join_sql}
             {where_sql}
             ORDER BY {order_sql or "a.id DESC"}
             LIMIT %s OFFSET %s
@@ -11040,6 +11135,18 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
                 info = order_info.get(row["order_code"], {})
                 row["purchaser_jwoa_code"] = info.get("jwoa_code")
                 row["bv_actived_flg"] = info.get("bv_actived_flg")
+                row["order_status"] = info.get("order_status")
+                row["order_type"] = info.get("order_type")
+                row["deposit_at"] = info.get("deposit_at")
+
+        payment_dates = self._fetch_bonus_payment_dates(
+            row["order_code"] for row in rows
+        )
+        for row in rows:
+            row["bonus_payment_date"] = self._resolve_bonus_payment_date(
+                payment_dates.get(row["order_code"]),
+                row.get("deposit_at"),
+            )
 
         return rows
 
@@ -11053,6 +11160,12 @@ class OrdersDistributionBvView(KeysetPaginationMixin, generic.TemplateView):
             ).strip(),
             "q_bv_actived_flg": (
                 self.request.GET.get("q_bv_actived_flg") or ""
+            ).strip(),
+            "q_bonus_payment_from": (
+                self.request.GET.get("q_bonus_payment_from") or ""
+            ).strip(),
+            "q_bonus_payment_to": (
+                self.request.GET.get("q_bonus_payment_to") or ""
             ).strip(),
             "q_created_from": (self.request.GET.get("q_created_from") or "").strip(),
             "q_created_to": (self.request.GET.get("q_created_to") or "").strip(),
@@ -11114,6 +11227,26 @@ class OrdersDistributionBvExportView(OrdersDistributionBvView):
 
     EXPORT_FETCH_SIZE = 5000
     MAX_EXPORT_ROWS = 300000
+    ORDER_STATUS_LABELS = {
+        201: "入金待ち",
+        202: "入金確認済",
+        203: "決済完了",
+        204: "出荷依頼済",
+        205: "出荷完了",
+        206: "キャンセル",
+        207: "返品処理中",
+        208: "返品処理完了",
+        209: "商品交換処理中",
+        210: "再出荷依頼中",
+        211: "再出荷完了",
+    }
+    ORDER_TYPE_LABELS = {
+        101: "再購入品",
+        102: "初回購入品",
+        103: "ランクアップ購入品",
+        105: "特別対応購入品",
+        200: "クーリングオフ",
+    }
     BV_ACTIVED_FLG_LABELS = {
         0: "未反映",
         1: "反映済",
@@ -11121,13 +11254,16 @@ class OrdersDistributionBvExportView(OrdersDistributionBvView):
     }
     EXPORT_HEADER = [
         "注文番号",
+        "注文状況",
+        "注文区分",
         "購入者_会員ID",
         "振分会員ID",
         "振分BV",
         "システム使用料",
         "BV反映FLG",
+        "ボーナス支払日",
+        "入金日",
         "作成日時",
-        "更新日時",
     ]
 
     def _fetch_export_rows(self, last_id=None, limit=None, **filters):
@@ -11145,15 +11281,19 @@ class OrdersDistributionBvExportView(OrdersDistributionBvView):
             SELECT
                 a.id,
                 a.order_code,
+                b.order_status,
+                b.order_type,
                 b.jwoa_code AS purchaser_jwoa_code,
                 a.jwoa_code,
                 a.distribution_bv,
                 a.usage_fee,
                 b.bv_actived_flg,
-                a.created_at,
-                a.updated_at
+                b.deposit_at,
+                p.bonus_payment_date,
+                a.created_at
             FROM nexus_production.orders_distribution_bv AS a
             {self._orders_join_sql()}
+            {self._bonus_payment_join_sql()}
             {where_sql}
             ORDER BY a.id DESC
             LIMIT %s
@@ -11165,13 +11305,16 @@ class OrdersDistributionBvExportView(OrdersDistributionBvView):
     def _row_to_excel(self, row):
         return [
             row[1],
-            row[2],
-            row[3],
+            self.ORDER_STATUS_LABELS.get(row[2], row[2]),
+            self.ORDER_TYPE_LABELS.get(row[3], row[3]),
             row[4],
             row[5],
-            self.BV_ACTIVED_FLG_LABELS.get(row[6], row[6]),
-            _excel_db_datetime(row[7]),
-            _excel_db_datetime(row[8]),
+            row[6],
+            row[7],
+            self.BV_ACTIVED_FLG_LABELS.get(row[8], row[8]),
+            self._resolve_bonus_payment_date(row[10], row[9]),
+            _excel_db_datetime(row[9]),
+            _excel_db_datetime(row[11]),
         ]
 
     def get(self, request, *args, **kwargs):
