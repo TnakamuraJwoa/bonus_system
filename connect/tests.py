@@ -8,6 +8,8 @@ from connect.legacy_orders import LegacyOrdersView
 from connect.templatetags.custom_filters import as_db_datetime, db_datetime, jp_date, jst_datetime
 from connect.views import (
     BonusPaymentDateView,
+    ensure_user_target_rank_for_kibetu,
+    register_users_target_rank,
     OrdersDistributionBvExportView,
     OrdersDistributionBvView,
     S_MonthBonusView,
@@ -658,3 +660,78 @@ class LegacyOrdersUpdateTests(SimpleTestCase):
             mock_messages.error.call_args.args[1],
             "会員IDは60文字以内で入力してください。",
         )
+
+
+class UserTargetRankRegisterTests(SimpleTestCase):
+    """user_add_rank が保存できずに毎回 78,000件の再構築が走っていた不具合の回帰テスト。"""
+
+    def test_setting_is_upserted_so_it_survives_a_missing_row(self):
+        cursor = MagicMock()
+        cursor.__enter__.return_value = cursor
+        cursor.rowcount = 78553
+        connection = MagicMock()
+        connection.cursor.return_value = cursor
+
+        with patch("connect.views.connections", {"rds": connection}):
+            inserted_count, target_rank = register_users_target_rank(2026, 7)
+
+        self.assertEqual(inserted_count, 78553)
+        self.assertEqual(target_rank, "202607")
+
+        setting_sql, setting_params = cursor.execute.call_args.args
+        self.assertIn("INSERT INTO bonus_db.settings", setting_sql)
+        self.assertIn("ON DUPLICATE KEY UPDATE", setting_sql)
+        self.assertIn("'user_add_rank'", setting_sql)
+        self.assertEqual(setting_params, ["202607"])
+        # 他の設定行を巻き込まないこと
+        self.assertNotIn("old_gyouseki_kibetu", setting_sql)
+        self.assertNotIn("set_title", setting_sql)
+
+
+class EnsureUserTargetRankTests(SimpleTestCase):
+    def setUp(self):
+        self.request = RequestFactory().get("/week_bonus/")
+        self.request.user = SimpleNamespace(username="admin")
+
+    def _run(self, current_rank, has_history):
+        with patch("connect.views.get_user_add_rank_setting", return_value=current_rank), patch(
+            "connect.views.has_user_target_rank_history", return_value=has_history
+        ), patch("connect.views.register_users_target_rank") as mock_register, patch(
+            "connect.views.insert_bonus_register_history"
+        ) as mock_history, patch(
+            "connect.views.transaction"
+        ), patch("connect.views.messages"):
+            result = ensure_user_target_rank_for_kibetu(self.request, "2026C08W3")
+        return result, mock_register, mock_history
+
+    def test_same_rank_skips_the_rebuild(self):
+        result, mock_register, _ = self._run("202607", has_history=True)
+
+        self.assertTrue(result)
+        mock_register.assert_not_called()
+
+    def test_same_rank_does_not_add_another_history_row(self):
+        _result, _mock_register, mock_history = self._run("202607", has_history=True)
+
+        mock_history.assert_not_called()
+
+    def test_same_rank_records_history_once_when_it_is_missing(self):
+        _result, mock_register, mock_history = self._run("202607", has_history=False)
+
+        mock_register.assert_not_called()
+        mock_history.assert_called_once()
+        self.assertEqual(mock_history.call_args.args[1], "202607")
+
+    def test_different_rank_still_rebuilds(self):
+        mock_register_return = (78553, "202607")
+        with patch("connect.views.get_user_add_rank_setting", return_value="202606"), patch(
+            "connect.views.has_user_target_rank_history", return_value=False
+        ), patch(
+            "connect.views.register_users_target_rank", return_value=mock_register_return
+        ) as mock_register, patch(
+            "connect.views.insert_bonus_register_history"
+        ), patch("connect.views.transaction"), patch("connect.views.messages"):
+            result = ensure_user_target_rank_for_kibetu(self.request, "2026C08W3")
+
+        self.assertTrue(result)
+        mock_register.assert_called_once_with(2026, 7)

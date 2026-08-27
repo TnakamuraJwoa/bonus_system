@@ -264,7 +264,7 @@ def get_user_add_rank_setting():
             """
         )
         row = cursor.fetchone()
-    return str(row[0]) if row and row[0] is not None else ""
+    return str(row[0]).strip() if row and row[0] is not None else ""
 
 
 def has_user_target_rank_history(kibetu):
@@ -290,11 +290,18 @@ def register_users_target_rank(year, month):
         cursor.execute("TRUNCATE TABLE bonus_db.users_target_rank")
         cursor.execute(register_sql.USERS_TARGET_RANK_INSERT_SQL, [cutoff_dt])
         inserted_count = cursor.rowcount
+        # UPDATE だけだと settings に user_add_rank 行が無いときに 0 件更新で終わり、
+        # 登録済みの目印が残らないので毎回 TRUNCATE + 78,000 件 INSERT が走ってしまう。
+        # name には UNIQUE KEY (uk_settings_name) があるので、
+        # INSERT ... ON DUPLICATE KEY UPDATE で確実に保存する。
+        # 更新するのは user_add_rank 行の value だけで、
+        # old_gyouseki_kibetu など他の設定行には影響しない。
         cursor.execute(
             """
-                UPDATE bonus_db.settings
-                SET value = %s
-                WHERE name = 'user_add_rank'
+                INSERT INTO bonus_db.settings (name, value, comment)
+                VALUES ('user_add_rank', %s, 'users_target_rankを登録した対象年月')
+                ON DUPLICATE KEY UPDATE
+                    value = VALUES(value)
             """,
             [target_rank],
         )

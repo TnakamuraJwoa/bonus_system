@@ -32,7 +32,12 @@ prev_basic_carry_over_bv AS (
         jmoa_code AS jwoa_code,
         bv,
         carry_over_bv
-    FROM bonus_db.basic_bv_line
+    -- basic_bv_line は約345万件。kibetu が CTE のスカラーサブクエリなので
+    -- オプティマイザが件数を見積もれず、sum_prev_purchasers_list 側から
+    -- uk_bv(placement_code, ...) で引いて後から kibetu を絞る計画を選ぶことがある。
+    -- その場合 1 会員あたり約188件（全期別分）を読むため 729回×約26ms＝約19秒かかる。
+    -- idx_kibetu を固定すると先に kibetu で絞られ、対象は前週分の約545件だけになる。
+    FROM bonus_db.basic_bv_line FORCE INDEX (idx_kibetu)
     WHERE kibetu = (
         SELECT prev_kibetu
         FROM prev_kibetu
@@ -149,8 +154,12 @@ payer_tree AS (
         u.placement_code AS upper_code,
         0 AS lvl
     FROM nexus_production.users AS u
+    -- purchase_info_list.jwoa_code は utf8mb4_bin、users.jmoa_code は utf8mb3_bin。
+    -- そのまま結合すると比較が utf8mb4 に寄せられて index_users_on_jmoa_code が使えず、
+    -- 起点だけで users 78,000件のフルスキャンになる。
+    -- COLLATE まで揃えると購入者（数十件）側から eq_ref で引ける。
     JOIN purchase_users AS pu
-      ON pu.jwoa_code = u.jmoa_code
+      ON CONVERT(pu.jwoa_code USING utf8mb3) COLLATE utf8mb3_bin = u.jmoa_code
 
     UNION ALL
 
@@ -218,7 +227,10 @@ FROM payer_list_prevMonth_users
 
 UNION ALL
 
-SELECT
+-- NO_MERGE: active_prev_basic_carry_over_bv は2箇所から参照される。
+-- 展開されると参照ごとに別々の実行計画が選ばれ、片方が上の遅い計画になる。
+-- 一度だけ実体化して両方で使い回す。
+SELECT /*+ NO_MERGE(active_prev_basic_carry_over_bv) */
     placement_code AS 上位者コード,
     '' AS 上位者名,
     jwoa_code AS ラインコード,
@@ -322,7 +334,7 @@ on a.placement_code = b.上位者コード and a.jmoa_code = b.ラインコー�
 
 UNION ALL
 
-select
+select /*+ NO_MERGE(p) */
  p.placement_code,
  p.jwoa_code,
  p.bv,
