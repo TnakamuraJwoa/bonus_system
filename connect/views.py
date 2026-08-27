@@ -11635,9 +11635,37 @@ class WeekBonusView(generic.ListView):
         return PeriodMaster.objects.using("rds").all()
 
     def get(self, request, *args, **kwargs):
+        selected_kibetu = (request.GET.get("kibetu") or "").strip()
+        pre_register_targets = self._get_pre_register_targets()
+        period = None
+        if selected_kibetu:
+            period = (
+                PeriodMaster.objects.using("rds").filter(kibetu=selected_kibetu).first()
+            )
+
+        if selected_kibetu and period and pre_register_targets:
+            if not self._pre_register_selected_bonuses(
+                selected_kibetu,
+                period,
+                pre_register_targets,
+            ):
+                # 事前登録に失敗したときは、中途半端な集計結果を見せずに
+                # エラーメッセージだけ表示する。
+                self.object_list = self.get_queryset()
+                return self.render_to_response(
+                    self.get_context_data(pre_register_failed=True)
+                )
+
+            # 事前登録はGETの副作用なので、成功したらpre_registerを外した
+            # URLへリダイレクトする。そのままだとF5・戻る・URL共有のたびに
+            # 3ボーナスの登録が丸ごと再実行される。
+            return redirect(
+                f"{reverse('connect:week_bonus')}?"
+                f"{urlencode({'kibetu': selected_kibetu})}"
+            )
+
         self.object_list = self.get_queryset()
-        context = self.get_context_data()
-        return self.render_to_response(context)
+        return self.render_to_response(self.get_context_data())
 
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "")
@@ -11755,7 +11783,8 @@ class WeekBonusView(generic.ListView):
 
         return redirect(f"/week_bonus/?kibetu={selected_kibetu}")
 
-    def get_context_data(self, **kwargs):
+    def get_context_data(self, pre_register_failed=False, **kwargs):
+        # 事前登録は get() 側で実行済み。ここでは表示だけを組み立てる。
         ctx = super().get_context_data(**kwargs)
 
         selected_kibetu = (self.request.GET.get("kibetu") or "").strip()
@@ -11776,11 +11805,7 @@ class WeekBonusView(generic.ListView):
             return ctx
 
         ctx["selected_period"] = period
-        if not self._pre_register_selected_bonuses(
-            selected_kibetu,
-            period,
-            pre_register_targets,
-        ):
+        if pre_register_failed:
             return ctx
 
         ctx["rows"] = self._get_week_bonus_rows(selected_kibetu, period)

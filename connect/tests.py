@@ -15,6 +15,7 @@ from connect.views import (
     S_MonthBonusView,
     S_WeekBonusView,
     UsersView,
+    WeekBonusView,
 )
 
 
@@ -735,3 +736,89 @@ class EnsureUserTargetRankTests(SimpleTestCase):
 
         self.assertTrue(result)
         mock_register.assert_called_once_with(2026, 7)
+
+
+class WeekBonusPreRegisterFlowTests(SimpleTestCase):
+    """「計算」の事前登録はGETの副作用なので、成功したらクリーンなURLへ逃がす。"""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def _view(self, query):
+        request = self.factory.get("/week_bonus/", query)
+        request.user = SimpleNamespace(username="admin")
+        view = WeekBonusView()
+        view.setup(request)
+        return view, request
+
+    @staticmethod
+    def _patched_period_master():
+        mock_pm = patch("connect.views.PeriodMaster").start()
+        mock_pm.objects.using.return_value.filter.return_value.first.return_value = (
+            SimpleNamespace(kibetu="2026C08W3")
+        )
+        mock_pm.objects.using.return_value.all.return_value = []
+        return mock_pm
+
+    def test_checked_boxes_run_pre_register_then_redirect_to_clean_url(self):
+        view, request = self._view(
+            {"kibetu": "2026C08W3", "pre_register": ["drive", "basic", "matching"]}
+        )
+
+        self.addCleanup(patch.stopall)
+        self._patched_period_master()
+        mock_pre = patch.object(
+            WeekBonusView, "_pre_register_selected_bonuses", return_value=True
+        ).start()
+
+        response = view.get(request)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/week_bonus/?kibetu=2026C08W3")
+        mock_pre.assert_called_once()
+        self.assertEqual(
+            mock_pre.call_args.args[2], ["drive", "basic", "matching"]
+        )
+
+    def test_clean_url_does_not_re_register(self):
+        """リダイレクト後のURLをF5しても登録が走らないこと。"""
+        view, request = self._view({"kibetu": "2026C08W3"})
+
+        self.addCleanup(patch.stopall)
+        self._patched_period_master()
+        mock_pre = patch.object(
+            WeekBonusView, "_pre_register_selected_bonuses"
+        ).start()
+        patch.object(WeekBonusView, "_get_week_bonus_rows", return_value=[]).start()
+        patch("connect.views.get_week_bonus_history_rows", return_value=[]).start()
+        patch("connect.views.insert_empty_bonus_history_on_display").start()
+
+        response = view.get(request)
+
+        self.assertEqual(response.status_code, 200)
+        mock_pre.assert_not_called()
+        self.assertEqual(response.context_data["pre_register_targets"], [])
+
+    def test_pre_register_failure_shows_no_rows_and_does_not_redirect(self):
+        view, request = self._view({"kibetu": "2026C08W3", "pre_register": ["drive"]})
+
+        self.addCleanup(patch.stopall)
+        self._patched_period_master()
+        patch.object(
+            WeekBonusView, "_pre_register_selected_bonuses", return_value=False
+        ).start()
+        mock_rows = patch.object(WeekBonusView, "_get_week_bonus_rows").start()
+        patch("connect.views.get_week_bonus_history_rows", return_value=[]).start()
+
+        response = view.get(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context_data["rows"], [])
+        mock_rows.assert_not_called()
+
+    def test_first_visit_defaults_to_all_bonuses_checked(self):
+        view, _request = self._view({})
+
+        self.assertEqual(
+            view._get_pre_register_targets(), ["drive", "basic", "matching"]
+        )
